@@ -63,3 +63,14 @@ th { color:#8a909a; font-weight:600; position:sticky; top:0; background:#171a21;
 .tl-track { position:relative; flex:1; height:22px; background:#0f1115;
   border:1px solid #232733; border-radius:5px; overflow:hidden; }
 .tl-seg { position:absolute; top:2px; bottom:2px; min-width:2px; border-radius:3px; cursor:pointer; }
+
+.kpis { display:flex; flex-wrap:wrap; gap:.8rem; margin:.4rem 0 1rem; }
+.kpi { background:#0f1115; border:1px solid #232733; border-radius:10px; padding:.9rem 1.1rem; min-width:140px; }
+.kpi-v { font-size:1.5rem; font-weight:700; color:#fff; }
+.kpi-l { font-size:.75rem; color:#8a909a; margin-top:.2rem; }
+.daily-chart { display:flex; align-items:flex-end; gap:.5rem; height:160px; padding:.5rem 0 1.4rem; overflow:auto; }
+.bar-col { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:34px; position:relative; }
+.bar { width:22px; background:#2b6fff; border-radius:4px 4px 0 0; min-height:2px; }
+.bar-x { position:absolute; bottom:-1.3rem; font-size:.65rem; color:#8a909a; }
+.guide h3 { font-size:.95rem; margin:1.2rem 0 .4rem; color:#cfd3da; }
+.guide p, .guide li { color:#b6bcc6; font-size:.9rem; line-height:1.5; }

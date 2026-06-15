@@ -251,3 +251,183 @@ def visits():
                    min=mn.isoformat() if mn else None,
                    max=mx.isoformat() if mx else None)
 
+# ── Plan vs Actual ───────────────────────────────────────────────────────────
+@bp.get("/pva")
+@login_required
+def pva():
+    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
+                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
+    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
+              "speed": p.speed, "status": p.status}
+             for p in GpsPing.query.order_by(GpsPing.dt).all()]
+    deactivated = {engine.norm_plate(t.plate) for t in
+                   Truck.query.filter_by(status="deactivated").all()}
+    visits = engine.build_visits(pings, anchors, deactivated)
+    seqs = engine.recompute_sequences(visits, roles)
+    plan = DispatchPlanRow.query.all()
+
+    THRESH = 60  # minutes; on-time window is +/- 1 hour
+    rows, scored, ontime = [], 0, 0
+    for p in plan:
+        cyc = [c for c in seqs if engine.norm_plate_strict(c["plate"]) == p.key]
+        chosen = None
+        if cyc and p.load_start:
+            same = [c for c in cyc if c["xppl_in"]
+                    and c["xppl_in"].date() == p.load_start.date()]
+            if same:
+                chosen = same[0]
+            else:
+                chosen = min(cyc, key=lambda c: abs((c["xppl_in"] - p.load_start).total_seconds())
+                             if c["xppl_in"] else 9e18)
+        elif cyc:
+            chosen = sorted(cyc, key=lambda c: c["cycle_date"])[-1]
+
+        actual_load = (chosen.get("loading_in") or chosen.get("xppl_in")) if chosen else None
+        actual_port = chosen.get("chan_may_in") if chosen else None
+
+        port_delta, status, code = None, "no actual yet", "na"
+        if actual_port and p.port_arrive:
+            port_delta = round((actual_port - p.port_arrive).total_seconds() / 60)
+            scored += 1
+            if port_delta < -THRESH:
+                status, code = "early", "planned"
+                ontime += 1
+            elif port_delta > THRESH:
+                status, code = "late", "unassigned"
+            else:
+                status, code = "on-time", "reloaded"
+                ontime += 1
+        elif actual_port:
+            status, code = "actual only", "fronthaul"
+
+        rows.append({
+            "plate": p.plate,
+            "plan_load": engine.fmt(p.load_start),
+            "actual_load": engine.fmt(actual_load),
+            "plan_port": engine.fmt(p.port_arrive),
+            "actual_port": engine.fmt(actual_port),
+            "port_delta": port_delta,
+            "status": status, "code": code,
+        })
+    pct = round(ontime / scored * 100) if scored else None
+    return jsonify(rows=rows, ontime_pct=pct, scored=scored, total=len(rows))
+
+# ── Shared engine state for analytics endpoints ──────────────────────────────
+def _engine_state():
+    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
+                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
+    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    routes = {r.leg_key: {"points": r.points, "speed": r.speed}
+              for r in RouteLeg.query.all()}
+    pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
+              "speed": p.speed, "status": p.status}
+             for p in GpsPing.query.order_by(GpsPing.dt).all()]
+    deactivated = {engine.norm_plate(t.plate) for t in
+                   Truck.query.filter_by(status="deactivated").all()}
+    visits = engine.build_visits(pings, anchors, deactivated)
+    seqs = engine.recompute_sequences(visits, roles)
+    return {"anchors": anchors, "roles": roles, "routes": routes,
+            "pings": pings, "deactivated": deactivated,
+            "visits": visits, "seqs": seqs}
+
+
+def _status_rows(st):
+    plates = set(t.plate for t in Truck.query.all()) | set(p["plate"] for p in st["pings"])
+    plates -= {p for p in plates if engine.norm_plate(p) in st["deactivated"]}
+    plan = [{"plate": r.plate, "key": r.key, "load_start": r.load_start,
+             "port_arrive": r.port_arrive} for r in DispatchPlanRow.query.all()]
+    load = [{"plate": r.plate, "key": r.key, "load_in": r.load_in,
+             "net": r.net, "ticket": r.ticket} for r in LoadActualRow.query.all()]
+    return engine.build_status_rows(list(plates), _last_pings(), st["seqs"],
+                                    st["routes"], st["anchors"], st["roles"],
+                                    plan, load, st["deactivated"])
+
+
+# ── Subcontractor fleet status ───────────────────────────────────────────────
+@bp.get("/subfleet")
+@login_required
+def subfleet():
+    st = _engine_state()
+    rows_by_plate = {engine.norm_plate_strict(r["plate"]): r for r in _status_rows(st)}
+    out = []
+    for r in SubFleetRow.query.all():
+        sr = rows_by_plate.get(r.key)
+        haul = sr["haul"] if sr else "-"
+        est = sr["eta_criteria"] if (sr and sr["haul"] == "Backhaul") else ""
+        last_seen = sr["last_seen"] if sr else ""
+        if not last_seen:
+            gps = "No GPS"
+        elif haul == "Backhaul":
+            gps = "Returning"
+        elif haul == "Completed":
+            gps = "At mine"
+        else:
+            gps = "Not returning"
+        delta = None
+        if est and r.claimed_arrive_mine:
+            from datetime import datetime
+            try:
+                e = datetime.strptime(est, "%Y-%m-%d %H:%M")
+                delta = round((e - r.claimed_arrive_mine).total_seconds() / 60)
+            except Exception:
+                delta = None
+        out.append({
+            "plate": r.plate, "declared_haul": r.declared_haul or "",
+            "status": haul, "location": (sr["direction"] if sr else ""),
+            "claimed_arrive_mine": engine.fmt(r.claimed_arrive_mine),
+            "est_arrive_mine": est, "delta": delta, "gps_check": gps,
+        })
+    return jsonify(rows=out, count=len(out))
+
+
+# ── Performance dashboard ────────────────────────────────────────────────────
+@bp.get("/performance")
+@login_required
+def performance():
+    st = _engine_state()
+    seqs = st["seqs"]
+    completed = [c for c in seqs if c["chan_may_in"]]
+    # cycle time = xppl_in -> xppl_r (next mine arrival)
+    durs = []
+    for c in seqs:
+        if c["xppl_in"] and c["xppl_r"]:
+            durs.append((c["xppl_r"] - c["xppl_in"]).total_seconds() / 3600.0)
+    avg_cycle = round(sum(durs) / len(durs), 1) if durs else None
+    rows = _status_rows(st)
+    by_haul = {}
+    for r in rows:
+        by_haul[r["haul"]] = by_haul.get(r["haul"], 0) + 1
+    return jsonify(
+        trucks=len(rows),
+        cycles=len(seqs),
+        completed_trips=len(completed),
+        avg_cycle_hours=avg_cycle,
+        plan_cycle_hours=48,
+        by_haul=by_haul,
+    )
+
+
+# ── Daily performance ────────────────────────────────────────────────────────
+@bp.get("/daily")
+@login_required
+def daily():
+    st = _engine_state()
+    ports = {}
+    for c in st["seqs"]:
+        if c["chan_may_in"]:
+            d = c["chan_may_in"].date().isoformat()
+            ports[d] = ports.get(d, 0) + 1
+    loads = {}
+    tonnes = {}
+    for r in LoadActualRow.query.all():
+        if r.load_in:
+            d = r.load_in.date().isoformat()
+            loads[d] = loads.get(d, 0) + 1
+            if r.net:
+                tonnes[d] = round(tonnes.get(d, 0) + r.net / 1000.0, 1)
+    days = sorted(set(list(ports) + list(loads)))
+    series = [{"date": d, "port_arrivals": ports.get(d, 0),
+               "loads": loads.get(d, 0), "tonnes": tonnes.get(d, 0)} for d in days]
+    return jsonify(series=series)
+

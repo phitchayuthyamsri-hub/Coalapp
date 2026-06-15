@@ -33,3 +33,33 @@ def routes():
 @login_required
 def timeline():
     return render_template("timeline.html")
+
+
+@bp.route("/pva")
+@login_required
+def pva():
+    return render_template("pva.html")
+
+
+@bp.route("/subfleet")
+@login_required
+def subfleet():
+    return render_template("subfleet.html")
+
+
+@bp.route("/performance")
+@login_required
+def performance():
+    return render_template("performance.html")
+
+
+@bp.route("/daily")
+@login_required
+def daily():
+    return render_template("daily.html")
+
+
+@bp.route("/guide")
+@login_required
+def guide():
+    return render_template("guide.html")

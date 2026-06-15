@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='pva' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <div class="row"><h2>Plan vs Actual</h2><span class="spacer"></span>
+      <button id="pvaRefresh">Refresh</button></div>
+    <div id="pvaCards" class="kpis"></div>
+    <div class="tablewrap">
+      <table id="pvaTable">
+        <thead><tr>
+          <th>Plate</th><th>Plan load</th><th>Actual load</th>
+          <th>Plan port</th><th>Actual port</th><th>Δ port (min)</th><th>Status</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pva.js') }}"></script>{% endblock %}

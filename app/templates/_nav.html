@@ -5,6 +5,11 @@
     <a href="{{ url_for('views.fleet') }}" class="{{ 'active' if active=='fleet' else '' }}">Fleet</a>
     <a href="{{ url_for('views.routes') }}" class="{{ 'active' if active=='routes' else '' }}">Routes</a>
     <a href="{{ url_for('views.timeline') }}" class="{{ 'active' if active=='timeline' else '' }}">Timeline</a>
+    <a href="{{ url_for('views.pva') }}" class="{{ 'active' if active=='pva' else '' }}">Plan vs Actual</a>
+    <a href="{{ url_for('views.subfleet') }}" class="{{ 'active' if active=='subfleet' else '' }}">Subcontractor</a>
+    <a href="{{ url_for('views.performance') }}" class="{{ 'active' if active=='performance' else '' }}">Performance</a>
+    <a href="{{ url_for('views.daily') }}" class="{{ 'active' if active=='daily' else '' }}">Daily</a>
+    <a href="{{ url_for('views.guide') }}" class="{{ 'active' if active=='guide' else '' }}">Guide</a>
   </nav>
   <span class="spacer"></span>
   <span class="muted">{{ current_user.username }}</span>
