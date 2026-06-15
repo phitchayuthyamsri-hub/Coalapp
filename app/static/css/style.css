@@ -49,3 +49,6 @@ th { color:#8a909a; font-weight:600; position:sticky; top:0; background:#171a21;
 .rowbtns button { background:#222732; color:#cfd3da; padding:.3rem .6rem; font-size:.78rem; }
 .rowbtns .del:hover { background:#4d1f0f; color:#ff9a7d; }
 .rowbtns .edit:hover { background:#0f2d4d; color:#7db8ff; }
+
+.dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:.5rem; vertical-align:middle; }
+.spd { width:80px; padding:.35rem; background:#0f1115; border:1px solid #2a2f3a; border-radius:6px; color:#e6e8eb; }

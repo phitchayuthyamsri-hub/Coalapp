@@ -3,6 +3,7 @@
   <nav class="mainnav">
     <a href="{{ url_for('views.dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
     <a href="{{ url_for('views.fleet') }}" class="{{ 'active' if active=='fleet' else '' }}">Fleet</a>
+    <a href="{{ url_for('views.routes') }}" class="{{ 'active' if active=='routes' else '' }}">Routes</a>
   </nav>
   <span class="spacer"></span>
   <span class="muted">{{ current_user.username }}</span>

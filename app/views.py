@@ -21,3 +21,9 @@ def dashboard():
 @login_required
 def fleet():
     return render_template("fleet.html")
+
+
+@bp.route("/routes")
+@login_required
+def routes():
+    return render_template("routes.html")
