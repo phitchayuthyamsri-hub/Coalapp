@@ -1,3 +1,4 @@
+import os
 from flask import Flask
 from flask_login import LoginManager
 
@@ -62,7 +63,14 @@ def _ensure_user_schema():
 
 
 def _ensure_admin():
-    """If no admin exists, promote the earliest-created user (the owner)."""
+    """Pin the owner account as admin; fall back to earliest user if absent."""
+    from sqlalchemy import func
+    name = os.environ.get("ADMIN_USERNAME", "PhitchayuthYamsri")
+    if name:
+        owner = User.query.filter(func.lower(User.username) == name.lower()).first()
+        if owner and not owner.is_admin:
+            owner.is_admin = True
+            db.session.commit()
     if User.query.filter_by(is_admin=True).first():
         return
     first = User.query.order_by(User.id.asc()).first()

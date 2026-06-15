@@ -7638,6 +7638,7 @@ function recomputeSequences() {
   if (typeof renderRouteTable === 'function') renderRouteTable();
   if (typeof renderFleetUI === 'function') renderFleetUI();      // trip counts depend on sequences
   if (typeof renderStatusTable === 'function') renderStatusTable(); // haul/ETA depend on sequences
+  if (typeof window !== 'undefined' && window.renderPerfTab) window.renderPerfTab(); // rebuild Performance KPIs (ACS) from current sequences
 }
 
 function sequenceMatchesFilters(c) {
