@@ -2232,16 +2232,17 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 <nav class="page-nav" id="pageNav">
   <button data-page="perf" class="active">Performance</button>
   <button data-page="daily">Daily performance</button>
+  <button data-page="data" data-subtab="timeline">Timeline</button>
+  <button data-page="truckstatus">Truck Status</button>
   <button data-page="pva">Plan vs Actual</button>
   <button data-page="subfleet">Subcontractor fleet status</button>
   <div class="nav-group" id="navDataInput">
     <button type="button" class="nav-group-btn" id="navDataInputBtn">Data input ▾</button>
     <div class="nav-group-menu" id="navDataInputMenu">
       <button data-page="anchors">Parameter</button>
-      <button data-page="data">Data</button>
+      <button data-page="data" data-subtab="sequence">Sequence/Route</button>
       <button data-page="gps">GPS Data</button>
       <button data-page="plan">Dispatch Plan</button>
-      <button data-page="truckstatus">Truck Status</button>
       <button data-page="weigh">Weighbridge</button>
       <button data-page="fleet">Fleet</button>
     </div>
@@ -6551,6 +6552,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     const t = btn.dataset.page;
     document.querySelectorAll('#pageNav button[data-page]').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('[data-page-panel]').forEach(p => p.classList.toggle('active', p.dataset.pagePanel === t));
+    if (btn.dataset.subtab) { const _sb=document.querySelector('.tab-btn[data-tab="'+btn.dataset.subtab+'"]'); if (_sb) _sb.click(); }
     // "Data input" group highlights when one of its pages is active; close its menu.
     const grp = document.getElementById('navDataInput');
     if (grp) {
