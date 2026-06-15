@@ -1,6 +1,7 @@
 <header class="topbar">
   <strong>Actual GPS Report</strong>
   <nav class="mainnav">
+    <a href="{{ url_for('views.tool') }}" class="{{ 'active' if active=='tool' else '' }}" style="background:#34c759;color:#fff">Full tool</a>
     <a href="{{ url_for('views.performance') }}" class="{{ 'active' if active=='performance' else '' }}">Performance</a>
     <a href="{{ url_for('views.daily') }}" class="{{ 'active' if active=='daily' else '' }}">Daily performance</a>
     <a href="{{ url_for('views.pva') }}" class="{{ 'active' if active=='pva' else '' }}">Plan vs Actual</a>

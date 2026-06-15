@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, redirect, url_for
+import os
+from flask import Blueprint, render_template, redirect, url_for, send_from_directory
 from flask_login import login_required, current_user
 
 bp = Blueprint("views", __name__)
@@ -99,3 +100,10 @@ def routes():
 @login_required
 def timeline():
     return redirect(url_for("views.data"))
+
+
+@bp.route("/tool")
+@login_required
+def tool():
+    folder = os.path.join(os.path.dirname(__file__), "tool")
+    return send_from_directory(folder, "index.html")
