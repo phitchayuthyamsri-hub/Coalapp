@@ -2625,7 +2625,6 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <span class="pcl">PERIOD</span>
         <button id="pmMonthBtn" class="pmbtn">Month</button>
         <select id="perfMonthSel" class="pmsel"></select>
-        <button id="pmYestBtn" class="pmbtn">Yesterday</button>
         <span class="rngnote" id="perfRangeNote"></span>
         <button id="perfShotBtn" class="pmbtn" style="margin-left:auto;background:#2dd4bf;color:#06231f;font-weight:700">&#128247; Screenshot</button>
       </div>
@@ -2804,7 +2803,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <p><b>What it is:</b> the easy summary of how the fleet is doing.</p>
         <p><b>What you see, top to bottom:</b></p>
         <ul>
-          <li><b>Period</b> — pick the month (or "Yesterday") you want to look at.</li>
+          <li><b>Period</b> — pick the month you want to look at.</li>
           <li><b>KPI Summary</b> — the big numbers: trucks loading, trips per truck, plan achievement, time per trip.</li>
           <li><b>On-time Performance</b> — green bar = on time, red = late. Bigger green is better.</li>
           <li><b>Average Travel / Time Spending</b> — how long each part of the road takes, plan vs real.</li>
@@ -3161,7 +3160,7 @@ const STATE = {
     cycleStatus: 'all',  // 'all' | 'complete' | 'incomplete'
     activeRangeOnly: true,  // timeline: only trucks whose fleet effective range covers the window
     offRouteOnly: false,
-    fleetScope: 'all',   // 'all' | 'in' | 'out'  (in = registered on Fleet tab)
+    fleetScope: 'in',    // 'all' | 'in' | 'out'  (in = registered on Fleet tab) — default In fleet
     search: ''
   }
 };
@@ -6068,7 +6067,7 @@ document.getElementById('btnResetFilters').addEventListener('click', () => {
   STATE.filters.activeRangeOnly = true;
   document.getElementById('searchBox').value = '';
   STATE.filters.search = '';
-  STATE.filters.fleetScope = 'all';
+  STATE.filters.fleetScope = 'in';
   syncFleetScopeControls();
   STATE.filters.trucks = new Set(STATE.fileInfo?.plates || []);
   STATE.filters.anchorIds = new Set(STATE.anchors.map(a => a.id));
@@ -6107,7 +6106,7 @@ function isInFleet(plate) {
   return Object.prototype.hasOwnProperty.call(STATE.fleet, normPlate(plate));
 }
 function fleetScopeAllows(plate) {
-  const s = (STATE.filters && STATE.filters.fleetScope) || 'all';
+  const s = (STATE.filters && STATE.filters.fleetScope) || 'in';
   if (s === 'all') return true;
   const inF = isInFleet(plate);
   return s === 'in' ? inF : !inF;
@@ -6124,7 +6123,7 @@ function setFleetScope(scope) {
   if (typeof renderStatusTable === 'function') renderStatusTable();
 }
 function syncFleetScopeControls() {
-  const scope = (STATE.filters && STATE.filters.fleetScope) || 'all';
+  const scope = (STATE.filters && STATE.filters.fleetScope) || 'in';
   document.querySelectorAll('.fleet-scope-seg button[data-scope]').forEach(b => {
     b.classList.toggle('active', b.dataset.scope === scope);
   });
@@ -10085,7 +10084,11 @@ function computePerf(){
 
   // truck x date symbol grid (rows = ALL fleet)
   const grid={};
-  for(const pl of ACS.fleet) grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}};
+  for(const pl of ACS.fleet){ const _m=(ACS.fleetMeta||{})[pl]||{};
+    if(_m.effFrom && perfRange.to && _m.effFrom>perfRange.to) continue;   // not yet active in this period
+    if(_m.effTo && perfRange.from && _m.effTo<perfRange.from) continue;    // deactivated before this period
+    grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}};
+  }
   const ensure=pl=>grid[pl]||(grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}});
   for(const p of asPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:p.offset?String(p.offset):''}; g.totals.circle++; }
   for(const p of manualPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:''}; g.totals.circle++; }   // manual came-as-planned
