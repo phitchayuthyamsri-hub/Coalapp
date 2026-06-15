@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required
 from sqlalchemy import func
 
-from .models import (db, Truck, GpsPing, Anchor, RouteLeg,
+from .models import (db, Truck, GpsPing, Anchor, RouteLeg, KVStore,
                      DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
 
@@ -531,3 +531,34 @@ def anchor_update(aid):
     db.session.commit()
     return jsonify(ok=True)
 
+
+# ── Shared key-value store (backs the full tool's localStorage) ──────────────
+@bp.get("/kv")
+@login_required
+def kv_all():
+    return jsonify({r.key: r.value for r in KVStore.query.all()})
+
+
+@bp.put("/kv/<path:key>")
+@login_required
+def kv_put(key):
+    d = request.get_json(force=True, silent=True) or {}
+    val = d.get("value", "")
+    row = db.session.get(KVStore, key)
+    if row is None:
+        row = KVStore(key=key, value=val)
+        db.session.add(row)
+    else:
+        row.value = val
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@bp.delete("/kv/<path:key>")
+@login_required
+def kv_delete(key):
+    row = db.session.get(KVStore, key)
+    if row is not None:
+        db.session.delete(row)
+        db.session.commit()
+    return jsonify(ok=True)

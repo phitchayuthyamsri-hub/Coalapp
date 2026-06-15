@@ -89,3 +89,9 @@ class SubFleetRow(db.Model):
     key = db.Column(db.String(40), index=True)
     declared_haul = db.Column(db.String(20), default="")
     claimed_arrive_mine = db.Column(db.DateTime)
+
+
+class KVStore(db.Model):
+    """Shared key-value mirror of the full tool's localStorage (team-wide)."""
+    key = db.Column(db.String(255), primary_key=True)
+    value = db.Column(db.Text)
