@@ -595,7 +595,10 @@ def admin_required(f):
 def me():
     return jsonify(username=current_user.username,
                    is_admin=bool(current_user.is_admin),
-                   tabs=_tabs_of(current_user))
+                   tabs=_tabs_of(current_user),
+                   lang=(current_user.lang or "en"),
+                   default_page=(current_user.default_page or None),
+                   can_edit=bool(current_user.can_edit))
 
 
 @bp.get("/admin/users")
@@ -604,7 +607,9 @@ def admin_users():
     out = []
     for u in User.query.order_by(User.id.asc()).all():
         out.append({"id": u.id, "username": u.username,
-                    "is_admin": bool(u.is_admin), "tabs": _tabs_of(u)})
+                    "is_admin": bool(u.is_admin), "tabs": _tabs_of(u),
+                    "lang": (u.lang or "en"), "default_page": (u.default_page or ""),
+                    "can_edit": bool(u.can_edit)})
     return jsonify(out)
 
 
@@ -623,6 +628,15 @@ def admin_update(uid):
             u.allowed_tabs = None
         else:
             u.allowed_tabs = json.dumps([str(x) for x in t if str(x) in TAB_KEYS])
+    if "lang" in d:
+        u.lang = "vi" if str(d["lang"]).lower() == "vi" else "en"
+    if "default_page" in d:
+        dp = str(d["default_page"] or "")
+        u.default_page = dp if dp in TAB_KEYS else None
+    if "can_edit" in d:
+        u.can_edit = bool(d["can_edit"])
+    if d.get("password"):
+        u.set_password(str(d["password"]))
     db.session.commit()
     # Safety net: never leave the system with zero admins.
     if not User.query.filter_by(is_admin=True).first():
@@ -630,3 +644,42 @@ def admin_update(uid):
         db.session.commit()
         return jsonify(ok=True, note="At least one admin is required; kept this user as admin.")
     return jsonify(ok=True, tabs=_tabs_of(u), is_admin=bool(u.is_admin))
+
+
+@bp.post("/admin/users")
+@admin_required
+def admin_create():
+    d = request.get_json(force=True, silent=True) or {}
+    username = (d.get("username") or "").strip()
+    password = d.get("password") or ""
+    if not username or not password:
+        return jsonify(ok=False, error="username and password required"), 400
+    if User.query.filter(db.func.lower(User.username) == username.lower()).first():
+        return jsonify(ok=False, error="username already exists"), 409
+    u = User(username=username)
+    u.set_password(str(password))
+    u.is_admin = bool(d.get("is_admin", False))
+    u.can_edit = bool(d.get("can_edit", True))
+    u.lang = "vi" if str(d.get("lang", "en")).lower() == "vi" else "en"
+    dp = str(d.get("default_page") or "")
+    u.default_page = dp if dp in TAB_KEYS else None
+    t = d.get("tabs", None)
+    u.allowed_tabs = None if t is None else json.dumps([str(x) for x in t if str(x) in TAB_KEYS])
+    db.session.add(u)
+    db.session.commit()
+    return jsonify(ok=True, id=u.id)
+
+
+@bp.delete("/admin/users/<int:uid>")
+@admin_required
+def admin_delete(uid):
+    u = db.session.get(User, uid)
+    if not u:
+        abort(404)
+    if u.id == current_user.id:
+        return jsonify(ok=False, error="You cannot delete your own account."), 400
+    if u.is_admin and User.query.filter_by(is_admin=True).count() <= 1:
+        return jsonify(ok=False, error="Cannot delete the last admin."), 400
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify(ok=True)

@@ -56,6 +56,12 @@ def _ensure_user_schema():
         stmts.append('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0')
     if "allowed_tabs" not in cols:
         stmts.append('ALTER TABLE "user" ADD COLUMN allowed_tabs TEXT')
+    if "lang" not in cols:
+        stmts.append('ALTER TABLE "user" ADD COLUMN lang VARCHAR(2) DEFAULT \'en\'')
+    if "default_page" not in cols:
+        stmts.append('ALTER TABLE "user" ADD COLUMN default_page VARCHAR(20)')
+    if "can_edit" not in cols:
+        stmts.append('ALTER TABLE "user" ADD COLUMN can_edit BOOLEAN NOT NULL DEFAULT 1')
     for st in stmts:
         db.session.execute(text(st))
     if stmts:

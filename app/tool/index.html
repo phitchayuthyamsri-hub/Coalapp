@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Actual GPS Report v39</title>
+<title>TMS system : Coal project</title>
 <script id="BAKED_DATA" type="application/json">null</script>
 
 <style id="leaflet-css">
@@ -1229,6 +1229,7 @@ header .actions { display: flex; gap: 8px; }
 .page-nav {
   background: #2c2c2e;
   display: flex;
+  justify-content: center;
   gap: 2px;
   padding: 0 12px;
   flex: 0 0 auto;
@@ -2196,7 +2197,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 
 <header>
   <div>
-    <h1>Actual GPS Report</h1>
+    <h1>TMS system : Coal project</h1>
     <div class="sub">Polygon geofence visit detection</div>
   </div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
@@ -3053,20 +3054,20 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <input type="file" id="subfleetFile" accept=".xlsx,.xls" hidden>
         </div>
         <button class="secondary small" id="btnSubfleetClear">Clear</button>
-        <button class="secondary small" id="btnSubfleetFit">Fit to content</button>
+        <button class="secondary small active" id="btnSubfleetFit">Fit to content</button>
         <button class="small" id="btnSubfleetCsv">Export xlsx</button>
       </div>
       <div id="subfleetSummary" style="font-size:13px;color:#3a3a3c;margin:0 0 10px"></div>
       <style>
         #subfleetTable th[data-sfsort]{cursor:pointer;user-select:none}
         #subfleetTable th[data-sfsort]:hover{color:#0071e3}
-        #subfleetTable.sf-fit{table-layout:auto;width:auto;min-width:100%}
+        #subfleetTable.sf-fit{table-layout:auto;width:max-content;max-width:100%}
         #subfleetTable.sf-fit th,#subfleetTable.sf-fit td{white-space:nowrap}
         #subfleetTable td.sf-plate{cursor:pointer;color:#0071e3;text-decoration:underline}
         #btnSubfleetFit.active{background:var(--accent,#0071e3);color:#fff}
       </style>
       <div class="table-wrap">
-        <table id="subfleetTable">
+        <table id="subfleetTable" class="sf-fit">
           <thead><tr>
             <th data-sfsort="idx">#<span class="sf-ind"></span></th>
             <th data-sfsort="plate">Plate<span class="sf-ind"></span></th>
