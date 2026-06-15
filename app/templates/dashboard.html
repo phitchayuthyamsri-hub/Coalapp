@@ -1,11 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-<header class="topbar">
-  <strong>Actual GPS Report</strong>
-  <span class="spacer"></span>
-  <span class="muted">{{ user.username }}</span>
-  <a href="{{ url_for('auth.logout') }}">Log out</a>
-</header>
+{% set active='dashboard' %}{% include "_nav.html" %}
 
 <main class="wrap">
   <section class="card">

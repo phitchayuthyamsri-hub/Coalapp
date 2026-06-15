@@ -15,3 +15,9 @@ def index():
 @login_required
 def dashboard():
     return render_template("dashboard.html", user=current_user)
+
+
+@bp.route("/fleet")
+@login_required
+def fleet():
+    return render_template("fleet.html")

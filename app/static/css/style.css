@@ -36,3 +36,16 @@ th { color:#8a909a; font-weight:600; position:sticky; top:0; background:#171a21;
 
 #map { height:420px; border-radius:10px; }
 .leaflet-container { background:#0f1115; }
+
+.mainnav { display:flex; gap:.25rem; margin-left:1rem; }
+.mainnav a { padding:.35rem .7rem; border-radius:7px; color:#8a909a; }
+.mainnav a:hover { color:#e6e8eb; background:#1f242e; }
+.mainnav a.active { color:#fff; background:#2b6fff; }
+.fleet-form { display:flex; flex-wrap:wrap; gap:.8rem; align-items:flex-end; }
+.fleet-form label { display:flex; flex-direction:column; gap:.3rem; font-size:.8rem; color:#8a909a; }
+.fleet-form input, .fleet-form select { padding:.5rem; background:#0f1115;
+  border:1px solid #2a2f3a; border-radius:8px; color:#e6e8eb; min-width:130px; }
+.rowbtns { display:flex; gap:.4rem; }
+.rowbtns button { background:#222732; color:#cfd3da; padding:.3rem .6rem; font-size:.78rem; }
+.rowbtns .del:hover { background:#4d1f0f; color:#ff9a7d; }
+.rowbtns .edit:hover { background:#0f2d4d; color:#7db8ff; }
