@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='plan' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <h2>Dispatch Plan</h2>
+    <label class="upload-box">Upload Dispatch Plan (.xlsx) — replaces current plan
+      <input type="file" id="planFile" accept=".xlsx"></label>
+    <div id="planMsg" class="muted"></div>
+  </section>
+  <section class="card">
+    <div class="row"><h2>Plan</h2><span class="spacer"></span><span id="planCount" class="muted"></span></div>
+    <div class="tablewrap"><table id="planTable"><thead><tr>
+      <th>Plate</th><th>Load start</th><th>Arrive port</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/plan.js') }}"></script>{% endblock %}

@@ -7,6 +7,16 @@
     <div id="perfCards" class="kpis"></div>
     <div id="perfHaul"></div>
   </section>
+  <section class="card">
+    <div class="row"><h2>Live fleet status</h2><span class="spacer"></span><button id="stRefresh">Refresh</button></div>
+    <div id="statusNote" class="muted"></div>
+    <div class="tablewrap">
+      <table id="statusTable"><thead><tr>
+        <th>Plate</th><th>Haul</th><th>Direction</th><th>Next</th><th>Rem km</th>
+        <th>ETA (raw)</th><th>ETA (criteria)</th><th>Last seen</th><th>Status</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
 </main>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/performance.js') }}"></script>{% endblock %}

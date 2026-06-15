@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='weigh' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <h2>Weighbridge</h2>
+    <label class="upload-box">Upload Weighbridge / Load_actual (.xlsx) — replaces current
+      <input type="file" id="weighFile" accept=".xlsx"></label>
+    <div id="weighMsg" class="muted"></div>
+  </section>
+  <section class="card">
+    <div class="row"><h2>Loading tickets</h2><span class="spacer"></span><span id="weighCount" class="muted"></span></div>
+    <div class="tablewrap"><table id="weighTable"><thead><tr>
+      <th>Plate</th><th>Load in</th><th>Net (kg)</th><th>Ticket</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/weigh.js') }}"></script>{% endblock %}

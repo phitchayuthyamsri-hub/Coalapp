@@ -1,14 +1,23 @@
 <header class="topbar">
   <strong>Actual GPS Report</strong>
   <nav class="mainnav">
-    <a href="{{ url_for('views.dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
-    <a href="{{ url_for('views.fleet') }}" class="{{ 'active' if active=='fleet' else '' }}">Fleet</a>
-    <a href="{{ url_for('views.routes') }}" class="{{ 'active' if active=='routes' else '' }}">Routes</a>
-    <a href="{{ url_for('views.timeline') }}" class="{{ 'active' if active=='timeline' else '' }}">Timeline</a>
-    <a href="{{ url_for('views.pva') }}" class="{{ 'active' if active=='pva' else '' }}">Plan vs Actual</a>
-    <a href="{{ url_for('views.subfleet') }}" class="{{ 'active' if active=='subfleet' else '' }}">Subcontractor</a>
     <a href="{{ url_for('views.performance') }}" class="{{ 'active' if active=='performance' else '' }}">Performance</a>
-    <a href="{{ url_for('views.daily') }}" class="{{ 'active' if active=='daily' else '' }}">Daily</a>
+    <a href="{{ url_for('views.daily') }}" class="{{ 'active' if active=='daily' else '' }}">Daily performance</a>
+    <a href="{{ url_for('views.pva') }}" class="{{ 'active' if active=='pva' else '' }}">Plan vs Actual</a>
+    <a href="{{ url_for('views.subfleet') }}" class="{{ 'active' if active=='subfleet' else '' }}">Subcontractor fleet status</a>
+    {% set datapages = ['parameter','data','gps','plan','truckstatus','weigh','fleet'] %}
+    <div class="dropdown">
+      <button class="ddbtn {{ 'active' if active in datapages else '' }}">Data input ▾</button>
+      <div class="ddmenu">
+        <a href="{{ url_for('views.parameter') }}" class="{{ 'active' if active=='parameter' else '' }}">Parameter</a>
+        <a href="{{ url_for('views.data') }}" class="{{ 'active' if active=='data' else '' }}">Data</a>
+        <a href="{{ url_for('views.gps') }}" class="{{ 'active' if active=='gps' else '' }}">GPS Data</a>
+        <a href="{{ url_for('views.plan') }}" class="{{ 'active' if active=='plan' else '' }}">Dispatch Plan</a>
+        <a href="{{ url_for('views.truckstatus') }}" class="{{ 'active' if active=='truckstatus' else '' }}">Truck Status</a>
+        <a href="{{ url_for('views.weigh') }}" class="{{ 'active' if active=='weigh' else '' }}">Weighbridge</a>
+        <a href="{{ url_for('views.fleet') }}" class="{{ 'active' if active=='fleet' else '' }}">Fleet</a>
+      </div>
+    </div>
     <a href="{{ url_for('views.guide') }}" class="{{ 'active' if active=='guide' else '' }}">Guide</a>
   </nav>
   <span class="spacer"></span>

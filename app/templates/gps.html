@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='gps' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <h2>GPS Data</h2>
+    <label class="upload-box">Add GPS file (.xlsx) — appends to existing
+      <input type="file" id="gpsFile" accept=".xlsx"></label>
+    <label class="inl" style="margin-left:1rem"><input type="checkbox" id="gpsReplace"> Replace existing GPS</label>
+    <div id="gpsMsg" class="muted"></div>
+  </section>
+  <section class="card">
+    <div class="row"><h2>Loaded GPS</h2><span class="spacer"></span><span id="gpsTotals" class="muted"></span></div>
+    <div class="tablewrap"><table id="gpsTable"><thead><tr>
+      <th>Plate</th><th>Pings</th><th>First seen</th><th>Last seen</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/gps.js') }}"></script>{% endblock %}

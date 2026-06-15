@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='truckstatus' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <div class="row"><h2>Truck Status</h2><span class="spacer"></span><button id="tsRefresh">Refresh</button></div>
+    <p class="muted">Plate × date — each cell shows that day's events (Load / Border / Port / Return / Mine).</p>
+    <div class="tablewrap"><table id="tsTable" class="pivot"><thead></thead><tbody></tbody></table></div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/truckstatus.js') }}"></script>{% endblock %}

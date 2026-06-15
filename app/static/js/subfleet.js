@@ -14,4 +14,12 @@ async function load(){
     tb.appendChild(tr);
   });
 }
-$('#sfRefresh').addEventListener('click',load);load();
+const fileInp=document.querySelector('#sfFile');
+if(fileInp){fileInp.addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
+  document.querySelector('#sfUpMsg').textContent='Uploading '+f.name+'…';
+  try{const r=await fetch('/api/upload/subfleet',{method:'POST',body:fd});const j=await r.json();
+    document.querySelector('#sfUpMsg').textContent=`${f.name}: ${j.added} rows.`;load();}
+  catch(err){document.querySelector('#sfUpMsg').textContent='Failed: '+err.message;}
+  e.target.value='';});}
+document.querySelector('#sfRefresh').addEventListener('click',load);load();

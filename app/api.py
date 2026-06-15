@@ -431,3 +431,103 @@ def daily():
                "loads": loads.get(d, 0), "tonnes": tonnes.get(d, 0)} for d in days]
     return jsonify(series=series)
 
+# ── Data tables for the Data-input pages ─────────────────────────────────────
+@bp.get("/sequences")
+@login_required
+def sequences():
+    st = _engine_state()
+    def f(x): return engine.fmt(x)
+    rows = []
+    for c in st["seqs"]:
+        rows.append({
+            "plate": c["plate"], "cycle_date": f(c["cycle_date"]),
+            "xppl_in": f(c["xppl_in"]), "loading_in": f(c["loading_in"]),
+            "lalay_out_in": f(c["lalay_out_in"]), "ql49_out_in": f(c["ql49_out_in"]),
+            "chan_may_in": f(c["chan_may_in"]), "ql49_back_in": f(c["ql49_back_in"]),
+            "lalay_back_in": f(c["lalay_back_in"]), "xppl_r": f(c["xppl_r"]),
+            "backhaul_type": c["backhaul_type"] or "",
+            "complete": bool(c["chan_may_in"] and c["xppl_r"]),
+        })
+    return jsonify(rows=rows, count=len(rows))
+
+
+@bp.get("/gps_summary")
+@login_required
+def gps_summary():
+    from sqlalchemy import func
+    q = (db.session.query(GpsPing.plate, func.count(GpsPing.id),
+                          func.min(GpsPing.dt), func.max(GpsPing.dt))
+         .group_by(GpsPing.plate).order_by(GpsPing.plate))
+    rows = [{"plate": p, "pings": n, "first": engine.fmt(mn), "last": engine.fmt(mx)}
+            for p, n, mn, mx in q]
+    total = sum(r["pings"] for r in rows)
+    return jsonify(rows=rows, total_pings=total, plates=len(rows))
+
+
+@bp.get("/plan_rows")
+@login_required
+def plan_rows():
+    rows = [{"plate": r.plate, "load_start": engine.fmt(r.load_start),
+             "port_arrive": engine.fmt(r.port_arrive)}
+            for r in DispatchPlanRow.query.order_by(DispatchPlanRow.load_start).all()]
+    return jsonify(rows=rows, count=len(rows))
+
+
+@bp.get("/load_rows")
+@login_required
+def load_rows():
+    rows = [{"plate": r.plate, "load_in": engine.fmt(r.load_in),
+             "net": r.net, "ticket": r.ticket}
+            for r in LoadActualRow.query.order_by(LoadActualRow.load_in).all()]
+    return jsonify(rows=rows, count=len(rows))
+
+
+@bp.get("/truckstatus")
+@login_required
+def truckstatus():
+    """Pivot: plate (rows) x date (cols). Cell = that day's key events."""
+    st = _engine_state()
+    # collect events per (plate, date)
+    cells = {}
+    dates = set()
+
+    def add(plate, dt, label):
+        if not dt:
+            return
+        d = dt.date().isoformat()
+        dates.add(d)
+        cells.setdefault(plate, {}).setdefault(d, [])
+        cells[plate][d].append((dt, label))
+
+    for c in st["seqs"]:
+        add(c["plate"], c["loading_in"], "Load")
+        add(c["plate"], c["lalay_out_in"], "Border")
+        add(c["plate"], c["chan_may_in"], "Port")
+        add(c["plate"], c["lalay_back_in"], "Return")
+        add(c["plate"], c["xppl_r"], "Mine")
+
+    plates = sorted(cells.keys())
+    dates = sorted(dates)
+    out = {}
+    for plate in plates:
+        out[plate] = {}
+        for d in dates:
+            evs = sorted(cells[plate].get(d, []))
+            out[plate][d] = " · ".join(f"{lbl} {dt.strftime('%H:%M')}" for dt, lbl in evs)
+    return jsonify(plates=plates, dates=dates, cells=out)
+
+
+@bp.put("/anchors/<int:aid>")
+@login_required
+def anchor_update(aid):
+    a = db.session.get(Anchor, aid)
+    if not a:
+        return jsonify(error="not found"), 404
+    d = request.get_json(force=True)
+    if "role" in d:
+        a.role = d["role"] or ""
+    if "min_dwell_min" in d and d["min_dwell_min"] is not None:
+        a.min_dwell_min = int(d["min_dwell_min"])
+    db.session.commit()
+    return jsonify(ok=True)
+

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='parameter' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <h2>Parameter — map zones</h2>
+    <p class="muted">Geofence zones used to detect visits. Set each zone's role and minimum dwell.</p>
+    <div class="tablewrap"><table id="anchorTable"><thead><tr>
+      <th>Zone</th><th>Role</th><th>Min dwell (min)</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div id="paramMsg" class="muted"></div>
+  </section>
+  <section class="card"><h2>Map</h2><div id="map"></div></section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/parameter.js') }}"></script>
+{% endblock %}
