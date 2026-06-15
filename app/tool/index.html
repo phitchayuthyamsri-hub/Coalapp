@@ -4846,10 +4846,11 @@ async function dinIngestWeigh(file) {
   }
   if (!n || !maxMonth) throw new Error('Weighbridge: no rows with a valid Date Out parsed');
 
-  // Replace only the latest month; keep every other month as-is.
+  // Replace every month present in this upload; keep months not in the file untouched.
+  const monthsInFile = new Set(Object.values(agg).map(g => g.month));
   const keep = {};
-  for (const k in (STATE.din.weigh || {})) { if (STATE.din.weigh[k].month !== maxMonth) keep[k] = STATE.din.weigh[k]; }
-  for (const k in agg) { if (agg[k].month === maxMonth) keep[k] = agg[k]; }
+  for (const k in (STATE.din.weigh || {})) { if (!monthsInFile.has(STATE.din.weigh[k].month)) keep[k] = STATE.din.weigh[k]; }
+  for (const k in agg) { keep[k] = agg[k]; }
   STATE.din.weigh = keep;
   STATE.din._weighMonth = maxMonth;
   weighSave();
