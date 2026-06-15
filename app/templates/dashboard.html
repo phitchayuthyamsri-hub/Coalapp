@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="topbar">
+  <strong>Actual GPS Report</strong>
+  <span class="spacer"></span>
+  <span class="muted">{{ user.username }}</span>
+  <a href="{{ url_for('auth.logout') }}">Log out</a>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <h2>Data input</h2>
+    <div class="uploads">
+      <label>GPS<input type="file" data-ep="/api/upload/gps?replace=1" accept=".xlsx"></label>
+      <label>Dispatch plan<input type="file" data-ep="/api/upload/plan" accept=".xlsx"></label>
+      <label>Weighbridge<input type="file" data-ep="/api/upload/load" accept=".xlsx"></label>
+      <label>Subcontractor<input type="file" data-ep="/api/upload/subfleet" accept=".xlsx"></label>
+    </div>
+    <div id="uploadMsg" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <h2>Fleet status</h2>
+      <span class="spacer"></span>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+    <div id="statusNote" class="muted"></div>
+    <div class="tablewrap">
+      <table id="statusTable">
+        <thead><tr>
+          <th>Plate</th><th>Haul</th><th>Direction</th><th>Next</th>
+          <th>Rem km</th><th>ETA (raw)</th><th>ETA (criteria)</th>
+          <th>Last seen</th><th>Status</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Map</h2>
+    <div id="map"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}
