@@ -205,3 +205,49 @@ def status():
     rows = engine.build_status_rows(list(plates), last_pings, sequences, routes,
                                     anchors, roles, plan, load, deactivated)
     return jsonify(rows=rows, count=len(rows))
+
+# ── Visits (for the Timeline page) ───────────────────────────────────────────
+@bp.get("/visits")
+@login_required
+def visits():
+    from datetime import datetime, timedelta
+    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
+                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
+    role_by_anchor = {a.id: a.role for a in Anchor.query.all() if a.role}
+
+    q = GpsPing.query
+    fr = request.args.get("from")
+    to = request.args.get("to")
+    plate = request.args.get("plate")
+    if fr:
+        q = q.filter(GpsPing.dt >= datetime.strptime(fr, "%Y-%m-%d"))
+    if to:
+        q = q.filter(GpsPing.dt < datetime.strptime(to, "%Y-%m-%d") + timedelta(days=1))
+    if plate:
+        q = q.filter(GpsPing.plate == plate)
+    pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
+              "speed": p.speed, "status": p.status}
+             for p in q.order_by(GpsPing.dt).all()]
+
+    deactivated = {engine.norm_plate(t.plate) for t in
+                   Truck.query.filter_by(status="deactivated").all()}
+    vs = engine.build_visits(pings, anchors, deactivated)
+
+    out, mn, mx = [], None, None
+    for v in vs:
+        e, x = v["enter"], v.get("exit") or v["enter"]
+        if mn is None or e < mn:
+            mn = e
+        if mx is None or x > mx:
+            mx = x
+        out.append({
+            "plate": v["plate"], "anchor_name": v["anchor_name"],
+            "role": role_by_anchor.get(v["anchor_id"], ""),
+            "enter": e.isoformat(), "exit": x.isoformat(),
+            "dur_min": round((x - e).total_seconds() / 60),
+            "open": bool(v.get("open")),
+        })
+    return jsonify(visits=out,
+                   min=mn.isoformat() if mn else None,
+                   max=mx.isoformat() if mx else None)
+

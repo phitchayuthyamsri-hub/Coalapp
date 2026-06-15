@@ -4,6 +4,7 @@
     <a href="{{ url_for('views.dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
     <a href="{{ url_for('views.fleet') }}" class="{{ 'active' if active=='fleet' else '' }}">Fleet</a>
     <a href="{{ url_for('views.routes') }}" class="{{ 'active' if active=='routes' else '' }}">Routes</a>
+    <a href="{{ url_for('views.timeline') }}" class="{{ 'active' if active=='timeline' else '' }}">Timeline</a>
   </nav>
   <span class="spacer"></span>
   <span class="muted">{{ current_user.username }}</span>

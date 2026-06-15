@@ -27,3 +27,9 @@ def fleet():
 @login_required
 def routes():
     return render_template("routes.html")
+
+
+@bp.route("/timeline")
+@login_required
+def timeline():
+    return render_template("timeline.html")

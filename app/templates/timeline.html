@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='timeline' %}{% include "_nav.html" %}
+
+<main class="wrap">
+  <section class="card">
+    <div class="row">
+      <h2>Timeline</h2><span class="spacer"></span>
+      <label class="inl">From<input id="tl_from" type="date"></label>
+      <label class="inl">To<input id="tl_to" type="date"></label>
+      <label class="inl">Truck<input id="tl_plate" placeholder="all"></label>
+      <button id="tl_load">Load</button>
+    </div>
+    <div id="tl_legend" class="legend"></div>
+    <div id="tl_note" class="muted"></div>
+    <div id="tl_body" class="tl-body"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/timeline.js') }}"></script>
+{% endblock %}

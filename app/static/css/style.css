@@ -52,3 +52,14 @@ th { color:#8a909a; font-weight:600; position:sticky; top:0; background:#171a21;
 
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:.5rem; vertical-align:middle; }
 .spd { width:80px; padding:.35rem; background:#0f1115; border:1px solid #2a2f3a; border-radius:6px; color:#e6e8eb; }
+
+.inl { display:inline-flex; flex-direction:column; gap:.2rem; font-size:.75rem; color:#8a909a; }
+.inl input { padding:.4rem; background:#0f1115; border:1px solid #2a2f3a; border-radius:6px; color:#e6e8eb; }
+.legend { display:flex; flex-wrap:wrap; gap:1rem; margin:.6rem 0; font-size:.8rem; color:#8a909a; }
+.leg-item { display:flex; align-items:center; }
+.tl-body { display:flex; flex-direction:column; gap:.35rem; margin-top:.6rem; }
+.tl-row { display:flex; align-items:center; gap:.6rem; }
+.tl-label { width:110px; flex:none; font-size:.8rem; color:#cfd3da; }
+.tl-track { position:relative; flex:1; height:22px; background:#0f1115;
+  border:1px solid #232733; border-radius:5px; overflow:hidden; }
+.tl-seg { position:absolute; top:2px; bottom:2px; min-width:2px; border-radius:3px; cursor:pointer; }
