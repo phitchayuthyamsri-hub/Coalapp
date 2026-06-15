@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required, current_user
 
 from .models import db, User
@@ -19,9 +19,12 @@ def register():
             return redirect(url_for("auth.register"))
         u = User(username=username)
         u.set_password(password)
+        if User.query.count() == 0:
+            u.is_admin = True
         db.session.add(u)
         db.session.commit()
         login_user(u)
+        session.permanent = True
         return redirect(url_for("views.dashboard"))
     return render_template("register.html")
 
@@ -36,6 +39,7 @@ def login():
         u = User.query.filter_by(username=username).first()
         if u and u.check_password(password):
             login_user(u)
+            session.permanent = True
             return redirect(url_for("views.dashboard"))
         flash("Invalid username or password.")
         return redirect(url_for("auth.login"))

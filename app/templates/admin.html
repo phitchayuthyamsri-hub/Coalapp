@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Access control</title>
+<style>
+  :root{ --bg:#0b0b0c; --panel:#161618; --line:#2a2a2e; --ink:#e6e6ea; --mut:#8a8f98; --grn:#34c759; --blue:#0a84ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0}
+  header .sp{flex:1}
+  a.btn{color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px}
+  a.btn:hover{border-color:var(--mut)}
+  .wrap{padding:18px;max-width:1100px;margin:0 auto}
+  .note{color:var(--mut);font-size:13px;margin:0 0 16px}
+  .user{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+  .urow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .uname{font-weight:600;font-size:15px;min-width:160px}
+  .pill{font-size:11px;color:#000;background:var(--grn);border-radius:999px;padding:2px 8px;font-weight:700}
+  label.ad{display:flex;align-items:center;gap:6px;color:var(--mut)}
+  .tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;margin:12px 0 0}
+  .tabs label{display:flex;align-items:center;gap:7px}
+  .actions{display:flex;align-items:center;gap:12px;margin-top:12px}
+  button.save{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-weight:600;cursor:pointer}
+  button.save:hover{filter:brightness(1.1)}
+  .allbtn{background:none;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:5px 10px;cursor:pointer}
+  .ok{color:var(--grn);font-size:13px}
+  .err{color:#ff6b6b;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Access control</h1>
+  <div class="sp"></div>
+  <a class="btn" href="/tool">← Back to tool</a>
+  <a class="btn" href="/logout">Log out</a>
+</header>
+<div class="wrap">
+  <p class="note">Tick the tabs each user is allowed to open in the tool. Unchecked tabs are hidden for them. Admins always see every tab and can open this page. At least one admin is always kept.</p>
+  <div id="list">Loading…</div>
+</div>
+
+<script>
+const TABS = [
+  ["perf","Performance"],["daily","Daily performance"],["pva","Plan vs Actual"],
+  ["subfleet","Subcontractor fleet status"],["anchors","Parameter"],["data","Data"],
+  ["gps","GPS Data"],["plan","Dispatch Plan"],["truckstatus","Truck Status"],
+  ["weigh","Weighbridge"],["fleet","Fleet"],["guide","Guide"]
+];
+const ALL = TABS.map(t => t[0]);
+
+function userCard(u){
+  const el = document.createElement("div");
+  el.className = "user";
+  const allowed = u.tabs === null ? ALL : u.tabs;   // null = all
+  el.innerHTML =
+    '<div class="urow">'
+    + '<span class="uname">' + escapeHtml(u.username) + (u.is_admin ? ' <span class="pill">admin</span>' : '') + '</span>'
+    + '<label class="ad"><input type="checkbox" class="adchk"' + (u.is_admin ? ' checked' : '') + '> admin</label>'
+    + '<button class="allbtn" data-act="all">All</button>'
+    + '<button class="allbtn" data-act="none">None</button>'
+    + '</div>'
+    + '<div class="tabs">' + TABS.map(function(t){
+        const on = allowed.indexOf(t[0]) >= 0 ? ' checked' : '';
+        return '<label><input type="checkbox" class="tabchk" value="' + t[0] + '"' + on + '>' + t[1] + '</label>';
+      }).join('') + '</div>'
+    + '<div class="actions"><button class="save">Save</button><span class="msg"></span></div>';
+
+  const tabBoxes = () => Array.from(el.querySelectorAll(".tabchk"));
+  el.querySelector('[data-act="all"]').onclick = () => tabBoxes().forEach(b => b.checked = true);
+  el.querySelector('[data-act="none"]').onclick = () => tabBoxes().forEach(b => b.checked = false);
+
+  el.querySelector(".save").onclick = function(){
+    const msg = el.querySelector(".msg"); msg.textContent = "Saving…"; msg.className = "msg";
+    const checked = tabBoxes().filter(b => b.checked).map(b => b.value);
+    const tabs = (checked.length === ALL.length) ? null : checked;   // all = unrestricted
+    const is_admin = el.querySelector(".adchk").checked;
+    fetch("/api/admin/users/" + u.id, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ tabs: tabs, is_admin: is_admin })
+    }).then(r => r.json()).then(res => {
+      if (res && res.ok) { msg.textContent = res.note ? res.note : "Saved ✓"; msg.className = res.note ? "msg err" : "msg ok"; load(); }
+      else { msg.textContent = "Save failed"; msg.className = "msg err"; }
+    }).catch(() => { msg.textContent = "Save failed"; msg.className = "msg err"; });
+  };
+  return el;
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function load(){
+  fetch("/api/admin/users").then(r => {
+    if (r.status === 403) { document.getElementById("list").innerHTML = '<p class="err">Admins only.</p>'; return null; }
+    return r.json();
+  }).then(users => {
+    if (!users) return;
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    users.forEach(u => list.appendChild(userCard(u)));
+  }).catch(() => { document.getElementById("list").innerHTML = '<p class="err">Could not load users.</p>'; });
+}
+load();
+</script>
+</body>
+</html>

@@ -15,6 +15,8 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     pw_hash = db.Column(db.String(255), nullable=False)
     created = db.Column(db.DateTime, default=datetime.utcnow)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    allowed_tabs = db.Column(db.Text)  # JSON list of allowed tab keys; NULL = all tabs
 
     def set_password(self, pw):
         self.pw_hash = generate_password_hash(pw)

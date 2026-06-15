@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, render_template, redirect, url_for, Response
+from flask import Blueprint, render_template, redirect, url_for, Response, abort
 from flask_login import login_required, current_user
 
 bp = Blueprint("views", __name__)
@@ -31,6 +31,39 @@ _BRIDGE = """<script>
 })();
 </script>"""
 
+_GUARD = '''<script>
+(function(){
+  // 1) Auto-logout after 30 minutes of inactivity
+  var IDLE_MS=30*60*1000, timer;
+  function reset(){ clearTimeout(timer); timer=setTimeout(function(){ try{location.href='/logout';}catch(e){} }, IDLE_MS); }
+  ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function(ev){
+    document.addEventListener(ev, reset, {passive:true});
+  });
+  reset();
+
+  // 2) Admin-managed tab access: hide tabs this user is not allowed to open
+  document.addEventListener('DOMContentLoaded', function(){
+    fetch('/api/me').then(function(r){return r.json();}).then(function(me){
+      if(!me || !me.tabs) return;                 // null = all tabs allowed
+      var allow=new Set(me.tabs);
+      var nav=document.getElementById('pageNav'); if(!nav) return;
+      nav.querySelectorAll('button[data-page]').forEach(function(b){
+        if(!allow.has(b.getAttribute('data-page'))) b.style.display='none';
+      });
+      var sub=['anchors','data','gps','plan','truckstatus','weigh','fleet'];
+      if(!sub.some(function(k){return allow.has(k);})){
+        var di=document.getElementById('navDataInput'); if(di) di.style.display='none';
+      }
+      var active=nav.querySelector('button[data-page].active');
+      if(active && active.style.display==='none'){
+        var vis=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return b.style.display!=='none'; });
+        if(vis) vis.click();
+      }
+    }).catch(function(){});
+  });
+})();
+</script>'''
+
 _TOOL_HTML = None
 
 
@@ -40,7 +73,7 @@ def _tool_html():
         path = os.path.join(os.path.dirname(__file__), "tool", "index.html")
         with open(path, encoding="utf-8") as f:
             html = f.read()
-        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE, 1)
+        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD, 1)
     return _TOOL_HTML
 
 
@@ -55,6 +88,14 @@ def index():
 @login_required
 def tool():
     return Response(_tool_html(), mimetype="text/html")
+
+
+@bp.route("/admin")
+@login_required
+def admin():
+    if not getattr(current_user, "is_admin", False):
+        abort(403)
+    return render_template("admin.html")
 
 
 # Rebuilt app (kept available; uses its own SQLite tables, separate from /tool)

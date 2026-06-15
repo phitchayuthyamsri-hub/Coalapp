@@ -2,11 +2,13 @@
 JSON API. All endpoints require login. Data is shared across the team.
 Uploads parse server-side and replace the relevant table.
 """
-from flask import Blueprint, request, jsonify
-from flask_login import login_required
+import json
+from functools import wraps
+from flask import Blueprint, request, jsonify, abort
+from flask_login import login_required, current_user
 from sqlalchemy import func
 
-from .models import (db, Truck, GpsPing, Anchor, RouteLeg, KVStore,
+from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore,
                      DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
 
@@ -562,3 +564,69 @@ def kv_delete(key):
         db.session.delete(row)
         db.session.commit()
     return jsonify(ok=True)
+
+
+# ── Access control: identity + admin-managed tab access ──────────────────────
+TAB_KEYS = ["perf","daily","pva","subfleet","anchors","data","gps","plan",
+            "truckstatus","weigh","fleet","guide"]
+
+
+def _tabs_of(u):
+    if not u.allowed_tabs:
+        return None  # None = all tabs allowed
+    try:
+        return [t for t in json.loads(u.allowed_tabs) if t in TAB_KEYS]
+    except Exception:
+        return None
+
+
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def w(*a, **k):
+        if not getattr(current_user, "is_admin", False):
+            abort(403)
+        return f(*a, **k)
+    return w
+
+
+@bp.get("/me")
+@login_required
+def me():
+    return jsonify(username=current_user.username,
+                   is_admin=bool(current_user.is_admin),
+                   tabs=_tabs_of(current_user))
+
+
+@bp.get("/admin/users")
+@admin_required
+def admin_users():
+    out = []
+    for u in User.query.order_by(User.id.asc()).all():
+        out.append({"id": u.id, "username": u.username,
+                    "is_admin": bool(u.is_admin), "tabs": _tabs_of(u)})
+    return jsonify(out)
+
+
+@bp.put("/admin/users/<int:uid>")
+@admin_required
+def admin_update(uid):
+    u = db.session.get(User, uid)
+    if not u:
+        abort(404)
+    d = request.get_json(force=True, silent=True) or {}
+    if "is_admin" in d:
+        u.is_admin = bool(d["is_admin"])
+    if "tabs" in d:
+        t = d["tabs"]
+        if t is None:
+            u.allowed_tabs = None
+        else:
+            u.allowed_tabs = json.dumps([str(x) for x in t if str(x) in TAB_KEYS])
+    db.session.commit()
+    # Safety net: never leave the system with zero admins.
+    if not User.query.filter_by(is_admin=True).first():
+        u.is_admin = True
+        db.session.commit()
+        return jsonify(ok=True, note="At least one admin is required; kept this user as admin.")
+    return jsonify(ok=True, tabs=_tabs_of(u), is_admin=bool(u.is_admin))
