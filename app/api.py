@@ -4,7 +4,8 @@ Uploads parse server-side and replace the relevant table.
 """
 import json
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date
+import openpyxl
 from flask import Blueprint, request, jsonify, abort
 from flask_login import login_required, current_user
 from sqlalchemy import func
@@ -568,6 +569,8 @@ def kv_delete(key):
 
 
 # ── Access control: identity + admin-managed tab access ──────────────────────
+APP_KEYS = ["tms", "report"]
+
 TAB_KEYS = ["perf","daily","timeline","pva","subfleet","anchors","data","gps","plan",
             "truckstatus","weigh","fleet","guide"]
 
@@ -577,6 +580,15 @@ def _tabs_of(u):
         return None  # None = all tabs allowed
     try:
         return [t for t in json.loads(u.allowed_tabs) if t in TAB_KEYS]
+    except Exception:
+        return None
+
+
+def _apps_of(u):
+    if not getattr(u, "allowed_apps", None):
+        return None  # None = all apps allowed
+    try:
+        return [a for a in json.loads(u.allowed_apps) if a in APP_KEYS]
     except Exception:
         return None
 
@@ -599,7 +611,8 @@ def me():
                    tabs=_tabs_of(current_user),
                    lang=(current_user.lang or "en"),
                    default_page=(current_user.default_page or None),
-                   can_edit=bool(current_user.can_edit))
+                   can_edit=bool(current_user.can_edit),
+                   apps=_apps_of(current_user))
 
 
 @bp.get("/admin/users")
@@ -610,7 +623,7 @@ def admin_users():
         out.append({"id": u.id, "username": u.username,
                     "is_admin": bool(u.is_admin), "tabs": _tabs_of(u),
                     "lang": (u.lang or "en"), "default_page": (u.default_page or ""),
-                    "can_edit": bool(u.can_edit)})
+                    "can_edit": bool(u.can_edit), "apps": _apps_of(u)})
     return jsonify(out)
 
 
@@ -636,6 +649,9 @@ def admin_update(uid):
         u.default_page = dp if dp in TAB_KEYS else None
     if "can_edit" in d:
         u.can_edit = bool(d["can_edit"])
+    if "apps" in d:
+        a = d["apps"]
+        u.allowed_apps = None if a is None else json.dumps([str(x) for x in a if str(x) in APP_KEYS])
     if d.get("password"):
         u.set_password(str(d["password"]))
     db.session.commit()
@@ -666,6 +682,8 @@ def admin_create():
     u.default_page = dp if dp in TAB_KEYS else None
     t = d.get("tabs", None)
     u.allowed_tabs = None if t is None else json.dumps([str(x) for x in t if str(x) in TAB_KEYS])
+    ap = d.get("apps", None)
+    u.allowed_apps = None if ap is None else json.dumps([str(x) for x in ap if str(x) in APP_KEYS])
     db.session.add(u)
     db.session.commit()
     return jsonify(ok=True, id=u.id)
@@ -742,3 +760,158 @@ def admin_activity():
         res[name] = {"total_seconds": u["total_seconds"], "areas": areas,
                      "countries": countries, "logins": u["logins"]}
     return jsonify(res)
+
+
+# ── Daily/Weekly Coal Report: contracts + readiness data layer ───────────────
+def _kv_get(key):
+    row = db.session.get(KVStore, key)
+    return row.value if row else None
+
+
+def _kv_set(key, value):
+    row = db.session.get(KVStore, key)
+    if row:
+        row.value = value
+    else:
+        db.session.add(KVStore(key=key, value=value))
+    db.session.commit()
+
+
+def _rs(v):
+    return "" if v is None else str(v).strip()
+
+
+def _ymd(v):
+    if isinstance(v, (datetime, date)):
+        return v.strftime("%Y-%m-%d")
+    s = _rs(v).split(" ")[0]
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    return ""
+
+
+def _hdr_index(headers):
+    def norm(x):
+        return _rs(x).lower().replace(" ", "").replace(".", "").replace("_", "").replace("#", "")
+    return {norm(h): i for i, h in enumerate(headers)}
+
+
+def _num(v):
+    try:
+        return float(str(v).replace(",", "") or 0)
+    except Exception:
+        return 0.0
+
+
+def editor_required(f):
+    @wraps(f)
+    @login_required
+    def w(*a, **k):
+        if not getattr(current_user, "can_edit", False):
+            abort(403)
+        return f(*a, **k)
+    return w
+
+
+def _open_upload():
+    fs = request.files.get("file")
+    if not fs:
+        abort(400)
+    return openpyxl.load_workbook(fs.stream, data_only=True, read_only=True)
+
+
+@bp.post("/coalrpt/contracts")
+@editor_required
+def coalrpt_contracts():
+    wb = _open_upload()
+    ws = wb[wb.sheetnames[0]]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return jsonify(ok=False, error="empty file"), 400
+    H = _hdr_index(rows[0])
+    def g(r, key):
+        i = H.get(key)
+        return r[i] if i is not None and i < len(r) else None
+    out = []
+    for r in rows[1:]:
+        if not _rs(g(r, "contract")):
+            continue
+        out.append({"customer": _rs(g(r, "customername")), "export": _rs(g(r, "export")),
+                    "term": _rs(g(r, "term")), "endUser": _rs(g(r, "enduser")),
+                    "contract": _rs(g(r, "contract")), "start": _ymd(g(r, "start")),
+                    "end": _ymd(g(r, "end")), "gar": _rs(g(r, "gartype")),
+                    "transporter": _rs(g(r, "transporter")), "qty": _num(g(r, "cntqty")),
+                    "tonPerTrip": _num(g(r, "tontrip")), "status": _rs(g(r, "status"))})
+    _kv_set("coalRptContracts_v1", json.dumps(out))
+    return jsonify(ok=True, count=len(out))
+
+
+@bp.post("/coalrpt/readiness")
+@editor_required
+def coalrpt_readiness():
+    wb = _open_upload()
+    ws = wb["Data"] if "Data" in wb.sheetnames else wb[wb.sheetnames[0]]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return jsonify(ok=False, error="empty file"), 400
+    H = _hdr_index(rows[0])
+    def g(r, key):
+        i = H.get(key)
+        return r[i] if i is not None and i < len(r) else None
+    try:
+        store = json.loads(_kv_get("coalRptReady_v1") or "{}")
+    except Exception:
+        store = {}
+    added = 0
+    for r in rows[1:]:
+        rid = _rs(g(r, "id"))
+        if not rid:
+            continue
+        store[rid] = {"id": rid, "regDate": _ymd(g(r, "registerdate")),
+                      "contract": _rs(g(r, "contractno")), "plate": _rs(g(r, "truckplate")),
+                      "country": _rs(g(r, "country")), "company": _rs(g(r, "transportcompany")),
+                      "sub": _rs(g(r, "subcontractor"))}
+        added += 1
+    _kv_set("coalRptReady_v1", json.dumps(store))
+    return jsonify(ok=True, added=added, total=len(store))
+
+
+@bp.post("/coalrpt/readiness/remove")
+@editor_required
+def coalrpt_readiness_remove():
+    d = request.get_json(force=True, silent=True) or {}
+    frm, to = _rs(d.get("from")), _rs(d.get("to"))
+    try:
+        store = json.loads(_kv_get("coalRptReady_v1") or "{}")
+    except Exception:
+        store = {}
+    before = len(store)
+    store = {rid: row for rid, row in store.items()
+             if not ((not frm or row.get("regDate", "") >= frm) and (not to or row.get("regDate", "") <= to))}
+    _kv_set("coalRptReady_v1", json.dumps(store))
+    return jsonify(ok=True, removed=before - len(store), total=len(store))
+
+
+@bp.get("/coalrpt/data")
+@login_required
+def coalrpt_data():
+    try:
+        wmonths = json.loads(_kv_get("coalRptWeigh_v1") or "{}")
+    except Exception:
+        wmonths = {}
+    weigh = []
+    for m in wmonths.values():
+        if isinstance(m, list):
+            weigh.extend(m)
+    try:
+        contracts = json.loads(_kv_get("coalRptContracts_v1") or "[]")
+    except Exception:
+        contracts = []
+    try:
+        ready = list(json.loads(_kv_get("coalRptReady_v1") or "{}").values())
+    except Exception:
+        ready = []
+    return jsonify(weighbridge=weigh, contracts=contracts, readiness=ready)

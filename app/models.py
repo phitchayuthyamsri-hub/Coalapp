@@ -20,6 +20,7 @@ class User(UserMixin, db.Model):
     lang = db.Column(db.String(2), default="en")
     default_page = db.Column(db.String(20))   # tab key to open on login
     can_edit = db.Column(db.Boolean, default=True, nullable=False)
+    allowed_apps = db.Column(db.Text)   # JSON list of app keys; NULL = all apps
 
     def set_password(self, pw):
         self.pw_hash = generate_password_hash(pw)

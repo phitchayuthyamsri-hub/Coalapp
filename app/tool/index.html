@@ -4818,7 +4818,7 @@ async function dinIngestWeigh(file) {
       const lc = (rr[i] || []).map(c => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
       const find = kw => lc.findIndex(x => x.includes(kw));
       const cP = find('truckno'), cN = find('netweight'), cDo = find('dateout');
-      if (cP >= 0 && cN >= 0 && cDo >= 0) { rows = rr; h = i; col = { plate: cP, net: cN, din: find('datein'), tin: find('timein'), dout: cDo, tout: find('timeout') }; break; }
+      if (cP >= 0 && cN >= 0 && cDo >= 0) { rows = rr; h = i; col = { plate: cP, net: cN, din: find('datein'), tin: find('timein'), dout: cDo, tout: find('timeout'), contract: find('contractno'), customer: find('customername'), market: find('ovsdmt') }; break; }
     }
     if (h >= 0) break;
   }
@@ -4828,7 +4828,7 @@ async function dinIngestWeigh(file) {
   const normW = s => String(s || '').toUpperCase().replace(/[\s.\-_/\\]/g, '');
   const isoMin = d => `${d.getFullYear()}-${_dinPad(d.getMonth() + 1)}-${_dinPad(d.getDate())}T${_dinPad(d.getHours())}:${_dinPad(d.getMinutes())}`;
 
-  const agg = {}; let maxMonth = null, n = 0;
+  const agg = {}; const rawByMonth = {}; let maxMonth = null, n = 0;  // rawByMonth feeds the Daily/Weekly report
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i] || []; const p = normW(r[col.plate]); if (!p) continue;
     const Din = toDate(r[col.din]); const tin = col.tin >= 0 ? toMin(r[col.tin]) : null;
@@ -4843,6 +4843,9 @@ async function dinIngestWeigh(file) {
     const g = agg[k] || (agg[k] = { plate: p, month: mo, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null });
     g.loads++; if (dwell != null) { g.dwellSum += dwell; g.dwellN++; } if (net != null) { g.netSum += net; g.netN++; }
     const ts = isoMin(DoT); if (!g.last || ts > g.last) g.last = ts;
+    const _dIn = Din ? `${Din.getFullYear()}-${_dinPad(Din.getMonth()+1)}-${_dinPad(Din.getDate())}` : `${DoT.getFullYear()}-${_dinPad(DoT.getMonth()+1)}-${_dinPad(DoT.getDate())}`;
+    const _tm = (tin!=null?tin:(to!=null?to:null)); const _ap = (_tm!=null && _tm>=720) ? 'n' : 'd';  // day(AM)/night(PM)
+    (rawByMonth[mo] = rawByMonth[mo] || []).push({ d:_dIn, p, net:(net!=null?net:0), c: col.contract>=0?String(r[col.contract]||'').trim():'', cust: col.customer>=0?String(r[col.customer]||'').trim():'', m: col.market>=0?String(r[col.market]||'').trim():'', ap:_ap });
     n++;
   }
   if (!n || !maxMonth) throw new Error('Weighbridge: no rows with a valid Date Out parsed');
@@ -4855,6 +4858,13 @@ async function dinIngestWeigh(file) {
   STATE.din.weigh = keep;
   STATE.din._weighMonth = maxMonth;
   weighSave();
+  // --- Daily/Weekly report: retain raw rows (only the needed fields) in a shared key ---
+  try {
+    let rawStore = {}; try { rawStore = JSON.parse(localStorage.getItem('coalRptWeigh_v1') || '{}'); } catch (e) {}
+    for (const m of monthsInFile) delete rawStore[m];
+    for (const m in rawByMonth) rawStore[m] = rawByMonth[m];
+    localStorage.setItem('coalRptWeigh_v1', JSON.stringify(rawStore));
+  } catch (e) {}
 }
 
 // ---- Truck Status parser (plate × date note pivot) ----

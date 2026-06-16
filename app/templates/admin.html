@@ -63,6 +63,19 @@ const TABS = [
   ["weigh","Weighbridge"],["fleet","Fleet"],["guide","Guide"]
 ];
 const ALL = TABS.map(t => t[0]);
+const APPS = [["tms","TMS : Coal project"],["report","Daily/Weekly performance report"]];
+const ALL_APPS = APPS.map(a => a[0]);
+function appCheckboxes(allowed){
+  return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin:4px 0">' + APPS.map(function(a){
+    const on = allowed.indexOf(a[0]) >= 0 ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="appchk" value="'+a[0]+'"'+on+'>'+a[1]+'</label>';
+  }).join('') + '</div>';
+}
+function collectApps(el){
+  const boxes = Array.from(el.querySelectorAll('.appchk'));
+  const checked = boxes.filter(b=>b.checked).map(b=>b.value);
+  return checked.length === ALL_APPS.length ? null : checked;   // all = unrestricted
+}
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function tabCheckboxes(allowed){
@@ -97,6 +110,9 @@ function renderCreate(){
     + '<label class="chk"><input type="checkbox" class="f-admin"> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
     + '</div>'
+    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
+    + appCheckboxes(ALL_APPS)
+    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
     + tabCheckboxes(ALL)
     + '<div class="actions"><button class="save create">Create user</button><span class="msg"></span></div>';
   wireAllNone(el);
@@ -109,6 +125,7 @@ function renderCreate(){
       default_page: el.querySelector('.f-page').value,
       can_edit: el.querySelector('.f-edit').checked,
       is_admin: el.querySelector('.f-admin').checked,
+      apps: collectApps(el),
       tabs: collectTabs(el)
     };
     fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
@@ -132,6 +149,9 @@ function userCard(u){
     + '<label class="chk"><input type="checkbox" class="f-admin"'+(u.is_admin?' checked':'')+'> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
     + '</div>'
+    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
+    + appCheckboxes(u.apps === null ? ALL_APPS : u.apps)
+    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
     + tabCheckboxes(allowed)
     + '<div class="actions"><button class="save">Save</button><button class="del">Delete</button><span class="msg"></span></div>';
   wireAllNone(el);
@@ -142,7 +162,8 @@ function userCard(u){
       lang: el.querySelector('.f-lang').value,
       default_page: el.querySelector('.f-page').value,
       can_edit: el.querySelector('.f-edit').checked,
-      is_admin: el.querySelector('.f-admin').checked
+      is_admin: el.querySelector('.f-admin').checked,
+      apps: collectApps(el)
     };
     const pw = el.querySelector('.f-pass').value; if(pw) body.password = pw;
     fetch('/api/admin/users/'+u.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})

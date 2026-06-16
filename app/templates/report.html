@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily/Weekly performance report</title>
+<style>
+  :root{ --bg:#0b0b0c; --panel:#161618; --panel2:#1d1d20; --line:#2a2a2e; --ink:#e6e6ea; --mut:#8a8f98; --acc:#9cd0ff; --good:#54c98a; --warn:#e6b450; --bad:#e07a6b; --day:#5b9bd5; --night:#2f4b6e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  header .brand{font-weight:700}
+  header .sp{flex:1}
+  header a{color:var(--acc);text-decoration:none;font-size:13px;margin-left:14px}
+  header a:hover{text-decoration:underline}
+  header .who{color:var(--mut);font-size:13px}
+  .wrap{padding:18px 20px;max-width:1280px;margin:0 auto}
+  .tabs{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+  .tab{padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer;font-size:13px}
+  .tab.on{background:#26405e;border-color:#3a5f87;color:#fff}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+  .bar label{color:var(--mut);font-size:12px}
+  select,input[type=date]{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel);color:var(--ink);border:0;padding:6px 14px;cursor:pointer;font-size:13px;border-left:1px solid var(--line)}
+  .seg button:first-child{border-left:0}
+  .seg button.on{background:#26405e;color:#fff}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
+  .card h2{margin:0 0 12px;font-size:15px}
+  .card .sub{color:var(--mut);font-size:12px;font-weight:400}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child,.l{text-align:left}
+  thead th{color:var(--mut);font-weight:600;border-bottom:1px solid var(--line);position:sticky;top:53px;background:var(--panel)}
+  tbody tr:hover{background:#1b1b1f}
+  .tableScroll{overflow:auto;max-height:62vh}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+  .pill.Ongoing{color:var(--good);border-color:#2f6b4d}
+  .pill.Stop{color:var(--warn);border-color:#6b5a2f}
+  .pill.Complete{color:var(--acc);border-color:#2f4f6b}
+  .pill.Cancelled{color:var(--mut)}
+  .neg{color:var(--bad)} .pos{color:var(--good)}
+  .muted{color:var(--mut)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .upbox{border:1px dashed var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .upbox h3{margin:0 0 4px;font-size:14px}
+  .upbox p{margin:0 0 10px;color:var(--mut);font-size:12px}
+  button.act{background:#26405e;color:#fff;border:1px solid #3a5f87;border-radius:7px;padding:7px 14px;cursor:pointer;font-size:13px}
+  button.act:hover{background:#2f4f73}
+  .status{font-size:12px;color:var(--mut);margin-left:8px}
+  body.noedit .editonly{display:none!important}
+  .kv{display:flex;gap:18px;flex-wrap:wrap;color:var(--mut);font-size:12px}
+  .kv b{color:var(--ink);font-weight:600}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .empty{color:var(--mut);padding:24px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Daily / Weekly performance report</span>
+  <span class="sp"></span>
+  <span class="who">{{ username }}</span>
+  <a href="/">&larr; Home</a>
+  {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
+  <a href="/logout">Log out</a>
+</header>
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab on" data-tab="daily">Daily</button>
+    <button class="tab" data-tab="weekly">Weekly</button>
+    <button class="tab editonly" data-tab="data">Data</button>
+  </div>
+  <div class="bar" id="marketBar">
+    <label>Market</label>
+    <div class="seg" id="mkt">
+      <button data-m="" class="on">All</button>
+      <button data-m="Oversea">Oversea</button>
+      <button data-m="Domestic">Domestic</button>
+    </div>
+    <span class="status" id="asof"></span>
+  </div>
+  <div id="view"></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+let ME={can_edit:false}, RAW={weighbridge:[],contracts:[],readiness:[]};
+let CMAP={}, WROWS=[], REGrows=[], TAB='daily', MARKET='', WK_SUB='vol';
+const WORKDAYS=7, WEEKS=12, TGT={Oversea:60,Domestic:32};
+const BK_LABELS=['32–34','35–37','38–40','40–50','51–60','61–65','66+'];
+
+const normC=s=>String(s||'').trim().toUpperCase();
+const normP=s=>String(s||'').trim().toUpperCase().replace(/[\s.\-_/\\]/g,'');
+function bkIdx(n){n=+n||0; if(n<35)return 0; if(n<38)return 1; if(n<40)return 2; if(n<51)return 3; if(n<61)return 4; if(n<66)return 5; return 6;}
+const fmt=(n,d=0)=>(+n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+function dmy(s){ if(!s)return''; const p=String(s).split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s; }
+function mondayOf(s){ const d=new Date(s+'T00:00:00'); const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd); return iso(d); }
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function addDays(s,n){ const d=new Date(s+'T00:00:00'); d.setDate(d.getDate()+n); return iso(d); }
+function wkLabel(s){ const d=new Date(s+'T00:00:00'); return d.getDate()+' '+d.toLocaleString('en',{month:'short'}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+async function boot(){
+  try{ ME=await (await fetch('/api/me')).json(); }catch(e){}
+  if(!ME.can_edit) document.body.classList.add('noedit');
+  await reload();
+  $('#mkt').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; MARKET=b.dataset.m; $$('#mkt button').forEach(x=>x.classList.toggle('on',x===b)); render(); });
+  document.querySelector('.tabs').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b)return; TAB=b.dataset.tab; $$('.tab').forEach(x=>x.classList.toggle('on',x===b)); $('#marketBar').style.display=(TAB==='data')?'none':''; render(); });
+}
+function $$(s){return [...document.querySelectorAll(s)];}
+
+async function reload(){
+  try{ RAW=await (await fetch('/api/coalrpt/data')).json(); }catch(e){ RAW={weighbridge:[],contracts:[],readiness:[]}; }
+  build(); render();
+}
+function build(){
+  CMAP={}; (RAW.contracts||[]).forEach(c=>{ CMAP[normC(c.contract)]=c; });
+  WROWS=(RAW.weighbridge||[]).filter(r=>r&&r.d).map(r=>{ const ck=normC(r.c); const c=CMAP[ck];
+    return {ck, date:r.d, net:+r.net||0, ap:(r.ap==='n'?'n':'d'),
+            market:(c&&c.export)||r.m||'', cust:(c&&c.customer)||r.cust||r.c||'(no contract)'}; });
+  REGrows=(RAW.readiness||[]).map(r=>({ck:normC(r.contract), plate:normP(r.plate), regDate:r.regDate||'',
+            company:r.company||'', sub:r.sub||'', market:(CMAP[normC(r.contract)]&&CMAP[normC(r.contract)].export)||''}));
+  const asof=maxW(); $('#asof').textContent = asof ? ('Latest delivery: '+dmy(asof)) : 'No weighbridge data yet — upload in the TMS tool.';
+}
+const mOK=r=>!MARKET||r.market===MARKET;
+function maxW(){ let m=''; WROWS.forEach(r=>{ if(r.date>m)m=r.date; }); return m; }
+function maxReg(){ let m=''; REGrows.forEach(r=>{ if(r.regDate>m)m=r.regDate; }); return m; }
+
+function aggregate(){
+  const cd={},bk={},dn={},wk={};
+  WROWS.forEach(r=>{ if(!mOK(r))return;
+    (cd[r.ck]=cd[r.ck]||{}); (cd[r.ck][r.date]=cd[r.ck][r.date]||{t:0,n:0}); cd[r.ck][r.date].t+=r.net; cd[r.ck][r.date].n++;
+    (bk[r.ck]=bk[r.ck]||{}); (bk[r.ck][r.date]=bk[r.ck][r.date]||[0,0,0,0,0,0,0]); bk[r.ck][r.date][bkIdx(r.net)]++;
+    (dn[r.date]=dn[r.date]||{d:0,n:0}); dn[r.date][r.ap]++;
+    const w=mondayOf(r.date); (wk[w]=wk[w]||{t:0,n:0}); wk[w].t+=r.net; wk[w].n++;
+  });
+  return {cd,bk,dn,wk};
+}
+function regCount(date){ const seen={},m={}; REGrows.forEach(r=>{ if(MARKET&&r.market&&r.market!==MARKET)return; if(date&&r.regDate!==date)return; if(!r.plate)return; const k=r.ck+'|'+r.plate; if(seen[k])return; seen[k]=1; m[r.ck]=(m[r.ck]||0)+1; }); return m; }
+function tonPerTrip(c){ return (c&&+c.tonPerTrip>0)?+c.tonPerTrip:(TGT[(c&&c.export)||'']||TGT.Oversea); }
+function remainingWeeks(c,asof){ if(!c.end)return 1; const days=(new Date(c.end+'T00:00:00')-new Date(asof+'T00:00:00'))/864e5; return Math.max(1,Math.ceil(days/7)); }
+
+function render(){
+  if(TAB==='daily') return renderDaily();
+  if(TAB==='weekly') return renderWeekly();
+  return renderData();
+}
+
+/* ---------- DAILY ---------- */
+let DAILY_STATUS='Ongoing';
+function renderDaily(){
+  const A=aggregate(), asof=maxW();
+  const delivered={}; for(const ck in A.cd){ let t=0; for(const d in A.cd[ck])t+=A.cd[ck][d].t; delivered[ck]=t; }
+  const regToday=regCount(maxReg());
+  const contracts=(RAW.contracts||[]).filter(c=>(!MARKET||c.export===MARKET));
+  const shown=contracts.filter(c=>DAILY_STATUS==='All'||c.status===DAILY_STATUS);
+
+  let html='';
+  // status filter
+  html+='<div class="bar"><label>Status</label><div class="seg" id="stseg">'+
+    ['Ongoing','Stop','Complete','Cancelled','All'].map(s=>`<button data-s="${s}" class="${s===DAILY_STATUS?'on':''}">${s}</button>`).join('')+
+    '</div></div>';
+
+  // per-contract status table
+  html+='<div class="card"><h2>Contract status <span class="sub">— as of '+(asof?dmy(asof):'—')+' &middot; "Yesterday" = latest delivery day</span></h2><div class="tableScroll"><table><thead><tr>'+
+    ['Customer','Exp/Ovs','Term','End user','Contract','Start','End','GAR','Total qty','Yesterday','To-date','Remaining','Status'].map((h,i)=>`<th class="${i<8?'l':''}">${h}</th>`).join('')+
+    '</tr></thead><tbody>';
+  if(!shown.length) html+='<tr><td colspan="13" class="empty">No contracts.</td></tr>';
+  shown.forEach(c=>{ const ck=normC(c.contract); const del=delivered[ck]||0; const yest=(A.cd[ck]&&A.cd[ck][asof])?A.cd[ck][asof].t:0; const rem=(+c.qty||0)-del;
+    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.term)}</td><td class="l">${esc(c.endUser)}</td><td class="l">${esc(c.contract)}</td><td class="l">${dmy(c.start)}</td><td class="l">${dmy(c.end)}</td><td class="l">${esc(c.gar)}</td><td>${fmt(c.qty)}</td><td>${fmt(yest)}</td><td>${fmt(del)}</td><td class="${rem<0?'neg':''}">${fmt(rem)}</td><td class="l"><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+
+  // truck plan
+  html+='<div class="card"><h2>Truck plan <span class="sub">— weekly target = (total − delivered) ÷ remaining weeks &middot; '+WORKDAYS+' working days &middot; ton/trip 60 Oversea / 32 Domestic fallback</span></h2><div class="tableScroll"><table><thead><tr>'+
+    ['Customer','Exp/Ovs','Transporter','Contract','GAR','Week tons','Plan trucks','Plan/day','Variance','Registered',...BK_LABELS].map((h,i)=>`<th class="${i<5?'l':''}">${h}</th>`).join('')+
+    '</tr></thead><tbody>';
+  const planRows=contracts.filter(c=>c.status==='Ongoing');
+  if(!planRows.length) html+='<tr><td colspan="17" class="empty">No ongoing contracts.</td></tr>';
+  // recent buckets = sum last 7 delivery days per contract
+  planRows.forEach(c=>{ const ck=normC(c.contract); const del=delivered[ck]||0; const tpt=tonPerTrip(c);
+    const rw=remainingWeeks(c,asof||iso(new Date())); const weekTons=Math.max(0,((+c.qty||0)-del)/rw);
+    const planTrucks=Math.ceil(weekTons/tpt)||0; const planDay=Math.ceil(weekTons/WORKDAYS/tpt)||0;
+    const reg=regToday[ck]||0; const varc=reg-planDay;
+    const bk=[0,0,0,0,0,0,0]; if(A.bk[ck]){ const ds=Object.keys(A.bk[ck]).sort().slice(-7); ds.forEach(d=>A.bk[ck][d].forEach((v,i)=>bk[i]+=v)); }
+    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.transporter)}</td><td class="l">${esc(c.contract)}</td><td class="l">${esc(c.gar)}</td><td>${fmt(weekTons)}</td><td>${planTrucks}</td><td>${planDay}</td><td class="${varc<0?'neg':'pos'}">${varc>0?'+':''}${varc}</td><td>${reg}</td>`+bk.map(v=>`<td>${v||''}</td>`).join('')+'</tr>';
+  });
+  html+='</tbody></table></div><div class="legend muted">Registered = distinct plates in latest readiness ('+(maxReg()?dmy(maxReg()):'—')+'). Buckets = delivered trips by net weight, last 7 delivery days.</div></div>';
+
+  // 7-day day/night strip
+  html+='<div class="card"><h2>Daily trips — last 7 days <span class="sub">day (AM) / night (PM)</span></h2>'+dayNightSVG(A.dn,asof)+
+    '<div class="legend"><span><i style="background:var(--day)"></i>Day (AM)</span><span><i style="background:var(--night)"></i>Night (PM)</span></div></div>';
+
+  $('#view').innerHTML=html;
+  const st=$('#stseg'); if(st) st.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; DAILY_STATUS=b.dataset.s; renderDaily(); });
+}
+function dayNightSVG(dn,asof){
+  const end=asof||iso(new Date()); const days=[]; for(let i=6;i>=0;i--)days.push(addDays(end,-i));
+  const max=Math.max(1,...days.map(d=>(dn[d]?dn[d].d+dn[d].n:0)));
+  const W=760,H=200,padB=34,padT=12,bw=70,gap=(W-bw*7)/8;
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px">`;
+  days.forEach((d,i)=>{ const x=gap+i*(bw+gap); const o=dn[d]||{d:0,n:0}; const tot=o.d+o.n;
+    const hT=H-padB-padT; const dh=(o.d/max)*hT, nh=(o.n/max)*hT;
+    let y=H-padB;
+    s+=`<rect x="${x}" y="${y-dh}" width="${bw}" height="${dh}" fill="var(--day)"/>`;
+    s+=`<rect x="${x}" y="${y-dh-nh}" width="${bw}" height="${nh}" fill="var(--night)"/>`;
+    if(tot)s+=`<text x="${x+bw/2}" y="${y-dh-nh-4}" fill="var(--ink)" font-size="11" text-anchor="middle">${tot}</text>`;
+    s+=`<text x="${x+bw/2}" y="${H-padB+14}" fill="var(--mut)" font-size="10" text-anchor="middle">${wkLabel(d)}</text>`;
+    s+=`<text x="${x+bw/2}" y="${H-padB+26}" fill="var(--mut)" font-size="9" text-anchor="middle">${o.d}/${o.n}</text>`;
+  });
+  return s+'</svg>';
+}
+
+/* ---------- WEEKLY ---------- */
+function renderWeekly(){
+  const A=aggregate();
+  const weeks=Object.keys(A.wk).sort().slice(-WEEKS);
+  let html='<div class="bar"><div class="seg" id="wksub">'+
+    [['vol','Volume (t)'],['trip','Trips'],['pva','Plan vs actual'],['grid','By contract']].map(([k,l])=>`<button data-k="${k}" class="${k===WK_SUB?'on':''}">${l}</button>`).join('')+
+    '</div><span class="status">last '+WEEKS+' weeks</span></div>';
+
+  if(!weeks.length){ $('#view').innerHTML=html+'<div class="card"><div class="empty">No delivery data for this market.</div></div>'; wireWkSub(); return; }
+
+  if(WK_SUB==='vol'){
+    html+='<div class="card"><h2>Volume by week (tons)</h2>'+barSVG(weeks.map(w=>({label:wkLabel(w),v:A.wk[w].t})),'var(--day)',v=>fmt(v))+'</div>';
+  } else if(WK_SUB==='trip'){
+    html+='<div class="card"><h2>Trips by week</h2>'+barSVG(weeks.map(w=>({label:wkLabel(w),v:A.wk[w].n})),'var(--good)',v=>fmt(v))+'</div>';
+  } else if(WK_SUB==='pva'){
+    // per-week plan = sum of active ongoing contracts' even weekly quota; compare to actual
+    const planByWeek={}; (RAW.contracts||[]).filter(c=>(!MARKET||c.export===MARKET)&&c.start&&c.end).forEach(c=>{
+      const wks=Math.max(1,Math.round((new Date(c.end+'T00:00:00')-new Date(c.start+'T00:00:00'))/864e5/7));
+      const per=(+c.qty||0)/wks; let w=mondayOf(c.start); const endW=mondayOf(c.end);
+      let guard=0; while(w<=endW && guard++<400){ planByWeek[w]=(planByWeek[w]||0)+per; w=addDays(w,7); }
+    });
+    let as=0,over=0,under=0;
+    const rows=weeks.map(w=>{ const act=A.wk[w].t, pl=planByWeek[w]||0; const diff=act-pl; const cls=Math.abs(diff)<=pl*0.05?'as':(diff>0?'over':'under'); if(cls==='as')as++;else if(cls==='over')over++;else under++; return {w,act,pl,diff,cls}; });
+    html+='<div class="card"><h2>Plan vs actual by week</h2><div class="kv" style="margin-bottom:12px"><span>As plan: <b>'+as+'</b></span><span>Over plan: <b class="pos">'+over+'</b></span><span>Under plan: <b class="neg">'+under+'</b></span></div>'+
+      '<div class="tableScroll"><table><thead><tr><th class="l">Week</th><th>Plan (t)</th><th>Actual (t)</th><th>Diff</th><th class="l">Result</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr><td class="l">${wkLabel(r.w)}</td><td>${fmt(r.pl)}</td><td>${fmt(r.act)}</td><td class="${r.diff<0?'neg':'pos'}">${r.diff>0?'+':''}${fmt(r.diff)}</td><td class="l">${r.cls==='as'?'As plan':r.cls==='over'?'<span class=pos>Over</span>':'<span class=neg>Under</span>'}</td></tr>`).join('')+
+      '</tbody></table></div></div>';
+  } else {
+    // by-contract grid: actual tons per week
+    const cks=Object.keys(A.cd).sort((a,b)=>label(b).localeCompare(label(a)));
+    html+='<div class="card"><h2>Actual tons by contract &times; week</h2><div class="tableScroll"><table><thead><tr><th class="l">Contract</th>'+weeks.map(w=>`<th>${wkLabel(w)}</th>`).join('')+'<th>Total</th></tr></thead><tbody>';
+    cks.forEach(ck=>{ let tot=0; const cells=weeks.map(w=>{ let t=0; const cd=A.cd[ck]; if(cd)for(const d in cd){ if(mondayOf(d)===w)t+=cd[d].t; } tot+=t; return `<td>${t?fmt(t):''}</td>`; }); html+=`<tr><td class="l">${esc(label(ck))}</td>`+cells.join('')+`<td><b>${fmt(tot)}</b></td></tr>`; });
+    html+='</tbody></table></div></div>';
+  }
+  $('#view').innerHTML=html; wireWkSub();
+}
+function label(ck){ const c=CMAP[ck]; if(c)return c.customer+' · '+c.contract; const r=WROWS.find(x=>x.ck===ck); return (r?r.cust:ck)+' ('+ck+')'; }
+function wireWkSub(){ const e=$('#wksub'); if(e)e.addEventListener('click',ev=>{ const b=ev.target.closest('button'); if(!b)return; WK_SUB=b.dataset.k; $$('#wksub button').forEach(x=>x.classList.toggle('on',x===b)); renderWeekly(); }); }
+function barSVG(items,color,fmtv){
+  const W=900,H=260,padB=40,padT=16,padL=44; const n=items.length||1; const max=Math.max(1,...items.map(i=>i.v));
+  const cw=(W-padL)/n, bw=Math.min(46,cw*0.6);
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
+  for(let g=0;g<=4;g++){ const y=padT+(H-padB-padT)*g/4; const val=max*(1-g/4); s+=`<line x1="${padL}" y1="${y}" x2="${W}" y2="${y}" stroke="var(--line)"/><text x="${padL-6}" y="${y+3}" fill="var(--mut)" font-size="9" text-anchor="end">${fmtv(val)}</text>`; }
+  items.forEach((it,i)=>{ const x=padL+i*cw+(cw-bw)/2; const h=(it.v/max)*(H-padB-padT); const y=H-padB-h;
+    s+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" fill="${color}" rx="2"/>`;
+    if(it.v)s+=`<text x="${x+bw/2}" y="${y-4}" fill="var(--ink)" font-size="9" text-anchor="middle">${fmtv(it.v)}</text>`;
+    s+=`<text x="${x+bw/2}" y="${H-padB+14}" fill="var(--mut)" font-size="9" text-anchor="middle">${it.label}</text>`;
+  });
+  return s+'</svg>';
+}
+
+/* ---------- DATA ---------- */
+function renderData(){
+  const wmonths={}; (RAW.weighbridge||[]).forEach(r=>{ const m=(r.d||'').slice(0,7); if(m)wmonths[m]=(wmonths[m]||0)+1; });
+  const rdates=(RAW.readiness||[]).map(r=>r.regDate).filter(Boolean).sort();
+  let html='<div class="card"><h2>Current data</h2><div class="kv">'+
+    `<span>Contracts: <b>${(RAW.contracts||[]).length}</b></span>`+
+    `<span>Readiness rows: <b>${(RAW.readiness||[]).length}</b></span>`+
+    `<span>Readiness dates: <b>${rdates.length?dmy(rdates[0])+' → '+dmy(rdates[rdates.length-1]):'—'}</b></span>`+
+    `<span>Weighbridge rows: <b>${(RAW.weighbridge||[]).length}</b></span>`+
+    `<span>Weigh months: <b>${Object.keys(wmonths).sort().join(', ')||'—'}</b></span>`+
+    '</div><div class="legend muted">Weighbridge is uploaded in the TMS tool (Data input → Weighbridge); it flows here automatically.</div></div>';
+
+  html+='<div class="card editonly"><h2>Upload</h2>'+
+    '<div class="upbox"><h3>Contracts master</h3><p>One-time upload. Replaces the whole contract list (re-upload to update).</p>'+
+      '<input type="file" id="cFile" accept=".xlsx,.xls"> <button class="act" id="cBtn">Upload contracts</button><span class="status" id="cMsg"></span></div>'+
+    '<div class="upbox"><h3>Readiness register</h3><p>Appends &amp; merges by ID — safe to re-upload and to add backward updates.</p>'+
+      '<input type="file" id="rFile" accept=".xlsx,.xls"> <button class="act" id="rBtn">Upload readiness</button><span class="status" id="rMsg"></span></div>'+
+    '<div class="upbox"><h3>Remove readiness by date</h3><p>Delete registration rows in a Register-Date range (inclusive).</p>'+
+      'From <input type="date" id="rmFrom"> To <input type="date" id="rmTo"> <button class="act" id="rmBtn">Remove</button><span class="status" id="rmMsg"></span></div>'+
+    '</div>';
+  $('#view').innerHTML=html;
+  if(!ME.can_edit) return;
+  const up=async(inp,url,msg,btn)=>{ const f=$(inp).files[0]; if(!f){ $(msg).textContent='Choose a file first.'; return; } $(msg).textContent='Uploading…'; $(btn).disabled=true;
+    try{ const fd=new FormData(); fd.append('file',f); const r=await fetch(url,{method:'POST',body:fd}); const j=await r.json(); if(!r.ok||j.ok===false){ $(msg).textContent='Error: '+(j.error||r.status); } else { $(msg).textContent='Done · '+JSON.stringify(j).replace(/[{}"]/g,''); await reloadKeep(); } }catch(e){ $(msg).textContent='Error: '+e; } $(btn).disabled=false; };
+  $('#cBtn').addEventListener('click',()=>up('#cFile','/api/coalrpt/contracts','#cMsg','#cBtn'));
+  $('#rBtn').addEventListener('click',()=>up('#rFile','/api/coalrpt/readiness','#rMsg','#rBtn'));
+  $('#rmBtn').addEventListener('click',async()=>{ const from=$('#rmFrom').value,to=$('#rmTo').value; if(!from&&!to){ $('#rmMsg').textContent='Pick a date range.'; return; } $('#rmMsg').textContent='Removing…';
+    try{ const r=await fetch('/api/coalrpt/readiness/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})}); const j=await r.json(); $('#rmMsg').textContent='Removed '+j.removed+' · total '+j.total; await reloadKeep(); }catch(e){ $('#rmMsg').textContent='Error: '+e; } });
+}
+async function reloadKeep(){ try{ RAW=await (await fetch('/api/coalrpt/data')).json(); }catch(e){} build(); renderData(); }
+
+boot();
+</script>
+</body>
+</html>

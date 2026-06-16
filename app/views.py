@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Blueprint, render_template, redirect, url_for, Response, abort
 from flask_login import login_required, current_user
 
@@ -13,7 +14,7 @@ _BRIDGE = """<script>
     var x=new XMLHttpRequest(); x.open('GET',BASE,false); x.send();
     if(x.status===200){
       var d=JSON.parse(x.responseText||'{}');
-      Object.keys(d).forEach(function(k){ try{ window.localStorage.setItem(k,d[k]); }catch(e){} });
+      Object.keys(d).forEach(function(k){ if(k.indexOf('coalRpt')===0) return; try{ window.localStorage.setItem(k,d[k]); }catch(e){} });
     }
   }catch(e){ console.warn('shared-store pull failed', e); }
   var _set=Storage.prototype.setItem, _rem=Storage.prototype.removeItem;
@@ -48,6 +49,7 @@ _GUARD = """<script>
         var btn=document.getElementById('exportHtmlBtn');
         if(btn && !document.getElementById('__whoami')){
           var html='<span id="__whoami" style="color:#fff;font-size:12px;opacity:.9">&#128100; '+(me.username||'')+'</span>';
+          html+=' <a href="/" style="color:#9cd0ff;font-size:12px;text-decoration:none">Home</a>';
           if(me.is_admin) html+=' <a href="/admin" style="color:#9cd0ff;font-size:12px;text-decoration:none">Admin</a>';
           if(me.can_edit===false) html+=' <span style="background:#5a4a1a;color:#ffd479;font-size:11px;border-radius:999px;padding:1px 7px">view-only</span>';
           html+=' <a href="/logout" style="color:#9cd0ff;font-size:12px;text-decoration:none">Log out</a>';
@@ -130,17 +132,46 @@ def _tool_html():
     return _TOOL_HTML
 
 
+
+APPS = [("tms", "TMS : Coal project", "/tool"),
+        ("report", "Daily/Weekly performance report", "/report")]
+
+
+def _app_allowed(key):
+    raw = getattr(current_user, "allowed_apps", None)
+    if not raw:
+        return True   # NULL = all apps
+    try:
+        return key in json.loads(raw)
+    except Exception:
+        return True
+
+
 @bp.route("/")
+@login_required
 def index():
-    if current_user.is_authenticated:
-        return redirect(url_for("views.tool"))
-    return redirect(url_for("auth.login"))
+    apps = [{"key": k, "label": lbl, "url": url} for (k, lbl, url) in APPS if _app_allowed(k)]
+    return render_template("hub.html", apps=apps,
+                           username=current_user.username,
+                           is_admin=getattr(current_user, "is_admin", False))
 
 
 @bp.route("/tool")
 @login_required
 def tool():
+    if not _app_allowed("tms"):
+        return redirect(url_for("views.index"))
     return Response(_tool_html(), mimetype="text/html")
+
+
+@bp.route("/report")
+@login_required
+def report():
+    if not _app_allowed("report"):
+        return redirect(url_for("views.index"))
+    return render_template("report.html",
+                           username=current_user.username,
+                           is_admin=getattr(current_user, "is_admin", False))
 
 
 @bp.route("/admin")
