@@ -9650,6 +9650,7 @@ function acpBuild(){
   ACS.weigh={};
   for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0)}; }
   ACS.manual={};
+  for(var _mk in (din.manual||{})){ var _a=_mk.split("|"); if(_a.length>=2 && hasLatin(normPlate(_a[0]))) ACS.manual[normPlate(_a[0])+"|"+_a[1]]=true; }  // any manual stage entry marks that cycle as a GPS error (counted once)
 }
 
 const LOCS=['MINE','BORDER','PORT'];
@@ -9704,7 +9705,30 @@ const NODE_DEFS=[
 ];
 const EDGE_DEFS=[{fwd:'travelMB',back:'backBM'},{fwd:'travelBP',back:'backPB'}];
 const PLAN_MIN={ loading:60, travelMB:960, borderIO:330, travelBP:390, portIO:510, backPB:150, borderBack:180, backBM:300 };
+var _PERF=null;
+function _otReviewWire(){
+  if(window.__otWired) return; window.__otWired=true;
+  document.addEventListener('click', function(ev){
+    var seg=ev.target.closest && ev.target.closest('.otseg[data-otkey]');
+    if(!seg||!_PERF) return;
+    _otShowReview(seg.getAttribute('data-otkey'), seg.getAttribute('data-status'));
+  });
+}
+function _otShowReview(otkey,status){
+  if(!_PERF||!_PERF.otRows) return;
+  var ot=(_PERF.ontime&&_PERF.ontime[otkey])||{label:otkey};
+  var rows=_PERF.otRows.filter(function(r){ return r.key===otkey && r.status===status; });
+  var f=function(x){ if(!x) return '\u2014'; var d=new Date(x); return isNaN(d)?'\u2014':d.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); };
+  var body=rows.length?rows.map(function(r){ return '<tr><td>'+(r.plate||'')+'</td><td>'+(r.cyc!=null?r.cyc:'')+'</td><td>'+f(r.planIn)+'</td><td>'+f(r.timeIn)+'</td><td class="otrv-st-'+r.status+'">'+r.status+'</td></tr>'; }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted)">No trips in this group.</td></tr>';
+  var old=document.getElementById('otReviewPop'); if(old) old.remove();
+  var wrap=document.createElement('div'); wrap.id='otReviewPop';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  wrap.innerHTML='<div style="background:var(--panel,#161618);border:1px solid var(--line,#2a2a2e);border-radius:12px;max-width:780px;width:90%;max-height:80vh;overflow:auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>'+(ot.label||otkey)+' \u2014 '+status+' ('+rows.length+')</strong><button id="otReviewClose" style="background:none;border:1px solid var(--line,#2a2a2e);color:var(--ink,#e6e6ea);border-radius:8px;padding:4px 10px;cursor:pointer">Close</button></div><table class="otrv-table"><thead><tr><th>Plate</th><th>Cycle</th><th>Plan arrive</th><th>Actual arrive</th><th>Status</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', function(e){ if(e.target===wrap||e.target.id==='otReviewClose') wrap.remove(); });
+}
 function renderPerfTiming(p){
+  _PERF=p; _otReviewWire();
   const el=document.getElementById('perfTiming'); if(!el) return;
   const t=p.timing||{}; const c=p.counts||{planned:0,unplan:0};
   const pair=k=>{ const d=t[k]||{plan:{avg:null,n:0},unplan:{avg:null,n:0}}; return d; };
