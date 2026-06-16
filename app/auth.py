@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_user, logout_user, login_required, current_user
 
 from .models import db, User
+from . import activity
 
 bp = Blueprint("auth", __name__)
 
@@ -40,6 +41,7 @@ def login():
         if u and u.check_password(password):
             login_user(u)
             session.permanent = True
+            activity.record_login(u, request)
             return redirect(url_for("views.dashboard"))
         flash("Invalid username or password.")
         return redirect(url_for("auth.login"))

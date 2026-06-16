@@ -98,6 +98,22 @@ _GUARD = """<script>
     }).catch(function(){});
   });
 })();
+
+(function(){
+  var area=null, since=Date.now();
+  function cur(){ var nav=document.getElementById('pageNav'); if(!nav) return null;
+    var b=nav.querySelector('button[data-page].active'); if(!b) return null;
+    var a=b.getAttribute('data-page'), sub=b.getAttribute('data-subtab'); return sub? a+':'+sub : a; }
+  function send(a,sec){ if(!a||sec<1) return; try{ fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:a,seconds:sec}),keepalive:true}); }catch(e){} }
+  function flush(){ var now=Date.now(), sec=Math.round((now-since)/1000); if(area) send(area,sec); since=now; }
+  function setArea(){ flush(); area=cur(); }
+  setTimeout(function(){ area=cur(); since=Date.now(); }, 1200);
+  var nav=document.getElementById('pageNav');
+  if(nav) nav.addEventListener('click', function(e){ if(e.target.closest('button[data-page]')) setTimeout(setArea,60); });
+  setInterval(flush, 60000);
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) flush(); });
+  window.addEventListener('beforeunload', flush);
+})();
 </script>"""
 
 _TOOL_HTML = None
@@ -132,6 +148,14 @@ def admin():
     if not getattr(current_user, "is_admin", False):
         abort(403)
     return render_template("admin.html")
+
+
+@bp.route("/admin/activity")
+@login_required
+def admin_activity_page():
+    if not getattr(current_user, "is_admin", False):
+        abort(403)
+    return render_template("activity.html")
 
 
 # Rebuilt app pages (kept; separate SQLite-backed store from /tool)

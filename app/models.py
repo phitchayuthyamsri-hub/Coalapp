@@ -100,3 +100,25 @@ class KVStore(db.Model):
     """Shared key-value mirror of the full tool's localStorage (team-wide)."""
     key = db.Column(db.String(255), primary_key=True)
     value = db.Column(db.Text)
+
+
+class LoginEvent(db.Model):
+    """One row per successful login (for country / history)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, index=True)
+    username = db.Column(db.String(80))
+    ts = db.Column(db.DateTime, default=datetime.utcnow)
+    ip = db.Column(db.String(64))
+    country = db.Column(db.String(80))
+    country_code = db.Column(db.String(4))
+
+
+class AreaTime(db.Model):
+    """Aggregated dwell time per user / area / day."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, index=True)
+    username = db.Column(db.String(80))
+    page = db.Column(db.String(40))
+    day = db.Column(db.String(10))   # YYYY-MM-DD
+    seconds = db.Column(db.Integer, default=0)
+    __table_args__ = (db.UniqueConstraint("user_id", "page", "day", name="uq_areatime"),)

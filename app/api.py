@@ -4,11 +4,12 @@ Uploads parse server-side and replace the relevant table.
 """
 import json
 from functools import wraps
+from datetime import datetime
 from flask import Blueprint, request, jsonify, abort
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
-from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore,
+from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime,
                      DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
 
@@ -683,3 +684,61 @@ def admin_delete(uid):
     db.session.delete(u)
     db.session.commit()
     return jsonify(ok=True)
+
+
+# ── Usage analytics ──────────────────────────────────────────────────────────
+@bp.post("/track")
+@login_required
+def track():
+    d = request.get_json(force=True, silent=True) or {}
+    page = str(d.get("page") or "")[:40]
+    try:
+        secs = int(d.get("seconds") or 0)
+    except Exception:
+        secs = 0
+    if not page or secs <= 0:
+        return jsonify(ok=True)
+    if secs > 3600:
+        secs = 3600  # guard against absurd gaps
+    day = datetime.utcnow().strftime("%Y-%m-%d")
+    row = AreaTime.query.filter_by(user_id=current_user.id, page=page, day=day).first()
+    if row:
+        row.seconds = (row.seconds or 0) + secs
+    else:
+        db.session.add(AreaTime(user_id=current_user.id, username=current_user.username,
+                                page=page, day=day, seconds=secs))
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@bp.get("/admin/activity")
+@admin_required
+def admin_activity():
+    out = {}
+
+    def U(name):
+        return out.setdefault(name, {"total_seconds": 0, "areas": {}, "countries": {}, "logins": []})
+
+    for r in AreaTime.query.all():
+        u = U(r.username or "?")
+        u["areas"][r.page] = u["areas"].get(r.page, 0) + (r.seconds or 0)
+        u["total_seconds"] += (r.seconds or 0)
+
+    for e in LoginEvent.query.order_by(LoginEvent.ts.desc()).all():
+        u = U(e.username or "?")
+        c = e.country or "Unknown"
+        cc = u["countries"].setdefault(c, {"code": e.country_code or "", "count": 0})
+        cc["count"] += 1
+        if len(u["logins"]) < 25:
+            u["logins"].append({"ts": (e.ts.isoformat() if e.ts else ""), "ip": e.ip or "", "country": c})
+
+    # shape for the client: sorted areas, country list
+    res = {}
+    for name, u in out.items():
+        areas = sorted(([{"page": p, "seconds": s} for p, s in u["areas"].items()]),
+                       key=lambda x: -x["seconds"])
+        countries = sorted(([{"country": c, "code": v["code"], "count": v["count"]} for c, v in u["countries"].items()]),
+                           key=lambda x: -x["count"])
+        res[name] = {"total_seconds": u["total_seconds"], "areas": areas,
+                     "countries": countries, "logins": u["logins"]}
+    return jsonify(res)
