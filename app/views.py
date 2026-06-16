@@ -78,7 +78,8 @@ _GUARD = """<script>
       if(nav && me.tabs){
         var allow={}; me.tabs.forEach(function(k){ allow[k]=1; });
         nav.querySelectorAll('button[data-page]').forEach(function(b){
-          if(!allow[b.getAttribute('data-page')]) b.style.display='none';
+          var k=b.getAttribute('data-perm')||b.getAttribute('data-page');
+          if(!allow[k]) b.style.display='none';
         });
         var sub=['anchors','data','gps','plan','truckstatus','weigh','fleet'];
         if(!sub.some(function(k){return allow[k];})){ var di=document.getElementById('navDataInput'); if(di) di.style.display='none'; }
@@ -88,7 +89,7 @@ _GUARD = """<script>
       if(nav){
         var ok=function(k){ return !me.tabs || me.tabs.indexOf(k)>=0; };
         var target=null;
-        if(me.default_page && ok(me.default_page)) target=nav.querySelector('button[data-page="'+me.default_page+'"]');
+        if(me.default_page && ok(me.default_page)) target=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return (b.getAttribute('data-perm')||b.getAttribute('data-page'))===me.default_page; });
         var active=nav.querySelector('button[data-page].active');
         if(!target && active && active.style.display==='none'){
           target=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return b.style.display!=='none'; });

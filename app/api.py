@@ -568,7 +568,7 @@ def kv_delete(key):
 
 
 # ── Access control: identity + admin-managed tab access ──────────────────────
-TAB_KEYS = ["perf","daily","pva","subfleet","anchors","data","gps","plan",
+TAB_KEYS = ["perf","daily","timeline","pva","subfleet","anchors","data","gps","plan",
             "truckstatus","weigh","fleet","guide"]
 
 
