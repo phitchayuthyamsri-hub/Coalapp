@@ -31,7 +31,7 @@
   table{border-collapse:collapse;width:100%;font-size:12.5px}
   th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
   th:first-child,td:first-child,.l{text-align:left}
-  thead th{color:var(--mut);font-weight:600;border-bottom:1px solid var(--line);position:sticky;top:53px;background:var(--panel)}
+  thead th{color:var(--mut);font-weight:600;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;background:var(--panel)}
   tbody tr:hover{background:#1b1b1f}
   .tableScroll{overflow:auto;max-height:62vh}
   .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
@@ -70,6 +70,7 @@
   <div class="tabs">
     <button class="tab on" data-tab="daily">Daily</button>
     <button class="tab" data-tab="weekly">Weekly</button>
+    <button class="tab" data-tab="accuracy">Accuracy</button>
     <button class="tab editonly" data-tab="data">Data</button>
   </div>
   <div class="bar" id="marketBar">
@@ -117,7 +118,7 @@ async function reload(){
 function build(){
   CMAP={}; (RAW.contracts||[]).forEach(c=>{ CMAP[normC(c.contract)]=c; });
   WROWS=(RAW.weighbridge||[]).filter(r=>r&&r.d).map(r=>{ const ck=normC(r.c); const c=CMAP[ck];
-    return {ck, date:r.d, net:+r.net||0, ap:(r.ap==='n'?'n':'d'),
+    return {ck, date:r.d, net:+r.net||0, ap:(r.ap==='n'?'n':'d'), p:normP(r.p),
             market:(c&&c.export)||r.m||'', cust:(c&&c.customer)||r.cust||r.c||'(no contract)'}; });
   REGrows=(RAW.readiness||[]).map(r=>({ck:normC(r.contract), plate:normP(r.plate), regDate:r.regDate||'',
             company:r.company||'', sub:r.sub||'', market:(CMAP[normC(r.contract)]&&CMAP[normC(r.contract)].export)||''}));
@@ -144,6 +145,7 @@ function remainingWeeks(c,asof){ if(!c.end)return 1; const days=(new Date(c.end+
 function render(){
   if(TAB==='daily') return renderDaily();
   if(TAB==='weekly') return renderWeekly();
+  if(TAB==='accuracy') return renderAccuracy();
   return renderData();
 }
 
@@ -261,6 +263,36 @@ function barSVG(items,color,fmtv){
     s+=`<text x="${x+bw/2}" y="${H-padB+14}" fill="var(--mut)" font-size="9" text-anchor="middle">${it.label}</text>`;
   });
   return s+'</svg>';
+}
+
+/* ---------- ACCURACY ---------- */
+let ACC_BY='sub';
+function wPlateTrips(){ const m={}; WROWS.forEach(r=>{ if(!mOK(r))return; if(!r.p)return; m[r.p]=(m[r.p]||0)+1; }); return m; }
+function renderAccuracy(){
+  const wtrips=wPlateTrips(); const wset=new Set(Object.keys(wtrips));
+  const reg=REGrows.filter(r=>r.plate && (!MARKET || !r.market || r.market===MARKET));
+  const regPlates=new Set(reg.map(r=>r.plate)); let matched=0; regPlates.forEach(p=>{ if(wset.has(p))matched++; });
+  const dim={ sub:r=>r.sub||'(none)', cust:r=>{ const c=CMAP[r.ck]; return c?c.customer:(r.ck||'(no contract)'); },
+              week:r=>r.regDate?mondayOf(r.regDate):'(no date)', day:r=>r.regDate||'(no date)' }[ACC_BY];
+  const groups={}; reg.forEach(r=>{ const g=dim(r); (groups[g]=groups[g]||{plates:new Set()}); groups[g].plates.add(r.plate); });
+  let rows=Object.keys(groups).map(g=>{ const ps=[...groups[g].plates]; const del=ps.filter(p=>wset.has(p)).length;
+      const trips=ps.reduce((sm,p)=>sm+(wtrips[p]||0),0); return {g,reg:ps.length,del,trips,acc:ps.length?del/ps.length*100:0}; });
+  if(ACC_BY==='week'||ACC_BY==='day') rows.sort((a,b)=>a.g.localeCompare(b.g)); else rows.sort((a,b)=>b.reg-a.reg);
+
+  let html='<div class="bar"><div class="seg" id="accby">'+
+    [['sub','By subcontractor'],['cust','By customer'],['week','By week'],['day','By day']].map(x=>`<button data-k="${x[0]}" class="${x[0]===ACC_BY?'on':''}">${x[1]}</button>`).join('')+'</div></div>';
+  html+='<div class="card"><div class="kv"><span>Registered plates: <b>'+regPlates.size+'</b></span>'+
+    '<span>Seen in weighbridge: <b>'+matched+'</b> ('+(regPlates.size?Math.round(matched/regPlates.size*100):0)+'%)</span>'+
+    '<span>Distinct weighbridge plates: <b>'+wset.size+'</b></span></div>'+
+    '<div class="legend muted">Accuracy = registered trucks that actually delivered &divide; registered trucks. Matched by plate. If "seen in weighbridge" is near 0%, weighbridge Truck No and readiness Truck Plate are in different formats and the match is failing.</div></div>';
+  html+='<div class="card"><h2>Register vs actual &mdash; '+({sub:'by subcontractor',cust:'by customer',week:'by week',day:'by day'}[ACC_BY])+'</h2><div class="tableScroll"><table><thead><tr>'+
+    ['Group','Registered','Delivered','Trips','Accuracy %'].map((h,i)=>`<th class="${i===0?'l':''}">${h}</th>`).join('')+'</tr></thead><tbody>';
+  if(!rows.length) html+='<tr><td colspan="5" class="empty">No readiness data for this market.</td></tr>';
+  rows.forEach(r=>{ const lab=ACC_BY==='week'?wkLabel(r.g)+' (wk)':ACC_BY==='day'?dmy(r.g):r.g; const cls=r.acc>=80?'pos':(r.acc>=50?'':'neg');
+    html+=`<tr><td class="l">${esc(lab)}</td><td>${r.reg}</td><td>${r.del}</td><td>${r.trips}</td><td class="${cls}">${r.acc.toFixed(0)}%</td></tr>`; });
+  html+='</tbody></table></div></div>';
+  $('#view').innerHTML=html;
+  const e=$('#accby'); if(e) e.addEventListener('click',ev=>{ const b=ev.target.closest('button'); if(!b)return; ACC_BY=b.dataset.k; $$('#accby button').forEach(x=>x.classList.toggle('on',x===b)); renderAccuracy(); });
 }
 
 /* ---------- DATA ---------- */

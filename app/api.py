@@ -17,6 +17,15 @@ from . import parsers, engine
 bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+@bp.after_request
+def _no_store(resp):
+    # shared-store reads must never be served from browser cache (multi-user staleness)
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
 # ── Uploads ──────────────────────────────────────────────────────────────────
 def _save_tmp():
     f = request.files.get("file")

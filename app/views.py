@@ -11,7 +11,7 @@ _BRIDGE = """<script>
 (function(){
   var BASE='/api/kv';
   try{
-    var x=new XMLHttpRequest(); x.open('GET',BASE,false); x.send();
+    var x=new XMLHttpRequest(); x.open('GET',BASE+'?_='+Date.now(),false); try{x.setRequestHeader('Cache-Control','no-store');}catch(e){} x.send();
     if(x.status===200){
       var d=JSON.parse(x.responseText||'{}');
       Object.keys(d).forEach(function(k){ if(k.indexOf('coalRpt')===0) return; try{ window.localStorage.setItem(k,d[k]); }catch(e){} });
