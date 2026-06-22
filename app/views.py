@@ -122,13 +122,71 @@ _GUARD = """<script>
 _TOOL_HTML = None
 
 
+# Capture discrete user actions (tab opens, sorts, uploads, Calculate, exports,
+# manual-time edits, language switches) via global event delegation — no tool
+# internals are touched. Events are batched and flushed to /api/event.
+_EVENTS = """<script>
+(function(){
+  var Q=[], lastK='', lastT=0;
+  function push(action, detail){
+    var k=action+'|'+detail, now=Date.now();
+    if(k===lastK && (now-lastT)<1500) return;   // de-dupe rapid repeats
+    lastK=k; lastT=now;
+    Q.push({action:action, detail:String(detail||'').slice(0,300)});
+    if(Q.length>=25) flush();
+  }
+  function flush(){
+    if(!Q.length) return;
+    var batch=Q.splice(0,Q.length);
+    try{ fetch('/api/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:batch}),keepalive:true}); }catch(e){}
+  }
+  function curTab(){
+    var nav=document.getElementById('pageNav'); if(!nav) return '';
+    var b=nav.querySelector('button[data-page].active'); return b? (b.textContent||'').trim() : '';
+  }
+  function txt(el){ return (el.textContent||'').replace(/[\\u25B2\\u25BC\\u2191\\u2193]/g,'').trim().slice(0,60); }
+
+  document.addEventListener('click', function(e){
+    var t=e.target;
+    var nb=t.closest && t.closest('#pageNav button[data-page]');
+    if(nb){ setTimeout(function(){ push('open_tab', curTab()); }, 80); return; }
+    var th=t.closest && t.closest('th[data-dsort],th[data-sort]');
+    if(th){ push('sort', txt(th) || th.getAttribute('data-dsort') || th.getAttribute('data-sort')); return; }
+    var lb=t.closest && t.closest('#langToggle button[data-lang]');
+    if(lb){ push('language', lb.getAttribute('data-lang')); return; }
+    var cx=t.closest && t.closest('#dinCtxPop button');
+    if(cx){ push('manual_time', txt(cx) || 'set'); return; }
+    var btn=t.closest && t.closest('button,a.btn,[role=button]');
+    if(btn){
+      var s=txt(btn);
+      if(/calculat/i.test(s)) push('calculate', s);
+      else if(/export|download|baked|\\.xlsx|excel|\\bpng\\b|image|screenshot|\\bsave\\b/i.test(s)) push('export', s);
+    }
+  }, true);
+
+  document.addEventListener('change', function(e){
+    var i=e.target;
+    if(i && i.tagName==='INPUT' && i.type==='file' && i.files && i.files.length){
+      var names=[]; for(var j=0;j<i.files.length;j++) names.push(i.files[j].name);
+      var ctx=curTab(); push('upload', (ctx?ctx+': ':'')+names.join(', '));
+    }
+  }, true);
+
+  setInterval(flush, 4000);
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) flush(); });
+  window.addEventListener('pagehide', flush);
+  window.addEventListener('beforeunload', flush);
+})();
+</script>"""
+
+
 def _tool_html():
     global _TOOL_HTML
     if _TOOL_HTML is None:
         path = os.path.join(os.path.dirname(__file__), "tool", "index.html")
         with open(path, encoding="utf-8") as f:
             html = f.read()
-        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD, 1)
+        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD + _EVENTS, 1)
     return _TOOL_HTML
 
 

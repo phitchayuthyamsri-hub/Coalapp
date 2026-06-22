@@ -123,3 +123,13 @@ class AreaTime(db.Model):
     day = db.Column(db.String(10))   # YYYY-MM-DD
     seconds = db.Column(db.Integer, default=0)
     __table_args__ = (db.UniqueConstraint("user_id", "page", "day", name="uq_areatime"),)
+
+
+class ActivityEvent(db.Model):
+    """One row per discrete user action (tab open, sort, upload, calc, etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, index=True)
+    username = db.Column(db.String(80))
+    ts = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    action = db.Column(db.String(40))   # open_tab | sort | upload | calculate | export | manual_time | language | edit
+    detail = db.Column(db.String(300))

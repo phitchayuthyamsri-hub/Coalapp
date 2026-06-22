@@ -328,5 +328,22 @@ async function reloadKeep(){ try{ RAW=await (await fetch('/api/coalrpt/data')).j
 
 boot();
 </script>
+<script>
+(function(){
+  function ev(action, detail){ try{ fetch('/api/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action,detail:'report: '+String(detail||'').slice(0,280)}),keepalive:true}); }catch(e){} }
+  document.addEventListener('change', function(e){
+    var i=e.target;
+    if(i && i.tagName==='INPUT' && i.type==='file' && i.files && i.files.length){
+      var n=[]; for(var j=0;j<i.files.length;j++) n.push(i.files[j].name);
+      ev('upload', n.join(', '));
+    }
+  }, true);
+  document.addEventListener('click', function(e){
+    var b=e.target.closest && e.target.closest('button,a.btn,[role=button]'); if(!b) return;
+    var s=(b.textContent||'').trim().slice(0,60);
+    if(/upload|remove|delete|export|download/i.test(s)) ev(/export|download/i.test(s)?'export':(/remove|delete/i.test(s)?'delete':'upload'), s);
+  }, true);
+})();
+</script>
 </body>
 </html>

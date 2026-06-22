@@ -6,12 +6,12 @@ import json
 from functools import wraps
 from datetime import datetime, date
 import openpyxl
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify, abort, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime,
-                     DispatchPlanRow, LoadActualRow, SubFleetRow)
+                     ActivityEvent, DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -738,18 +738,54 @@ def track():
     return jsonify(ok=True)
 
 
+_EVENT_ACTIONS = {"open_tab", "sort", "upload", "calculate", "export",
+                  "manual_time", "language", "edit", "delete", "draw"}
+
+
+@bp.post("/event")
+@login_required
+def track_event():
+    """Record one or more discrete user actions. Accepts {action, detail} or
+    {events:[{action, detail}, ...]}. Unknown actions are dropped."""
+    d = request.get_json(force=True, silent=True) or {}
+    items = d.get("events")
+    if not isinstance(items, list):
+        items = [d]
+    n = 0
+    for it in items[:50]:  # cap batch size
+        if not isinstance(it, dict):
+            continue
+        action = str(it.get("action") or "")[:40]
+        if action not in _EVENT_ACTIONS:
+            continue
+        detail = str(it.get("detail") or "")[:300]
+        db.session.add(ActivityEvent(user_id=current_user.id,
+                                     username=current_user.username,
+                                     action=action, detail=detail))
+        n += 1
+    if n:
+        db.session.commit()
+    return jsonify(ok=True, n=n)
+
+
 @bp.get("/admin/activity")
 @admin_required
 def admin_activity():
     out = {}
 
     def U(name):
-        return out.setdefault(name, {"total_seconds": 0, "areas": {}, "countries": {}, "logins": []})
+        return out.setdefault(name, {"total_seconds": 0, "areas": {}, "countries": {}, "logins": [], "events": []})
 
     for r in AreaTime.query.all():
         u = U(r.username or "?")
         u["areas"][r.page] = u["areas"].get(r.page, 0) + (r.seconds or 0)
         u["total_seconds"] += (r.seconds or 0)
+
+    for e in ActivityEvent.query.order_by(ActivityEvent.ts.desc()).limit(4000):
+        u = U(e.username or "?")
+        if len(u["events"]) < 60:
+            u["events"].append({"ts": (e.ts.isoformat() if e.ts else ""),
+                                "action": e.action or "", "detail": e.detail or ""})
 
     for e in LoginEvent.query.order_by(LoginEvent.ts.desc()).all():
         u = U(e.username or "?")
@@ -767,8 +803,37 @@ def admin_activity():
         countries = sorted(([{"country": c, "code": v["code"], "count": v["count"]} for c, v in u["countries"].items()]),
                            key=lambda x: -x["count"])
         res[name] = {"total_seconds": u["total_seconds"], "areas": areas,
-                     "countries": countries, "logins": u["logins"]}
+                     "countries": countries, "logins": u["logins"], "events": u["events"]}
     return jsonify(res)
+
+
+@bp.get("/admin/activity/export.xlsx")
+@admin_required
+def admin_activity_export():
+    """Download the full action log as an Excel file. Times shown in UTC+7."""
+    from io import BytesIO
+    from datetime import timedelta
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Activity"
+    ws.append(["Time (UTC+7)", "User", "Action", "Detail"])
+    for c in ws[1]:
+        c.font = openpyxl.styles.Font(bold=True)
+    rows = ActivityEvent.query.order_by(ActivityEvent.ts.desc()).all()
+    for e in rows:
+        t = (e.ts + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S") if e.ts else ""
+        ws.append([t, e.username or "", e.action or "", e.detail or ""])
+    widths = [20, 18, 14, 70]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = "activity_%s.xlsx" % datetime.utcnow().strftime("%Y%m%d")
+    return Response(buf.getvalue(),
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=%s" % fname})
 
 
 # ── Daily/Weekly Coal Report: contracts + readiness data layer ───────────────

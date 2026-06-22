@@ -30,6 +30,13 @@
   .ctry .n{color:var(--mut)}
   .logins{font-size:12px;color:var(--mut);margin-top:10px}
   .logins div{padding:2px 0}
+  .feed{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  .evlist{max-height:260px;overflow:auto;font-size:12px}
+  .evrow{display:grid;grid-template-columns:130px 92px 1fr;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .evrow .evt{color:var(--mut);font-variant-numeric:tabular-nums}
+  .evrow .eva{color:var(--blue)}
+  .evrow .evd{color:var(--ink);word-break:break-word}
+  @media(max-width:560px){.evrow{grid-template-columns:1fr;gap:0}}
   .err{color:#ff6b6b}
 </style>
 </head>
@@ -38,6 +45,7 @@
   <h1>Activity</h1>
   <div class="sp"></div>
   <a class="btn" href="/admin">Users</a>
+  <a class="btn" href="/admin/activity/export.xlsx">Export Excel</a>
   <a class="btn" href="/tool">← Tool</a>
   <a class="btn" href="/logout">Log out</a>
 </header>
@@ -53,6 +61,11 @@ const LABEL = {
   gps:'GPS Data', plan:'Dispatch Plan', truckstatus:'Truck Status', weigh:'Weighbridge', fleet:'Fleet', guide:'Guide'
 };
 const lab = p => LABEL[p] || p;
+const ACT = {
+  open_tab:'Opened', sort:'Sorted', upload:'Uploaded', calculate:'Calculate',
+  export:'Exported', manual_time:'Manual time', language:'Language',
+  edit:'Edited', delete:'Removed', draw:'Drew'
+};
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function dur(sec){ sec=Math.round(sec||0); if(sec<60) return sec+'s'; const m=Math.round(sec/60); if(m<60) return m+'m'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
 function fmtTs(iso){ if(!iso) return '—'; const d=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso)?iso:iso+'Z'); if(isNaN(d)) return esc(String(iso).replace('T',' ').slice(0,16)); const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d); const g=t=>(p.find(x=>x.type===t)||{}).value||'00'; return g('year')+'-'+g('month')+'-'+g('day')+' '+g('hour')+':'+g('minute'); }
@@ -69,9 +82,13 @@ function userBlock(name, u){
   const logins = u.logins.slice(0,8).map(l =>
     '<div>'+fmtTs(l.ts)+' · '+esc(l.country)+' · '+esc(l.ip)+'</div>'
   ).join('');
+  const ev = (u.events||[]).map(e =>
+    '<div class="evrow"><span class="evt">'+fmtTs(e.ts)+'</span><span class="eva">'+esc(ACT[e.action]||e.action)+'</span><span class="evd">'+esc(e.detail||'')+'</span></div>'
+  ).join('') || '<div class="note">No actions recorded yet.</div>';
   return '<div class="user"><div class="uhead"><span class="uname">'+esc(name)+'</span><span class="total">total '+dur(u.total_seconds)+'</span></div>'
     + '<div class="cols"><div><h3>Time by area (most used first)</h3>'+bars+'</div>'
-    + '<div><h3>Logged in from</h3>'+ctry+'<div class="logins"><h3>Recent logins</h3>'+(logins||'<div>—</div>')+'</div></div></div></div>';
+    + '<div><h3>Logged in from</h3>'+ctry+'<div class="logins"><h3>Recent logins</h3>'+(logins||'<div>—</div>')+'</div></div></div>'
+    + '<div class="feed"><h3>Recent actions (newest first)</h3><div class="evlist">'+ev+'</div></div></div>';
 }
 
 fetch('/api/admin/activity').then(r=>{
