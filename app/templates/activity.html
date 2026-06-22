@@ -42,7 +42,7 @@
   <a class="btn" href="/logout">Log out</a>
 </header>
 <div class="wrap">
-  <p class="note">Per-user usage: which areas they spend the most time in, total time, and where they log in from (approximate, by IP). Time is aggregated from the tool; country is recorded at login.</p>
+  <p class="note">Per-user usage: which areas they spend the most time in, total time, and where they log in from (approximate, by IP). Time is aggregated from the tool; country is recorded at login. Login times shown in UTC+7 (Indochina).</p>
   <div id="list">Loading…</div>
 </div>
 
@@ -55,6 +55,7 @@ const LABEL = {
 const lab = p => LABEL[p] || p;
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function dur(sec){ sec=Math.round(sec||0); if(sec<60) return sec+'s'; const m=Math.round(sec/60); if(m<60) return m+'m'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
+function fmtTs(iso){ if(!iso) return '—'; const d=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso)?iso:iso+'Z'); if(isNaN(d)) return esc(String(iso).replace('T',' ').slice(0,16)); const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d); const g=t=>(p.find(x=>x.type===t)||{}).value||'00'; return g('year')+'-'+g('month')+'-'+g('day')+' '+g('hour')+':'+g('minute'); }
 function flag(cc){ if(!cc||cc.length!==2) return ''; return cc.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)))+' '; }
 
 function userBlock(name, u){
@@ -66,7 +67,7 @@ function userBlock(name, u){
     '<div class="ctry"><span>'+flag(c.code)+esc(c.country)+'</span><span class="n">'+c.count+' login'+(c.count>1?'s':'')+'</span></div>'
   ).join('') || '<div class="note">No logins recorded.</div>';
   const logins = u.logins.slice(0,8).map(l =>
-    '<div>'+esc((l.ts||'').replace('T',' ').slice(0,16))+' · '+esc(l.country)+' · '+esc(l.ip)+'</div>'
+    '<div>'+fmtTs(l.ts)+' · '+esc(l.country)+' · '+esc(l.ip)+'</div>'
   ).join('');
   return '<div class="user"><div class="uhead"><span class="uname">'+esc(name)+'</span><span class="total">total '+dur(u.total_seconds)+'</span></div>'
     + '<div class="cols"><div><h3>Time by area (most used first)</h3>'+bars+'</div>'
