@@ -2697,6 +2697,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <span class="pcl" style="margin-left:14px">Month</span><span class="dwchips" id="pvaMonths"></span></div>
         <div class="pva-slice"><span class="pcl">Date</span><span class="dwchips" id="pvaDates"></span><button id="pvaDateAll" class="dwallbtn">All</button>
           <span class="pcl" style="margin-left:14px">Cycle</span><span class="dwchips" id="pvaComp"></span>
+          <input id="pvaSearch" type="search" placeholder="Search truck…" autocomplete="off" style="margin-left:14px;padding:4px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12px;width:150px">
           <span class="rngnote">click · Ctrl=add · Shift=range</span></div>
         <div class="table-wrap"><table class="seq-table" id="dinPvaTable"><thead></thead><tbody></tbody></table></div>
       </div>
@@ -5033,13 +5034,16 @@ function renderDinStatus() {
     if (k === 'plate') return st.disp[p] || p;
     if (k === 'gps') return (fm && fm.gps) || null;
     if (k === 'status') return (fm && fm.status) || null;
+    if (k.indexOf('d:') === 0) { const dv = st.cell[p] && st.cell[p][k.slice(2)]; return dv || null; }  // note on that date
     return p;
   };
   if (_DIN_SORT['dinStatusTable'] && _DIN_SORT['dinStatusTable'].key) plates = _dinSortRows('dinStatusTable', plates, sVal);
   // header: Plate + GPS + Status (sortable) + each date (dd/mm)
   const dlabel = d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; };
   const sortHd = _dinSortHead('dinStatusTable', [['plate', 'Plate'], ['gps', 'GPS provider'], ['status', 'Truck status']], renderDinStatus).replace(/^<tr>|<\/tr>$/g, '');
-  tbl.querySelector('thead').innerHTML = '<tr>' + sortHd + dates.map(d => `<th>${dlabel(d)}</th>`).join('') + '</tr>';
+  const _ss = _DIN_SORT['dinStatusTable'] || {};
+  const dateHd = dates.map(d => { const k = 'd:' + d; const ind = _ss.key === k ? (_ss.dir === 1 ? ' \u25B2' : ' \u25BC') : ''; return `<th data-dsort="dinStatusTable|${k}" style="cursor:pointer;user-select:none" title="Sort by ${dlabel(d)} status A\u2192Z">${dlabel(d)}${ind}</th>`; }).join('');
+  tbl.querySelector('thead').innerHTML = '<tr>' + sortHd + dateHd + '</tr>';
   tbl.querySelector('tbody').innerHTML = plates.map(p => {
     const fm = fleetByNorm[p] || null;
     const gps = fm && fm.gps ? fm.gps : '<span style="color:var(--muted)">—</span>';
@@ -5131,6 +5135,7 @@ function setupDataInputUI() {
   wireChips('pvaDates', () => pvaDateSel, s => { pvaDateSel = s; }, () => pvaDateAnchor, a => { pvaDateAnchor = a; });
   wireChips('pvaComp', () => pvaCompSel, s => { pvaCompSel = s; }, () => -1, () => {});
   { const all = document.getElementById('pvaDateAll'); if (all) all.addEventListener('click', () => { pvaDateSel = null; pvaDateAnchor = -1; renderDinPVA(); }); }
+  { const sb = document.getElementById('pvaSearch'); if (sb) sb.addEventListener('input', () => { pvaSearch = sb.value; renderDinPVA(); }); }
 }
 
 // ---- PLAN vs ACTUAL (Pass 4) ----
@@ -5150,7 +5155,7 @@ function _pvaFmtDT(d) { if (!d || isNaN(d.getTime())) return '·'; return `${_di
 function _pvaDur(m) { if (m == null) return '·'; m = Math.round(m); const h = Math.floor(m / 60), mm = m % 60; return h ? `${h}h ${_dinPad(mm)}m` : `${mm}m`; }
 function _pvaMinDiff(a, b) { return (a && b) ? Math.round((b - a) / 6e4) : null; }
 // slicer state
-let pvaYearSel = null, pvaMonthSel = null, pvaDateSel = null, pvaCompSel = null, pvaDateAnchor = -1;
+let pvaYearSel = null, pvaMonthSel = null, pvaDateSel = null, pvaCompSel = null, pvaDateAnchor = -1, pvaSearch = '';
 const _PVA_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // match an actual sequence cycle to a plan cycle: same plate, closest cycleDate within 3 days, honoring manual assignment
 function _pvaMatchPlanKey(c) {
@@ -5194,13 +5199,14 @@ function renderDinPVA() {
   else { for (const d of [...pvaDateSel]) if (!dates.includes(d)) pvaDateSel.delete(d); if (!pvaDateSel.size) dates.forEach(d => pvaDateSel.add(d)); }
   if (pvaCompSel === null) pvaCompSel = new Set(['complete', 'incomplete']);
 
-  let useRows = rows.filter(r => pvaYearSel.has(r.d.slice(0, 4)) && pvaMonthSel.has(r.d.slice(0, 7)) && pvaDateSel.has(r.d) && pvaCompSel.has(isComplete(r) ? 'complete' : 'incomplete'));
+  const _pq = (pvaSearch || '').trim().toUpperCase();
+  let useRows = rows.filter(r => pvaYearSel.has(r.d.slice(0, 4)) && pvaMonthSel.has(r.d.slice(0, 7)) && pvaDateSel.has(r.d) && pvaCompSel.has(isComplete(r) ? 'complete' : 'incomplete') && (!_pq || r.plate.toUpperCase().includes(_pq) || _dinNorm(r.plate).includes(_dinNorm(_pq))));
   // precompute running totals (for sorting + display)
   for (const r of useRows) {
     const aMine = _pvaActArr(r.key, PVA_STAGES[0], r.act), aPort = _pvaActArr(r.key, PVA_STAGES[2], r.act), aRet = _pvaActArr(r.key, PVA_STAGES[4], r.act);
     r._t1 = _pvaMinDiff(aMine, aPort); r._t2 = _pvaMinDiff(aPort, aRet); r._t3 = _pvaMinDiff(aMine, aRet);
   }
-  const pvaVal = (r, k) => { if (k === 'dt') return r.d + '|' + r.plate; if (k === 't1') return r._t1; if (k === 't2') return r._t2; if (k === 't3') return r._t3; return r.d; };
+  const pvaVal = (r, k) => { if (k === 'date' || k === 'dt') return r.d + '|' + r.plate; if (k === 'truck') return r.plate + '|' + r.d; if (k === 't1') return r._t1; if (k === 't2') return r._t2; if (k === 't3') return r._t3; return r.d; };
   if (_DIN_SORT['dinPvaTable'] && _DIN_SORT['dinPvaTable'].key) useRows = _dinSortRows('dinPvaTable', useRows, pvaVal);
   else useRows.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : (a.plate < b.plate ? -1 : a.plate > b.plate ? 1 : 0));
 
@@ -5216,7 +5222,7 @@ function renderDinPVA() {
   const CL = [['Mine', 0], ['Border', 1], ['Port', 2], ['Border (BH)', 3], ['Mine (BH)', 4]];
   const ps = _DIN_SORT['dinPvaTable'] || {};
   const pind = k => ps.key === k ? (ps.dir === 1 ? ' ▲' : ' ▼') : '';
-  let thead = `<thead><tr><th rowspan="2" data-dsort="dinPvaTable|dt" style="cursor:pointer;user-select:none">Date · Truck${pind('dt')}</th>`;
+  let thead = `<thead><tr><th rowspan="2" data-dsort="dinPvaTable|date" style="cursor:pointer;user-select:none">Date${pind('date')}</th><th rowspan="2" data-dsort="dinPvaTable|truck" style="cursor:pointer;user-select:none">Truck${pind('truck')}</th>`;
   for (const [lbl] of CL) thead += `<th colspan="2" class="ch-loc">${lbl}</th>`;
   thead += `<th colspan="3" class="ch-loc ch-tot">Total running</th></tr><tr>`;
   for (const _ of CL) thead += `<th class="ch-sub plan">Plan</th><th class="ch-sub act">Actual</th>`;
@@ -5238,12 +5244,12 @@ function renderDinPVA() {
     const t1 = _pvaMinDiff(aMine, aPort), t2 = _pvaMinDiff(aPort, aRet), t3 = _pvaMinDiff(aMine, aRet);
     tds += `<td class="cht tot${t1 != null ? '' : ' blank'}">${_pvaDur(t1)}</td><td class="cht tot${t2 != null ? '' : ' blank'}">${_pvaDur(t2)}</td><td class="cht tot full${t3 != null ? '' : ' blank'}">${_pvaDur(t3)}</td>`;
     const dd = `${_dinPad(+r.d.slice(8, 10))}/${_dinPad(+r.d.slice(5, 7))}/${r.d.slice(2, 4)}`;
-    tbody += `<tr class="chrow${inc}" data-plate="${escapeHtml(r.plate)}" data-date="${r.d}"><td><span class="chd">${dd}</span>${escapeHtml(r.plate)}${manualSeen ? '<span class="mantag">manual</span>' : ''}${inc ? '<span class="chincb">⏳</span>' : ''}</td>${tds}</tr>`;
+    tbody += `<tr class="chrow${inc}" data-plate="${escapeHtml(r.plate)}" data-date="${r.d}"><td><span class="chd">${dd}</span></td><td>${escapeHtml(r.plate)}${manualSeen ? '<span class="mantag">manual</span>' : ''}${inc ? '<span class="chincb">⏳</span>' : ''}</td>${tds}</tr>`;
   }
   tbody += '</tbody>';
   tbl.querySelector('thead').innerHTML = '';   // we set full table at once
   tbl.innerHTML = thead + tbody;
-  if (!useRows.length) tbl.innerHTML = thead + `<tbody><tr><td colspan="${CL.length * 2 + 4}" style="text-align:center;color:var(--muted);padding:18px">No plan cycles in selection</td></tr></tbody>`;
+  if (!useRows.length) tbl.innerHTML = thead + `<tbody><tr><td colspan="${CL.length * 2 + 5}" style="text-align:center;color:var(--muted);padding:18px">No plan cycles in selection</td></tr></tbody>`;
 
   // Unplanned actual cycles
   const utbl = document.getElementById('dinPvaUnplannedTable');
