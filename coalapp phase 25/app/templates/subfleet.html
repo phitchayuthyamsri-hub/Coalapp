@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='subfleet' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <div class="row"><h2>Subcontractor fleet status</h2><span class="spacer"></span>
+      <button id="sfRefresh">Refresh</button></div>
+    <label class="upload-box">Upload Subcontractor file (.xlsx) — replaces current<input type="file" id="sfFile" accept=".xlsx"></label>
+    <div id="sfUpMsg" class="muted"></div>
+    <p class="muted">Compares the subcontractor's claimed Mine arrival (back-haul) against the GPS estimate.</p>
+    <div id="sfNote" class="muted"></div>
+    <div class="tablewrap">
+      <table id="sfTable">
+        <thead><tr>
+          <th>Plate</th><th>Declared haul</th><th>Status</th><th>Location</th>
+          <th>Claimed arrive Mine</th><th>Est. arrive Mine</th><th>Δ (est−claim)</th><th>GPS check</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/subfleet.js') }}"></script>{% endblock %}

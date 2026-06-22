@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='guide' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card guide">
+    <h2>Guide</h2>
+    <h3>The corridor</h3>
+    <p>XPPL Mine (Kaleum, Sekong, Laos) → Lalay border → QL49 highway → Chân Mây port (Vietnam).
+       An A Ngo warehouse hub is a planned leg-decoupling point.</p>
+    <h3>QL49 operating windows (the bottleneck)</h3>
+    <ul>
+      <li>Border crossing (loaded): 15:00–17:00, +1h paperwork</li>
+      <li>QL49 inbound (loaded, Mine→Port): 19:00–24:00</li>
+      <li>Port unload: 07:00–17:00</li>
+      <li>QL49 return (empty, Port→Mine): 00:00–05:00</li>
+    </ul>
+    <h3>Pages</h3>
+    <ul>
+      <li><b>Dashboard</b> — upload data; live fleet status with ETA.</li>
+      <li><b>Fleet</b> — register trucks, phone, status, effective dates.</li>
+      <li><b>Routes</b> — draw each leg's road line + set speed. ETA needs these.</li>
+      <li><b>Timeline</b> — each truck's zone visits over time.</li>
+      <li><b>Plan vs Actual</b> — planned vs actual port arrival, on-time %.</li>
+      <li><b>Subcontractor</b> — claimed vs GPS-estimated Mine arrival.</li>
+      <li><b>Performance / Daily</b> — trip counts, cycle time, per-day throughput.</li>
+    </ul>
+    <h3>Data sources</h3>
+    <p>GPS xlsx (vehicle pings), Dispatch Plan xlsx, Weighbridge (Load_actual) xlsx,
+       Subcontractor xlsx. Weighbridge is the authority for loading; GPS is the secondary check.</p>
+  </section>
+</main>
+{% endblock %}

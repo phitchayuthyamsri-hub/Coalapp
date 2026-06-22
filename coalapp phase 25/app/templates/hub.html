@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS — Home</title>
+<style>
+  :root{ --bg:#0b0b0c; --panel:#161618; --panel2:#1f1f22; --line:#2a2a2e; --ink:#e6e6ea; --mut:#8a8f98; --accent:#34c759; --blue:#0a84ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line)}
+  header .brand{font-weight:700;font-size:15px}
+  header .sp{flex:1}
+  header a{color:#9cd0ff;text-decoration:none;font-size:13px;margin-left:14px}
+  header a:hover{text-decoration:underline}
+  header .who{color:var(--mut);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px}
+  h1{font-size:22px;font-weight:600;margin:0 0 6px;text-align:center}
+  .sub{color:var(--mut);margin:0 0 34px;text-align:center}
+  .cards{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:820px}
+  .card{display:flex;flex-direction:column;justify-content:space-between;width:340px;min-height:200px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;text-decoration:none;color:var(--ink);transition:transform .12s ease,border-color .12s ease}
+  .card:hover{transform:translateY(-3px);border-color:#3a6ea5}
+  .card .icon{font-size:34px;margin-bottom:14px}
+  .card .t{font-size:19px;font-weight:600;margin-bottom:8px}
+  .card .d{color:var(--mut);font-size:14px}
+  .card .go{margin-top:18px;color:var(--blue);font-size:14px;font-weight:600}
+  .empty{color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">TMS system</span>
+  <span class="sp"></span>
+  <span class="who">{{ username }}</span>
+  {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
+  <a href="/logout">Log out</a>
+</header>
+<main>
+  <h1>Choose a workspace</h1>
+  <p class="sub">Select where you'd like to go.</p>
+  <div class="cards">
+    {% for a in apps %}
+      <a class="card" href="{{ a.url }}">
+        <div>
+          <div class="icon">{% if a.key == 'tms' %}&#128642;{% else %}&#128202;{% endif %}</div>
+          <div class="t">{{ a.label }}</div>
+          <div class="d">{% if a.key == 'tms' %}GPS routing, dispatch, plan vs actual, fleet &amp; performance.{% else %}Daily and weekly performance summaries.{% endif %}</div>
+        </div>
+        <div class="go">Open &rarr;</div>
+      </a>
+    {% endfor %}
+    {% if not apps %}<p class="empty">You don't have access to any workspace yet. Ask an admin to grant access.</p>{% endif %}
+  </div>
+</main>
+</body>
+</html>

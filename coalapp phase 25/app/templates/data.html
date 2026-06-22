@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='data' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <div class="subtabs">
+      <button class="subtab active" data-tab="sequence">Sequence</button>
+      <button class="subtab" data-tab="route">Route</button>
+      <button class="subtab" data-tab="timeline">Timeline</button>
+    </div>
+
+    <div class="subpanel" data-panel="sequence">
+      <div class="row"><h2>Cycles</h2><span class="spacer"></span><span id="seqCount" class="muted"></span></div>
+      <div class="tablewrap"><table id="seqTable"><thead><tr>
+        <th>Plate</th><th>Cycle date</th><th>Mine in</th><th>Loading</th><th>Border out</th>
+        <th>QL49 out</th><th>Port in</th><th>QL49 back</th><th>Border back</th><th>Mine R</th>
+        <th>Backhaul</th><th>Complete</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="subpanel" data-panel="route" style="display:none">
+      <div class="row"><h2>Route legs</h2></div>
+      <p class="muted">Pick a leg, click Draw, click along the road, double-click to finish (saves automatically).</p>
+      <div class="tablewrap"><table id="legTable"><thead><tr>
+        <th>Leg</th><th>Points</th><th>Speed (km/h)</th><th></th>
+      </tr></thead><tbody></tbody></table></div>
+      <div id="routeMsg" class="muted"></div>
+      <div id="map" style="margin-top:.8rem"></div>
+    </div>
+
+    <div class="subpanel" data-panel="timeline" style="display:none">
+      <div class="row"><h2>Timeline</h2><span class="spacer"></span>
+        <label class="inl">From<input id="tl_from" type="date"></label>
+        <label class="inl">To<input id="tl_to" type="date"></label>
+        <label class="inl">Truck<input id="tl_plate" placeholder="all"></label>
+        <button id="tl_load">Load</button>
+      </div>
+      <div id="tl_legend" class="legend"></div>
+      <div id="tl_note" class="muted"></div>
+      <div id="tl_body" class="tl-body"></div>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="{{ url_for('static', filename='js/data.js') }}"></script>
+{% endblock %}

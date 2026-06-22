@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · User management</title>
+<style>
+  :root{ --bg:#0b0b0c; --panel:#161618; --panel2:#1f1f22; --line:#2a2a2e; --ink:#e6e6ea; --mut:#8a8f98; --grn:#34c759; --blue:#0a84ff; --red:#ff5a52; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  header h1{font-size:16px;margin:0}
+  header .sp{flex:1}
+  a.btn,button.lnk{color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;background:none;cursor:pointer;font:inherit}
+  a.btn:hover,button.lnk:hover{border-color:var(--mut)}
+  .wrap{padding:18px;max-width:1150px;margin:0 auto}
+  .note{color:var(--mut);font-size:13px;margin:0 0 16px}
+  h2{font-size:14px;margin:22px 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .uname{font-weight:600;font-size:15px;min-width:150px}
+  .pill{font-size:11px;color:#000;background:var(--grn);border-radius:999px;padding:2px 8px;font-weight:700}
+  label.chk{display:flex;align-items:center;gap:6px;color:var(--mut);white-space:nowrap}
+  input[type=text],input[type=password],select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit}
+  input[type=text],input[type=password]{min-width:140px}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field small{color:var(--mut);font-size:11px}
+  .tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:5px 14px;margin:12px 0 0}
+  .tabs label{display:flex;align-items:center;gap:7px}
+  .actions{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+  button.save{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-weight:600;cursor:pointer}
+  button.create{background:var(--grn);color:#062a12}
+  button.del{background:none;border:1px solid #5a2a2a;color:var(--red);border-radius:8px;padding:7px 12px;cursor:pointer}
+  button.allbtn{background:none;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:5px 10px;cursor:pointer}
+  .ok{color:var(--grn);font-size:13px}
+  .err{color:var(--red);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1>User management</h1>
+  <div class="sp"></div>
+  <a class="btn" href="/admin/activity">Activity</a>
+  <a class="btn" href="/tool">← Back to tool</a>
+  <a class="btn" href="/logout">Log out</a>
+</header>
+<div class="wrap">
+  <p class="note">Create or remove users and set, per person: password, default language, the page they land on, which tabs they can open, and whether they can edit (uncheck = view-only, no uploads or saving). Admins always see every tab and can open this page. At least one admin is always kept.</p>
+
+  <h2>Create user</h2>
+  <div class="card" id="createCard"></div>
+
+  <h2>Users</h2>
+  <div id="list">Loading…</div>
+</div>
+
+<script>
+const TABS = [
+  ["perf","Performance"],["daily","Daily performance"],["pva","Plan vs Actual"],
+  ["subfleet","Subcontractor fleet status"],["anchors","Parameter"],["data","Sequence/Route"],
+  ["timeline","Timeline"],
+  ["gps","GPS Data"],["plan","Dispatch Plan"],["truckstatus","Truck Status"],
+  ["weigh","Weighbridge"],["fleet","Fleet"],["guide","Guide"]
+];
+const ALL = TABS.map(t => t[0]);
+const APPS = [["tms","TMS : Coal project"],["report","Daily/Weekly performance report"]];
+const ALL_APPS = APPS.map(a => a[0]);
+function appCheckboxes(allowed){
+  return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin:4px 0">' + APPS.map(function(a){
+    const on = allowed.indexOf(a[0]) >= 0 ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="appchk" value="'+a[0]+'"'+on+'>'+a[1]+'</label>';
+  }).join('') + '</div>';
+}
+function collectApps(el){
+  const boxes = Array.from(el.querySelectorAll('.appchk'));
+  const checked = boxes.filter(b=>b.checked).map(b=>b.value);
+  return checked.length === ALL_APPS.length ? null : checked;   // all = unrestricted
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function tabCheckboxes(allowed){
+  return '<div class="tabs">' + TABS.map(t => {
+    const on = allowed.indexOf(t[0]) >= 0 ? ' checked' : '';
+    return '<label><input type="checkbox" class="tabchk" value="'+t[0]+'"'+on+'>'+t[1]+'</label>';
+  }).join('') + '</div>';
+}
+function langSelect(v){ return '<select class="f-lang"><option value="en"'+(v!=='vi'?' selected':'')+'>English</option><option value="vi"'+(v==='vi'?' selected':'')+'>Tiếng Việt</option></select>'; }
+function pageSelect(v){ return '<select class="f-page"><option value="">(default: first allowed)</option>'+TABS.map(t=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>'; }
+
+function collectTabs(el){
+  const boxes = Array.from(el.querySelectorAll('.tabchk'));
+  const checked = boxes.filter(b=>b.checked).map(b=>b.value);
+  return checked.length === ALL.length ? null : checked;   // all = unrestricted
+}
+function wireAllNone(el){
+  const boxes = () => Array.from(el.querySelectorAll('.tabchk'));
+  el.querySelector('[data-act=all]').onclick = () => boxes().forEach(b=>b.checked=true);
+  el.querySelector('[data-act=none]').onclick = () => boxes().forEach(b=>b.checked=false);
+}
+
+function renderCreate(){
+  const el = document.getElementById('createCard');
+  el.innerHTML =
+    '<div class="row">'
+    + '<div class="field"><input type="text" class="f-user" placeholder="username"><small>username</small></div>'
+    + '<div class="field"><input type="password" class="f-pass" placeholder="password"><small>password</small></div>'
+    + '<div class="field">'+langSelect('en')+'<small>language</small></div>'
+    + '<div class="field">'+pageSelect('')+'<small>default page</small></div>'
+    + '<label class="chk"><input type="checkbox" class="f-edit" checked> can edit</label>'
+    + '<label class="chk"><input type="checkbox" class="f-admin"> admin</label>'
+    + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
+    + '</div>'
+    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
+    + appCheckboxes(ALL_APPS)
+    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
+    + tabCheckboxes(ALL)
+    + '<div class="actions"><button class="save create">Create user</button><span class="msg"></span></div>';
+  wireAllNone(el);
+  el.querySelector('.save').onclick = () => {
+    const msg = el.querySelector('.msg'); msg.textContent='Creating…'; msg.className='msg';
+    const body = {
+      username: el.querySelector('.f-user').value.trim(),
+      password: el.querySelector('.f-pass').value,
+      lang: el.querySelector('.f-lang').value,
+      default_page: el.querySelector('.f-page').value,
+      can_edit: el.querySelector('.f-edit').checked,
+      is_admin: el.querySelector('.f-admin').checked,
+      apps: collectApps(el),
+      tabs: collectTabs(el)
+    };
+    fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(r=>r.json()).then(res=>{
+        if(res && res.ok){ msg.textContent='Created ✓'; msg.className='msg ok'; load(); renderCreate(); }
+        else { msg.textContent = (res && res.error) || 'Failed'; msg.className='msg err'; }
+      }).catch(()=>{ msg.textContent='Failed'; msg.className='msg err'; });
+  };
+}
+
+function userCard(u){
+  const el = document.createElement('div'); el.className='card';
+  const allowed = u.tabs === null ? ALL : u.tabs;
+  el.innerHTML =
+    '<div class="row">'
+    + '<span class="uname">'+esc(u.username)+(u.is_admin?' <span class="pill">admin</span>':'')+'</span>'
+    + '<div class="field"><input type="password" class="f-pass" placeholder="leave blank to keep"><small>reset password</small></div>'
+    + '<div class="field">'+langSelect(u.lang)+'<small>language</small></div>'
+    + '<div class="field">'+pageSelect(u.default_page)+'<small>default page</small></div>'
+    + '<label class="chk"><input type="checkbox" class="f-edit"'+(u.can_edit?' checked':'')+'> can edit</label>'
+    + '<label class="chk"><input type="checkbox" class="f-admin"'+(u.is_admin?' checked':'')+'> admin</label>'
+    + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
+    + '</div>'
+    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
+    + appCheckboxes(u.apps === null ? ALL_APPS : u.apps)
+    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
+    + tabCheckboxes(allowed)
+    + '<div class="actions"><button class="save">Save</button><button class="del">Delete</button><span class="msg"></span></div>';
+  wireAllNone(el);
+  el.querySelector('.save').onclick = () => {
+    const msg = el.querySelector('.msg'); msg.textContent='Saving…'; msg.className='msg';
+    const body = {
+      tabs: collectTabs(el),
+      lang: el.querySelector('.f-lang').value,
+      default_page: el.querySelector('.f-page').value,
+      can_edit: el.querySelector('.f-edit').checked,
+      is_admin: el.querySelector('.f-admin').checked,
+      apps: collectApps(el)
+    };
+    const pw = el.querySelector('.f-pass').value; if(pw) body.password = pw;
+    fetch('/api/admin/users/'+u.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(r=>r.json()).then(res=>{
+        if(res && res.ok){ msg.textContent = res.note ? res.note : 'Saved ✓'; msg.className = res.note ? 'msg err':'msg ok'; load(); }
+        else { msg.textContent='Save failed'; msg.className='msg err'; }
+      }).catch(()=>{ msg.textContent='Save failed'; msg.className='msg err'; });
+  };
+  el.querySelector('.del').onclick = () => {
+    if(!confirm('Delete user "'+u.username+'"? This cannot be undone.')) return;
+    const msg = el.querySelector('.msg'); msg.textContent='Deleting…'; msg.className='msg';
+    fetch('/api/admin/users/'+u.id,{method:'DELETE'}).then(r=>r.json()).then(res=>{
+      if(res && res.ok){ load(); } else { msg.textContent=(res&&res.error)||'Delete failed'; msg.className='msg err'; }
+    }).catch(()=>{ msg.textContent='Delete failed'; msg.className='msg err'; });
+  };
+  return el;
+}
+
+function load(){
+  fetch('/api/admin/users').then(r=>{
+    if(r.status===403){ document.getElementById('list').innerHTML='<p class="err">Admins only.</p>'; return null; }
+    return r.json();
+  }).then(users=>{
+    if(!users) return;
+    const list = document.getElementById('list'); list.innerHTML='';
+    users.forEach(u => list.appendChild(userCard(u)));
+  }).catch(()=>{ document.getElementById('list').innerHTML='<p class="err">Could not load users.</p>'; });
+}
+renderCreate();
+load();
+</script>
+</body>
+</html>

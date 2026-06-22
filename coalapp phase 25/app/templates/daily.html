@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='daily' %}{% include "_nav.html" %}
+<main class="wrap">
+  <section class="card">
+    <h2>Daily performance</h2>
+    <div id="dailyChart" class="daily-chart"></div>
+    <div class="tablewrap">
+      <table id="dailyTable">
+        <thead><tr><th>Date</th><th>Port arrivals</th><th>Loads</th><th>Tonnes</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/daily.js') }}"></script>{% endblock %}

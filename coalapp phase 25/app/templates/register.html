@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="authbox">
+  <h1>Create account</h1>
+  <form method="post" action="{{ url_for('auth.register') }}">
+    <input name="username" placeholder="Username" autofocus>
+    <input name="password" type="password" placeholder="Password">
+    <button type="submit">Register</button>
+  </form>
+  <p class="muted"><a href="{{ url_for('auth.login') }}">Back to login</a></p>
+</div>
+{% endblock %}

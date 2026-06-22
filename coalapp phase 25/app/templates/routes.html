@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='routes' %}{% include "_nav.html" %}
+
+<main class="wrap">
+  <section class="card">
+    <h2>Route legs</h2>
+    <p class="muted">Pick a leg, click <b>Draw</b>, then click along the road on the map.
+       Double-click to finish — it saves automatically. ETA needs the fronthaul legs
+       (Mine→Border→QL49→Port) and at least one backhaul leg drawn.</p>
+    <div class="tablewrap">
+      <table id="legTable">
+        <thead><tr><th>Leg</th><th>Points</th><th>Speed (km/h)</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="routeMsg" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>Map</h2>
+    <div id="map"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="{{ url_for('static', filename='js/routes.js') }}"></script>
+{% endblock %}

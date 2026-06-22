@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block body %}
+{% set active='fleet' %}{% include "_nav.html" %}
+
+<main class="wrap">
+  <section class="card">
+    <h2>Add / edit truck</h2>
+    <div class="fleet-form">
+      <label>Plate<input id="f_plate" placeholder="43H-168.35"></label>
+      <label>Status
+        <select id="f_status">
+          <option value="online">online</option>
+          <option value="maintenance">maintenance</option>
+          <option value="breakdown">breakdown</option>
+          <option value="deactivated">deactivated</option>
+        </select>
+      </label>
+      <label>Phone<input id="f_phone" placeholder="+66..."></label>
+      <label>GPS provider<input id="f_gps" placeholder="Binh Anh / Viettel"></label>
+      <label>Eff. from<input id="f_from" type="date"></label>
+      <label>Eff. to<input id="f_to" type="date"></label>
+      <button id="saveBtn">Save</button>
+    </div>
+    <div id="fleetMsg" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><h2>Fleet</h2><span class="spacer"></span>
+      <span id="fleetCount" class="muted"></span></div>
+    <div class="tablewrap">
+      <table id="fleetTable">
+        <thead><tr>
+          <th>Plate</th><th>Status</th><th>Phone</th><th>GPS</th>
+          <th>Eff. from</th><th>Eff. to</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/fleet.js') }}"></script>
+{% endblock %}
