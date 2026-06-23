@@ -10072,10 +10072,35 @@ function computePerf(){
   for(const k in ACS.plan){ const e=ACS.plan[k]; if(!fleetSet.has(e.plate)) continue;
     const d=k.split('|')[1]; if(!inPerfRange(d)||!inEff(e.plate,d)) continue; const key=cycKey(e.plate,d); if(planSeen.has(key))continue; planSeen.add(key); planUniq.push({plate:e.plate,d,key,ent:e}); }
   // unique actual cycles
-  const actSeen=new Set(), actUniq=[];
+  // Re-arrival floor: a mine touch <24h after the truck's last KEPT arrival, with no
+  // trail evidence of a real journey (border/port) in between, is linger or a mine-only
+  // feed artifact — NOT a new arrival. It is suppressed (renders blank), and does not
+  // advance the anchor, so a genuine return one full cycle later still scores. A full
+  // cycle physically can't complete in <24h (border 15:00-19:00 once daily, QL49
+  // 19:00-24:00 inbound, port 07:00-17:00, ~8h loaded drive), so real re-arrivals are
+  // always >=24h apart; only artifacts fall inside the floor.
+  const REARRIVE_FLOOR_MS=24*3600*1000;
+  const _miOf=(e,d)=>{ const t=(e&&e.locs&&e.locs.MINE&&e.locs.MINE.in)?Date.parse(e.locs.MINE.in):NaN; return isNaN(t)?Date.parse(d+'T00:00:00'):t; };
+  const _journeyBetween=(e,t0,t1)=>{ const L=e&&e.locs; if(!L) return false;   // border/port visit strictly inside the gap = a real outbound trip
+    const hit=x=>{ const t=x?Date.parse(x):NaN; return !isNaN(t)&&t>t0&&t<t1; };
+    return hit(L.BORDER&&L.BORDER.in)||hit(L.PORT&&L.PORT.in); };
+  const _actRows=[];
   for(const k in ACS.actual){ const e=ACS.actual[k]; if(!fleetSet.has(e.plate)) continue;
-    const d=cycDateKey(k.split('|').slice(1).join('|'), e); if(!d||!inPerfRange(d)||!inEff(e.plate,d)) continue; const key=cycKey(e.plate,d); if(actSeen.has(key))continue; actSeen.add(key);
-    actUniq.push({plate:e.plate,d,key,arrival:actualArrival(e),ent:e}); }
+    const d=cycDateKey(k.split('|').slice(1).join('|'), e); if(!d||!inPerfRange(d)||!inEff(e.plate,d)) continue;
+    _actRows.push({plate:e.plate,d,mi:_miOf(e,d),ent:e}); }
+  _actRows.sort((a,b)=> a.plate<b.plate?-1 : a.plate>b.plate?1 : a.mi-b.mi);
+  const actSeen=new Set(), actUniq=[];
+  let _lastPlate=null, _anchorMi=null, _prevEnt=null;
+  for(const r of _actRows){
+    if(r.plate!==_lastPlate){ _lastPlate=r.plate; _anchorMi=null; _prevEnt=null; }
+    let keep=true;
+    if(_anchorMi!=null && (r.mi-_anchorMi)<REARRIVE_FLOOR_MS){
+      keep = _journeyBetween(_prevEnt,_anchorMi,r.mi) || _journeyBetween(r.ent,_anchorMi,r.mi);
+    }
+    if(!keep) continue;                                  // suppressed: blank, anchor unchanged
+    _anchorMi=r.mi; _prevEnt=r.ent;
+    const key=cycKey(r.plate,r.d); if(actSeen.has(key))continue; actSeen.add(key);
+    actUniq.push({plate:r.plate,d:r.d,key,arrival:actualArrival(r.ent),ent:r.ent}); }
   const planByKey=Object.fromEntries(planUniq.map(p=>[p.key,p]));
   const actByKey =Object.fromEntries(actUniq.map(a=>[a.key,a]));
 
