@@ -2674,6 +2674,13 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <label>To <input type="date" id="dailyTo"></label>
         <button id="dailyRangeClear" class="pmbtn">All dates</button>
         <span class="rngnote" id="dailyRangeNote"></span>
+        <span class="pcl" style="margin-left:14px">FLEET</span>
+        <div class="fleet-scope-seg">
+          <button data-scope="all">All</button>
+          <button data-scope="in" class="active">In fleet</button>
+          <button data-scope="out">Not in fleet</button>
+          <button data-scope="deact">Deactivated</button>
+        </div>
       </div>
       <div id="perfDetail"></div>
       <div class="symwrap" id="symGrid"></div>
@@ -6148,6 +6155,7 @@ function setFleetScope(scope) {
   if (typeof renderRouteTable === 'function') renderRouteTable();
   if (typeof renderTimeline === 'function') renderTimeline();
   if (typeof renderStatusTable === 'function') renderStatusTable();
+  if (window.renderPerfTab) try { window.renderPerfTab(); } catch (e) {}
 }
 function syncFleetScopeControls() {
   const scope = (STATE.filters && STATE.filters.fleetScope) || 'in';
@@ -10143,34 +10151,46 @@ function computePerf(){
   const manualPlannedSet=new Set(manualPlanned.map(x=>x.key));
   const noShowFinal=noShow.filter(p=>!manualPlannedSet.has(p.key));
 
+  // ---- Daily-tab fleet-scope filter: applies to the daily status counts + per-truck
+  // grid only. The KPI Summary / on-time / timing above stay full-fleet so those numbers
+  // don't shift. 'in'/'all'/'out' exclude deactivated; 'deact' shows only deactivated. ----
+  const _sc=pl=>fleetScopeAllows(pl);
+  const dPlanUniq      =planUniq.filter(p=>_sc(p.plate));
+  const dAsPlanned     =asPlanned.filter(p=>_sc(p.plate));
+  const dManualPlanned =manualPlanned.filter(p=>_sc(p.plate));
+  const dNoShowFinal   =noShowFinal.filter(p=>_sc(p.plate));
+  const dUnplanned     =unplanned.filter(a=>_sc(a.plate));
+  const dManualUnplanned=manualUnplanned.filter(a=>_sc(a.plate));
+  const dManualAll     =manualAll.filter(k=>_sc(k.split('|')[0]));
+
   // dates union (plan dates + unmatched actual dates + manual dates), within perf range
-  const dates=[...new Set([...planUniq.map(p=>p.d), ...unplanned.map(a=>a.d), ...manualAll.map(k=>k.split('|')[1])])].sort();
+  const dates=[...new Set([...dPlanUniq.map(p=>p.d), ...dUnplanned.map(a=>a.d), ...dManualAll.map(k=>k.split('|')[1])])].sort();
 
   // status x date counts (manual folded into came)
   const sbd={}; const z=()=>({planned:0,asPlanned:0,noShow:0,unplan:0});
   for(const d of dates) sbd[d]=z();
-  for(const p of planUniq){ sbd[p.d].planned++; }
-  for(const p of asPlanned){ sbd[p.d].asPlanned++; }
-  for(const p of manualPlanned){ sbd[p.d].asPlanned++; }
-  for(const p of noShowFinal){ sbd[p.d].noShow++; }
-  for(const a of unplanned){ sbd[a.d].unplan++; }
-  for(const a of manualUnplanned){ sbd[a.d].unplan++; }
+  for(const p of dPlanUniq){ sbd[p.d].planned++; }
+  for(const p of dAsPlanned){ sbd[p.d].asPlanned++; }
+  for(const p of dManualPlanned){ sbd[p.d].asPlanned++; }
+  for(const p of dNoShowFinal){ sbd[p.d].noShow++; }
+  for(const a of dUnplanned){ sbd[a.d].unplan++; }
+  for(const a of dManualUnplanned){ sbd[a.d].unplan++; }
 
-  // truck x date symbol grid (rows = ALL fleet)
+  // truck x date symbol grid (rows = fleet trucks allowed by the current scope)
   const grid={};
-  for(const pl of ACS.fleet){ const _m=(ACS.fleetMeta||{})[pl]||{};
+  for(const pl of ACS.fleet){ if(!_sc(pl)) continue; const _m=(ACS.fleetMeta||{})[pl]||{};
     if(_m.effFrom && perfRange.to && _m.effFrom>perfRange.to) continue;   // not yet active in this period
     if(_m.effTo && perfRange.from && _m.effTo<perfRange.from) continue;    // deactivated before this period
     grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}};
   }
   const ensure=pl=>grid[pl]||(grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}});
-  for(const p of asPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:p.offset?String(p.offset):''}; g.totals.circle++; }
-  for(const p of manualPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:''}; g.totals.circle++; }   // manual came-as-planned
-  for(const p of noShowFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'cross',note:''}; g.totals.cross++;} }
-  for(const a of unplanned){  const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
-  for(const a of manualUnplanned){ const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
+  for(const p of dAsPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:p.offset?String(p.offset):''}; g.totals.circle++; }
+  for(const p of dManualPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:''}; g.totals.circle++; }   // manual came-as-planned
+  for(const p of dNoShowFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'cross',note:''}; g.totals.cross++;} }
+  for(const a of dUnplanned){  const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
+  for(const a of dManualUnplanned){ const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
   // flag manual marker on every manual cell (visual ◆)
-  for(const k of manualAll){ const pl=k.split('|')[0], d=k.split('|')[1]; const g=ensure(pl);
+  for(const k of dManualAll){ const pl=k.split('|')[0], d=k.split('|')[1]; const g=ensure(pl);
     if(g.byDate[d]) g.byDate[d].man=true; else g.byDate[d]={sym:null,note:'',man:true}; }
 
   // chart badge: mark the merged actual's arrival cell with its day offset
