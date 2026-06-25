@@ -10292,7 +10292,11 @@ function computePerf(){
     const isPlanned = p => planPlates.has(p) && (fleetAll.size? fleetAll.has(p) : true);  // cap "as planned" to fleet roster
     const mFrom=perfRange.from?perfRange.from.slice(0,7):null, mTo=perfRange.to?perfRange.to.slice(0,7):null;
     const inMon=m=>{ if(!m) return false; if(mFrom && m<mFrom) return false; if(mTo && m>mTo) return false; return true; };
-    const wl=Object.values(ACS.weigh||{}).filter(w=>inMon(w.month));
+    // Month-level effective-range bound: drop a truck's weighbridge month only if it was
+    // inactive that whole month (effFrom after it, or effTo before it). A mid-month
+    // deactivation keeps the month — monthly weighbridge totals can't be split finer.
+    const inEffMon=(pl,m)=>{ const me=(ACS.fleetMeta||{})[pl]||{}; if(me.effFrom && m<me.effFrom.slice(0,7)) return false; if(me.effTo && m>me.effTo.slice(0,7)) return false; return true; };
+    const wl=Object.values(ACS.weigh||{}).filter(w=>inMon(w.month) && inEffMon(w.plate,w.month));
     const mk=()=>({trucks:new Set(),loads:0,dwellSum:0,dwellN:0,dwell:[]});
     const co={planned:mk(),off:mk()};
     let totLoads=0;
