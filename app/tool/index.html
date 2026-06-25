@@ -2405,6 +2405,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <button data-scope="all" class="active">All</button>
           <button data-scope="in">In fleet</button>
           <button data-scope="out">Not in fleet</button>
+          <button data-scope="deact">Deactivated</button>
         </div>
       </div>
       <div class="fb-item">
@@ -2832,7 +2833,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <li><b>Date range</b> — choose the days.</li>
           <li><b>Trucks / Anchors</b> — choose which trucks or zones.</li>
           <li><b>Active range only</b> — hide trucks that were not active in those days (a truck with no end date counts as active until today).</li>
-          <li><b>Fleet scope</b> — All / In fleet / Not in fleet.</li>
+          <li><b>Fleet scope</b> — All / In fleet / Not in fleet / Deactivated. <b>Deactivated</b> shows only deactivated trucks (including those auto-deactivated once their Effective To date passes), ignoring the date-range filter.</li>
           <li><b>Reset filters</b> — put everything back.</li>
         </ul>
       </div>
@@ -4415,10 +4416,17 @@ function getStatus(plate) {
   const r = STATE.fleet[normPlate(plate)];
   return r ? r.status : 'online';
 }
+// Auto-deactivation: a truck whose Effective To date has passed (relative to today)
+// is treated as deactivated automatically. Stored status is left untouched, so
+// extending the Effective To date reactivates it.
+function _todayISO(){ const d=new Date(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return d.getFullYear()+'-'+m+'-'+day; }
+function effExpired(plate){ const m=STATE.fleet[normPlate(plate)]; if(!m||!m.effTo) return false; return m.effTo < _todayISO(); }
+// Effective (displayed) status = stored status, overridden to 'deactivated' once expired.
+function effectiveStatus(plate){ return effExpired(plate) ? 'deactivated' : getStatus(plate); }
 // "broken" semantics for the timeline grouping = breakdown status
-function isBroken(plate) { return getStatus(plate) === 'breakdown'; }
-// Deactivated trucks are hidden across every tab (visits, sequence, timeline, status)
-function isDeactivated(plate) { return getStatus(plate) === 'deactivated'; }
+function isBroken(plate) { return effectiveStatus(plate) === 'breakdown'; }
+// Deactivated (manual OR auto-expired) trucks are hidden from normal scopes; shown only under the Deactivated filter.
+function isDeactivated(plate) { return effectiveStatus(plate) === 'deactivated'; }
 
 function setTruckStatus(plate, status) {
   const p = normPlate(plate);
@@ -4562,7 +4570,7 @@ function renderFleetUI() {
   if (!body || !sumEl) return;
   const plates = allFleetPlates();
   const counts = { online: 0, maintenance: 0, breakdown: 0, deactivated: 0 };
-  plates.forEach(p => { counts[getStatus(p)]++; });
+  plates.forEach(p => { counts[effectiveStatus(p)]++; });
   sumEl.innerHTML = `${plates.length} trucks · `
     + `<span class="pill pill-online">${counts.online} Online</span> `
     + `<span class="pill pill-maint">${counts.maintenance} Maintenance</span> `
@@ -4574,7 +4582,7 @@ function renderFleetUI() {
     const r = STATE.fleet[p] || { status: 'online', added: null };
     const ts = tripStats(p);
     return {
-      plate: p, status: getStatus(p),
+      plate: p, status: effectiveStatus(p),
       added: r.added || null,
       phone: r.phone || '', gps: r.gps || '',
       effFrom: r.effFrom || '', effTo: r.effTo || '',
@@ -6123,13 +6131,16 @@ function isInFleet(plate) {
 }
 function fleetScopeAllows(plate) {
   const s = (STATE.filters && STATE.filters.fleetScope) || 'in';
+  const deact = isDeactivated(plate);
+  if (s === 'deact') return deact;        // Deactivated filter: ONLY deactivated (manual + auto-expired)
+  if (deact) return false;                // otherwise deactivated stay hidden from All/In/Out
   if (s === 'all') return true;
   const inF = isInFleet(plate);
   return s === 'in' ? inF : !inF;
 }
 // Keep every fleet-scope segmented control in sync + re-render affected views.
 function setFleetScope(scope) {
-  if (!['all', 'in', 'out'].includes(scope)) scope = 'all';
+  if (!['all', 'in', 'out', 'deact'].includes(scope)) scope = 'all';
   STATE.filters.fleetScope = scope;
   syncFleetScopeControls();
   renderTable();
@@ -6151,7 +6162,6 @@ function buildVisits(pings, anchors) {
   if (!pings || !pings.length || !anchors || !anchors.length) return out;
   const byPlate = new Map();
   pings.forEach(p => {
-    if (isDeactivated(p.plate)) return;   // hidden from all tabs
     if (!byPlate.has(p.plate)) byPlate.set(p.plate, []);
     byPlate.get(p.plate).push(p);
   });
@@ -7919,7 +7929,7 @@ function buildTimelineRows() {
 
   for (const [plate, visits] of byPlate) {
     if (!fleetScopeAllows(plate)) continue;
-    if (f.activeRangeOnly && !fleetActiveInWindow(plate, +globalMin, +globalMax)) continue;
+    if (f.activeRangeOnly && f.fleetScope !== 'deact' && !fleetActiveInWindow(plate, +globalMin, +globalMax)) continue;
     if (f.trucks.size > 0 && !f.trucks.has(plate)) continue;
     if (filteredPlates && !filteredPlates.has(plate)) continue;
     visits.sort((a, b) => a.enter - b.enter);
@@ -9031,7 +9041,6 @@ function buildStatusRows() {
   const rows = [];
   const plates = allFleetPlates();
   for (const plate of plates) {
-    if (isDeactivated(plate)) continue;   // hidden from all tabs
     const lp = lastPing(plate);
     // Determine haul direction from most recent cycle for this plate
     const seqs = (STATE.sequences || []).filter(c => normPlate(c.plate) === normPlate(plate));
