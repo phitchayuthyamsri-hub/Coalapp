@@ -1631,6 +1631,8 @@ input[type="date"] { width: 100%; }
 #dinPvaTable tr.ch-inc td { background:rgba(248,113,113,.06); }
 #dinPvaTable .chincb { margin-left:6px; font-size:11px; }
 #dinPvaTable .mantag { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--accent); margin-left:4px; }
+#dinPvaTable .wbsrc { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--muted); opacity:.75; margin-left:3px; vertical-align:super; }
+#dinPvaTable td.wbfill { font-style:italic; }
 #dinPvaTable .chd { color:var(--muted); margin-right:6px; }
 #dinCtxPop { position: fixed; z-index: 9999; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.5); padding: 10px; min-width: 210px; }
 #dinCtxPop label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 4px; }
@@ -5205,10 +5207,46 @@ function _pvaMatchPlanKey(c) {
 }
 // per-location plan/actual accessors (actual honors manual override per stage)
 function _pvaPlanArr(pl, st) { const v = pl[st.plan]; return v ? new Date(v) : null; }
-function _pvaActArr(key, st, act) { const m = STATE.din.manual[key + '|' + st.key]; if (m) return new Date(m); return act ? (st.act(act) || null) : null; }
+// PvA weighbridge fallback: when GPS has no Mine-load time, fill from the in-session
+// Load_actual records (STATE.loadActual). _pvaWBIdx is rebuilt once per render
+// (plate -> load times) so each lookup is cheap, not a full scan. No persisted data.
+let _pvaWBIdx = null;
+function _pvaBuildWBIdx() {
+  _pvaWBIdx = new Map();
+  for (const r of (STATE.loadActual || [])) {
+    if (!r || !r.key || !r.loadIn) continue;
+    const t = new Date(r.loadIn); if (isNaN(t.getTime())) continue;
+    const a = _pvaWBIdx.get(r.key) || []; a.push(t); _pvaWBIdx.set(r.key, a);
+  }
+}
+function _pvaWeighMine(plan) {
+  if (!_pvaWBIdx || !plan) return null;
+  const key = normPlateStrict(plan.plate); if (!key) return null;
+  const arr = _pvaWBIdx.get(key); if (!arr || !arr.length) return null;
+  const planLoad = plan.loadStart ? new Date(plan.loadStart) : new Date(plan.date + 'T00:00:00');
+  if (isNaN(planLoad.getTime())) return null;
+  let best = null, bestScore = Infinity;
+  for (const t of arr) {
+    const gap = t - planLoad;
+    if (gap < -PVA_EARLY_GRACE_MS) continue;   // weighed before the plan -> not this plan
+    if (gap > PVA_MATCH_WINDOW_MS) continue;
+    const score = Math.abs(gap);
+    if (score < bestScore) { bestScore = score; best = t; }
+  }
+  return best;
+}
+// actual time for a stage: manual override > GPS cycle > (Mine only) weighbridge > blank
+function _pvaActArr(key, st, act, plan) {
+  const m = STATE.din.manual[key + '|' + st.key]; if (m) return new Date(m);
+  const gps = act ? (st.act(act) || null) : null;
+  if (gps) return gps;
+  if (st.key === 'mine' && plan) return _pvaWeighMine(plan);
+  return null;
+}
 
 function renderDinPVA() {
   const tbl = document.getElementById('dinPvaTable'); if (!tbl) return;
+  _pvaBuildWBIdx();   // weighbridge load-time index for this render (in-session only)
   const plans = Object.values(STATE.din.plan || {});
   const seqs = (STATE.sequences || []).filter(c => c.plate);
   const actByPlan = {};
@@ -5236,7 +5274,7 @@ function renderDinPVA() {
   let useRows = rows.filter(r => pvaYearSel.has(r.d.slice(0, 4)) && pvaMonthSel.has(r.d.slice(0, 7)) && pvaDateSel.has(r.d) && pvaCompSel.has(isComplete(r) ? 'complete' : 'incomplete') && (!_pq || r.plate.toUpperCase().includes(_pq) || _dinNorm(r.plate).includes(_dinNorm(_pq))));
   // precompute running totals (for sorting + display)
   for (const r of useRows) {
-    const aMine = _pvaActArr(r.key, PVA_STAGES[0], r.act), aPort = _pvaActArr(r.key, PVA_STAGES[2], r.act), aRet = _pvaActArr(r.key, PVA_STAGES[4], r.act);
+    const aMine = _pvaActArr(r.key, PVA_STAGES[0], r.act, r.plan), aPort = _pvaActArr(r.key, PVA_STAGES[2], r.act), aRet = _pvaActArr(r.key, PVA_STAGES[4], r.act);
     r._t1 = _pvaMinDiff(aMine, aPort); r._t2 = _pvaMinDiff(aPort, aRet); r._t3 = _pvaMinDiff(aMine, aRet);
   }
   const pvaVal = (r, k) => { if (k === 'date' || k === 'dt') return r.d + '|' + r.plate; if (k === 'truck') return r.plate + '|' + r.d; if (k === 't1') return r._t1; if (k === 't2') return r._t2; if (k === 't3') return r._t3; return r.d; };
@@ -5269,11 +5307,13 @@ function renderDinPVA() {
       const st = PVA_STAGES[si];
       const pv = _pvaPlanArr(r.plan, st);
       const mIso = STATE.din.manual[r.key + '|' + st.key]; if (mIso) manualSeen = true;
-      const av = _pvaActArr(r.key, st, r.act);
+      const av = _pvaActArr(r.key, st, r.act, r.plan);
+      const _gpsAv = r.act ? (st.act(r.act) || null) : null;
+      const _fromWB = !!(av && !mIso && !_gpsAv && st.key === 'mine');
       tds += `<td class="cht plan${pv ? '' : ' blank'}">${_pvaFmtDT(pv)}</td>`;
-      tds += `<td class="cht act pva-cell${av ? '' : ' blank'}${mIso ? ' manual' : ''}" data-pva="cell" data-key="${r.key}" data-stage="${st.key}" data-plan="${st.plan && r.plan[st.plan] || ''}">${_pvaFmtDT(av)}</td>`;
+      tds += `<td class="cht act pva-cell${av ? '' : ' blank'}${mIso ? ' manual' : ''}${_fromWB ? ' wbfill' : ''}" data-pva="cell" data-key="${r.key}" data-stage="${st.key}" data-plan="${st.plan && r.plan[st.plan] || ''}">${_pvaFmtDT(av)}${_fromWB ? '<sup class="wbsrc" title="from weighbridge">wb</sup>' : ''}</td>`;
     }
-    const aMine = _pvaActArr(r.key, PVA_STAGES[0], r.act), aPort = _pvaActArr(r.key, PVA_STAGES[2], r.act), aRet = _pvaActArr(r.key, PVA_STAGES[4], r.act);
+    const aMine = _pvaActArr(r.key, PVA_STAGES[0], r.act, r.plan), aPort = _pvaActArr(r.key, PVA_STAGES[2], r.act), aRet = _pvaActArr(r.key, PVA_STAGES[4], r.act);
     const t1 = _pvaMinDiff(aMine, aPort), t2 = _pvaMinDiff(aPort, aRet), t3 = _pvaMinDiff(aMine, aRet);
     tds += `<td class="cht tot${t1 != null ? '' : ' blank'}">${_pvaDur(t1)}</td><td class="cht tot${t2 != null ? '' : ' blank'}">${_pvaDur(t2)}</td><td class="cht tot full${t3 != null ? '' : ' blank'}">${_pvaDur(t3)}</td>`;
     const dd = `${_dinPad(+r.d.slice(8, 10))}/${_dinPad(+r.d.slice(5, 7))}/${r.d.slice(2, 4)}`;
