@@ -4848,10 +4848,15 @@ async function dinIngestWeigh(file) {
   const isoMin = d => `${d.getFullYear()}-${_dinPad(d.getMonth() + 1)}-${_dinPad(d.getDate())}T${_dinPad(d.getHours())}:${_dinPad(d.getMinutes())}`;
 
   const agg = {}; const rawByMonth = {}; let maxMonth = null, n = 0;  // rawByMonth feeds the Daily/Weekly report
+  // Also capture per-ticket Mine load-in times into the in-session loadActual store so the
+  // PvA weighbridge fallback works from this same upload (in-memory only; never persisted).
+  const _laMap = new Map();
+  for (const _e of (STATE.loadActual || [])) { if (_e && _e.key && _e.loadIn) { const _t = new Date(_e.loadIn); if (!isNaN(_t.getTime())) _laMap.set(_e.key + '|' + _t.getTime(), _e); } }
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i] || []; const p = normW(r[col.plate]); if (!p) continue;
     const Din = toDate(r[col.din]); const tin = col.tin >= 0 ? toMin(r[col.tin]) : null;
     let DinT = Din ? new Date(Din) : null; if (DinT && tin != null) DinT.setHours(Math.floor(tin / 60), tin % 60, 0, 0);
+    { const _sk = normPlateStrict(r[col.plate]); if (_sk && DinT && !isNaN(DinT.getTime())) { const _net = Number(String(r[col.net]).replace(/[^\d.\-]/g, '')) || null; _laMap.set(_sk + '|' + DinT.getTime(), { plate: String(r[col.plate] || '').trim(), key: _sk, loadIn: new Date(DinT), net: _net, ticket: '' }); } }
     const Do = toDate(r[col.dout]) || Din; if (!Do) continue;        // Date Out (col H) is the reference
     const to = col.tout >= 0 ? toMin(r[col.tout]) : null; const DoT = new Date(Do); if (to != null) DoT.setHours(Math.floor(to / 60), to % 60, 0, 0);
     let dwell = null; if (DinT && tin != null && to != null) { dwell = Math.round((DoT - DinT) / 6e4); if (dwell < 0 || dwell > 1440) dwell = null; }
@@ -4868,6 +4873,7 @@ async function dinIngestWeigh(file) {
     n++;
   }
   if (!n || !maxMonth) throw new Error('Weighbridge: no rows with a valid Date Out parsed');
+  STATE.loadActual = [..._laMap.values()];   // in-session per-ticket Mine load-in times (feeds the PvA blue weighbridge fallback)
 
   // Replace every month present in this upload; keep months not in the file untouched.
   const monthsInFile = new Set(Object.values(agg).map(g => g.month));
