@@ -5309,20 +5309,25 @@ function exportPvaExcel(){
       '', _pvaXName(aRet),
       hrs(_pvaMinDiff(aMine,aPort)), hrs(_pvaMinDiff(aPort,aRet)), hrs(_pvaMinDiff(aMine,aRet)), 'Without plan' ]);
   }
+  const _allD=rows.map(r=>r.d).concat(unplanned.map(c=>c.cycleDate?_dinDKey(c.cycleDate):null)).filter(Boolean).sort();
+  const _dFrom=_allD[0]||'-', _dTo=_allD[_allD.length-1]||'-';
   const sum=[
-    ['Performance summary - vehicles arriving by location (whole dataset)'],
+    ['Performance summary - vehicles arriving by location'],
+    ['Date range', _dFrom+' to '+_dTo],
+    ['Generated', _pvaXName(new Date())],
     [],
-    ['Location','As planned','Not as planned','Without plan'],
-    ['Mine (loading)', mineAsP, mineNoAct, mineNoPlan],
-    ['Port (unloading)', portAsP, portNoAct, portNoPlan],
+    ['Location','As planned','Not as planned','Without plan','Total plan'],
+    ['Mine (loading)', mineAsP, mineNoAct, mineNoPlan, mineAsP+mineNoAct],
+    ['Port (unloading)', portAsP, portNoAct, portNoPlan, portAsP+portNoAct],
     [],
-    ['Plan cycles', rows.length],
+    ['Plan cycles (total)', rows.length],
     ['Unplanned cycles', unplanned.length],
     [],
     ['Definitions'],
     ['As planned','Plan time exists and an actual time was recorded'],
     ['Not as planned','Plan time exists but no actual time was recorded'],
-    ['Without plan','Actual recorded with no matching plan (unplanned cycle)']
+    ['Without plan','Actual recorded with no matching plan (unplanned cycle)'],
+    ['Total plan','Vehicles planned at that location = as planned + not as planned']
   ];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'Summary');
