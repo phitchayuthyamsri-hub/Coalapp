@@ -9944,7 +9944,7 @@ function renderPerf(p){
           + single('Trips / truck', k.tripPerTruck!=null?k.tripPerTruck.toFixed(1):'\u2014','cycles per active truck'))
       + single('Plan achievement', (k.planPct!=null?k.planPct:0)+'%','came as planned \u00f7 plan')
       + cmp('Time / trip','plan: 48h full-cycle target \u00b7 actual: Mine \u2192 back at mine', fmtDur(2880), k.timePerTrip!=null?fmtDur(k.timePerTrip):'\u2014', k.timePerTrip, 2880, 'Plan', 'Actual', true)
-      + single('GPS error', (k.gpsPct!=null?k.gpsPct:0)+'%','manual uploads \u00f7 plan');
+      + single('GPS error', (k.gpsPct!=null?k.gpsPct:0)+'%','manual + weighbridge \u00f7 plan');
   }
   const oel=document.getElementById('perfOntime');
   if(oel){
@@ -10014,7 +10014,7 @@ function renderPerf(p){
       <div class="bar2"><i style="width:${p.pct}%;background:${pctColor}"></i></div></div>
     <div class="card unplan"><div class="k">Came &mdash; not in plan</div><div class="v">${p.unplanned}</div><div class="pct" style="color:var(--muted)">unplanned cycles</div></div>
     <div class="card came"><div class="k">Did come (total)</div><div class="v">${p.came}</div><div class="pct" style="color:var(--muted)">as planned + unplanned</div></div>
-    <div class="card gpserr"><div class="k">GPS error</div><div class="v">${p.gpsError}</div><div class="pct" style="color:var(--muted)">manual time uploads</div></div>
+    <div class="card gpserr"><div class="k">GPS error</div><div class="v">${p.gpsError}</div><div class="pct" style="color:var(--muted)">manual + weighbridge</div></div>
     <div class="card wberr"><div class="k">GPS error &middot; weighbridge</div><div class="v">${p.wbError||0}</div><div class="pct" style="color:var(--muted)">Mine time from weighbridge</div></div>`;
 
   renderPerfTiming(p);
@@ -10228,10 +10228,10 @@ function computePerf(){
   const actualKeys=new Set(actUniq.map(a=>a.key));
   const noShowKeySet=new Set(noShow.map(p=>p.key));
   const manualAll=Object.keys(ACS.manual).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
-  const gpsError=manualAll.length;                       // any trip with a manual upload
   const wbAll=Object.keys(ACS.wb||{}).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
   const wbError=wbAll.length;                             // cycles whose Mine time came from the weighbridge (GPS error)
   const wbByTruck={}; for(const _k of wbAll){ const _pl=_k.split('|')[0], _d=_k.split('|')[1]; (wbByTruck[_pl]=wbByTruck[_pl]||[]).push(_d); }
+  const gpsError=new Set([...manualAll, ...wbAll]).size;  // manual OR weighbridge Mine time = a GPS error (once per cycle)
   const manualSet=new Set(manualAll);
   const manualPlanned=[], manualUnplanned=[];            // reclassified arrivals (no GPS actual that day)
   for(const k of manualAll){ if(actualKeys.has(k)) continue;   // GPS already captured → no reclassify
