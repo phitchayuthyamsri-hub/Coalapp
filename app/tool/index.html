@@ -1633,6 +1633,11 @@ input[type="date"] { width: 100%; }
 #dinPvaTable .mantag { font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--accent); margin-left:4px; }
 #dinPvaTable .wbsrc { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:#2e9bff; opacity:.95; margin-left:3px; vertical-align:super; }
 #dinPvaTable td.cht.act.wbfill { color:#2e9bff; font-weight:700; }
+.wbflag { display:inline-block; margin-left:6px; font-size:9px; font-weight:700; color:#2e9bff; border:1px solid #2e9bff; border-radius:999px; padding:0 5px; vertical-align:1px; letter-spacing:.3px; cursor:help; }
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.wbm { color:#2e9bff; }
+:is([data-page-panel="perf"],[data-page-panel="daily"]) tr.wbrow td.splate { box-shadow: inset 3px 0 0 #2e9bff; }
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.wberr { border-top:3px solid #2e9bff; }
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.wberr .v { color:#2e9bff; }
 #dinPvaTable .chd { color:var(--muted); margin-right:6px; }
 #dinCtxPop { position: fixed; z-index: 9999; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.5); padding: 10px; min-width: 210px; }
 #dinCtxPop label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 4px; }
@@ -2629,6 +2634,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <button id="pmMonthBtn" class="pmbtn">Month</button>
         <select id="perfMonthSel" class="pmsel"></select>
         <span class="rngnote" id="perfRangeNote"></span>
+        <label class="toggle" style="margin-left:14px"><input type="checkbox" id="perfWbOnly"> &#9888; WB-error only</label>
         <button id="perfShotBtn" class="pmbtn" style="margin-left:auto;background:#2dd4bf;color:#06231f;font-weight:700">&#128247; Screenshot</button>
       </div>
       <div class="perf-section">
@@ -9757,6 +9763,8 @@ function acpBuild(){
   for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0)}; }
   ACS.manual={};
   for(var _mk in (din.manual||{})){ var _a=_mk.split("|"); if(_a.length>=2 && hasLatin(normPlate(_a[0]))) ACS.manual[normPlate(_a[0])+"|"+_a[1]]=true; }  // any manual stage entry marks that cycle as a GPS error (counted once)
+  ACS.wb={};
+  for(var _wk in (din.wbfill||{})){ var _wa=_wk.split("|"); if(_wa.length>=2 && hasLatin(normPlate(_wa[0]))) ACS.wb[normPlate(_wa[0])+"|"+_wa[1]]=true; }  // weighbridge-filled Mine time = GPS error (once per cycle)
 }
 
 const LOCS=['MINE','BORDER','PORT'];
@@ -9909,6 +9917,7 @@ function renderBackhaul(p){
       ${card('detour','Dakrong Passage','via Detour In/Out (P/Q)','detour')}
     </div></div>`;
 }
+let perfWbOnly=false;   // Performance: show only trucks flagged GPS-error (weighbridge)
 function renderPerf(p){
   const cards=document.getElementById('cards');
   const pctColor=p.pct>=80?'#34d399':p.pct>=50?'#e0a93f':'#f87171';
@@ -10005,7 +10014,8 @@ function renderPerf(p){
       <div class="bar2"><i style="width:${p.pct}%;background:${pctColor}"></i></div></div>
     <div class="card unplan"><div class="k">Came &mdash; not in plan</div><div class="v">${p.unplanned}</div><div class="pct" style="color:var(--muted)">unplanned cycles</div></div>
     <div class="card came"><div class="k">Did come (total)</div><div class="v">${p.came}</div><div class="pct" style="color:var(--muted)">as planned + unplanned</div></div>
-    <div class="card gpserr"><div class="k">GPS error</div><div class="v">${p.gpsError}</div><div class="pct" style="color:var(--muted)">manual time uploads</div></div>`;
+    <div class="card gpserr"><div class="k">GPS error</div><div class="v">${p.gpsError}</div><div class="pct" style="color:var(--muted)">manual time uploads</div></div>
+    <div class="card wberr"><div class="k">GPS error &middot; weighbridge</div><div class="v">${p.wbError||0}</div><div class="pct" style="color:var(--muted)">Mine time from weighbridge</div></div>`;
 
   renderPerfTiming(p);
   renderBackhaul(p);
@@ -10050,6 +10060,7 @@ function renderPerf(p){
   sh+=`</tr></thead>`;
   // sort fleet rows
   let fleetRows=ACS.fleet.slice();
+  if(perfWbOnly){ fleetRows=fleetRows.filter(pl=>p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length); }
   if(dailySort.col==='__plate'){ fleetRows.sort((a,b)=>a<b?-1:a>b?1:0); if(dailySort.dir<0) fleetRows.reverse(); }
   else if(dailySort.col){ const c=dailySort.col;
     const act=pl=>(p.grid[pl]&&p.grid[pl].byDate[c])?1:0;
@@ -10057,7 +10068,9 @@ function renderPerf(p){
   let sb='<tbody>';
   for(const pl of fleetRows){
     const g=p.grid[pl]||{totals:{circle:0,cross:0,square:0},byDate:{}};
-    sb+=`<tr><td class="splate">${pl}</td>
+    const _wbd=(p.wbByTruck&&p.wbByTruck[pl])||null;
+    const _wbBadge=(_wbd&&_wbd.length)?`<span class="wbflag" title="GPS error \u2014 Mine from weighbridge: ${_wbd.slice().sort().join(', ')}">&#9888; WB</span>`:'';
+    sb+=`<tr${(_wbd&&_wbd.length)?' class="wbrow"':''}><td class="splate">${pl}${_wbBadge}</td>
         <td class="sum sym circle">${g.totals.circle||''}</td>
         <td class="sum sym cross">${g.totals.cross||''}</td>
         <td class="sum sym square">${g.totals.square||''}</td>`;
@@ -10065,12 +10078,13 @@ function renderPerf(p){
       if(!c){ sb+=`<td></td>`; continue; }
       const symHTML=c.sym?`<span class="sym ${c.sym}">${SYM[c.sym]}</span>`:'';
       const manHTML=c.man?`<span class="sym manual" title="manual loading time — not scored">◆</span>`:'';
+      const wbHTML=c.wb?`<span class="sym wbm" title="Mine time from weighbridge \u2014 GPS error">&#9888;</span>`:'';
       const noteHTML=c.note?`<span class="symnote">${c.note}</span>`:'';
-      sb+=`<td>${symHTML}${manHTML}${noteHTML}</td>`; }
+      sb+=`<td>${symHTML}${manHTML}${wbHTML}${noteHTML}</td>`; }
     sb+=`</tr>`;
   }
   sb+='</tbody>';
-  symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="miss">✕ did not come</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b></span></div>
+  symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="miss">✕ did not come</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
     <div class="scroller" style="max-height:none"><table class="symtable">${sh}${sb}</table></div>`;
 }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -10215,6 +10229,9 @@ function computePerf(){
   const noShowKeySet=new Set(noShow.map(p=>p.key));
   const manualAll=Object.keys(ACS.manual).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
   const gpsError=manualAll.length;                       // any trip with a manual upload
+  const wbAll=Object.keys(ACS.wb||{}).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
+  const wbError=wbAll.length;                             // cycles whose Mine time came from the weighbridge (GPS error)
+  const wbByTruck={}; for(const _k of wbAll){ const _pl=_k.split('|')[0], _d=_k.split('|')[1]; (wbByTruck[_pl]=wbByTruck[_pl]||[]).push(_d); }
   const manualSet=new Set(manualAll);
   const manualPlanned=[], manualUnplanned=[];            // reclassified arrivals (no GPS actual that day)
   for(const k of manualAll){ if(actualKeys.has(k)) continue;   // GPS already captured → no reclassify
@@ -10235,6 +10252,7 @@ function computePerf(){
   const dUnplanned     =unplanned.filter(a=>_sc(a.plate));
   const dManualUnplanned=manualUnplanned.filter(a=>_sc(a.plate));
   const dManualAll     =manualAll.filter(k=>_sc(k.split('|')[0]));
+  const dWbAll         =wbAll.filter(k=>_sc(k.split('|')[0]));
 
   // dates union (plan dates + unmatched actual dates + manual dates), within perf range
   const dates=[...new Set([...dPlanUniq.map(p=>p.d), ...dUnplanned.map(a=>a.d), ...dManualAll.map(k=>k.split('|')[1])])].sort();
@@ -10265,6 +10283,8 @@ function computePerf(){
   // flag manual marker on every manual cell (visual ◆)
   for(const k of dManualAll){ const pl=k.split('|')[0], d=k.split('|')[1]; const g=ensure(pl);
     if(g.byDate[d]) g.byDate[d].man=true; else g.byDate[d]={sym:null,note:'',man:true}; }
+  for(const k of dWbAll){ const pl=k.split('|')[0], d=k.split('|')[1]; const g=ensure(pl);
+    if(g.byDate[d]) g.byDate[d].wb=true; else g.byDate[d]={sym:null,note:'',wb:true}; }
 
   // chart badge: mark the merged actual's arrival cell with its day offset
   const arrivalBadge={};
@@ -10383,7 +10403,7 @@ function computePerf(){
   kpi.weigh=weigh;
 
   return {
-    planTotal:planUniq.length, asPlanned:asPlannedCount, unplanned:unplannedCount, came:cameCount, gpsError, kpi, ontime, otRows,
+    planTotal:planUniq.length, asPlanned:asPlannedCount, unplanned:unplannedCount, came:cameCount, gpsError, wbError, wbByTruck, kpi, ontime, otRows,
     pct: planUniq.length? Math.round(asPlannedCount/planUniq.length*100):0,
     dates, sbd, grid, arrivalBadge, timing,
     counts:{planned:plannedActs.length, unplan:unplanned.length},
@@ -10420,6 +10440,7 @@ function applyPerfYesterday(){ perfMode='yesterday'; const d=new Date(); d.setDa
     var df=document.getElementById('dailyFrom'); if(df) df.addEventListener('change',function(e){ perfMode='range'; refreshPm(); setPerfRange(e.target.value, perfRange.to); });
     var dt=document.getElementById('dailyTo'); if(dt) dt.addEventListener('change',function(e){ perfMode='range'; refreshPm(); setPerfRange(perfRange.from, e.target.value); });
     var dc=document.getElementById('dailyRangeClear'); if(dc) dc.addEventListener('click',function(){ perfMode='range'; refreshPm(); setPerfRange(null,null); });
+    var wbo=document.getElementById('perfWbOnly'); if(wbo) wbo.addEventListener('change',function(e){ perfWbOnly=e.target.checked; render(); });
     var sg=document.getElementById('symGrid'); if(sg) sg.addEventListener('click',function(e){
       var th=e.target.closest('th.sortable'); if(!th) return; var col=th.dataset.col;
       if(dailySort.col===col) dailySort.dir=-dailySort.dir; else { dailySort.col=col; dailySort.dir=1; }
