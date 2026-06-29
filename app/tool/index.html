@@ -2706,6 +2706,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <div class="tab-bar" style="margin-bottom:10px">
         <button class="tab-btn active" data-pvatab="grid">Plan vs Actual</button>
         <button class="tab-btn" data-pvatab="unplanned">Unplanned <span id="dinPvaUnplannedCount"></span></button>
+        <button class="tab-btn" id="pvaExportBtn" title="Export all Plan-vs-Actual rows + summary to Excel (ignores the on-screen date filter)" style="margin-left:auto">&#11015;&#65039; Export Excel</button>
       </div>
       <div data-pvatab-panel="grid">
         <div class="help-text" id="dinPvaCount" style="margin-bottom:6px">Cross-references the Dispatch Plan against GPS-derived sequences. Right-click any actual cell to set a manual time.</div>
@@ -5166,6 +5167,7 @@ function setupDataInputUI() {
   wireChips('pvaComp', () => pvaCompSel, s => { pvaCompSel = s; }, () => -1, () => {});
   { const all = document.getElementById('pvaDateAll'); if (all) all.addEventListener('click', () => { pvaDateSel = null; pvaDateAnchor = -1; renderDinPVA(); }); }
   { const sb = document.getElementById('pvaSearch'); if (sb) sb.addEventListener('input', () => { pvaSearch = sb.value; renderDinPVA(); }); }
+  { const eb = document.getElementById('pvaExportBtn'); if (eb) eb.addEventListener('click', exportPvaExcel); }
 }
 
 // ---- PLAN vs ACTUAL (Pass 4) ----
@@ -5260,6 +5262,73 @@ function _pvaActArr(key, st, act, plan) {
     if (saved) { const d = new Date(saved); if (!isNaN(d.getTime())) return d; }
   }
   return null;
+}
+
+// ---- Excel export: raw Plan-vs-Actual timeline + performance summary (whole dataset) ----
+function _pvaXName(d){ if(!d||isNaN(d.getTime())) return ''; return _dinPad(d.getDate())+'/'+_dinPad(d.getMonth()+1)+'/'+d.getFullYear()+' '+_dinPad(d.getHours())+':'+_dinPad(d.getMinutes()); }
+function exportPvaExcel(){
+  if(typeof XLSX==='undefined'){ try{toast('Excel library not ready',true);}catch(e){} return; }
+  _pvaBuildWBIdx();
+  const plans=Object.values(STATE.din.plan||{});
+  const seqs=(STATE.sequences||[]).filter(c=>c.plate);
+  const actByPlan={};
+  seqs.forEach(c=>{ const k=_pvaMatchPlanKey(c); if(k)(actByPlan[k]=actByPlan[k]||[]).push(c); });
+  const rows=plans.map(pl=>({plate:pl.plate,d:pl.date,key:pl.plate+'|'+pl.date,plan:pl,act:(actByPlan[pl.plate+'|'+pl.date]||[])[0]||null}));
+  rows.sort((a,b)=> a.d<b.d?-1:a.d>b.d?1:(a.plate<b.plate?-1:a.plate>b.plate?1:0));
+  const hrs=m=>(m==null?'':Math.round(m/6)/10);
+  const pv=(r,si)=>_pvaPlanArr(r.plan,PVA_STAGES[si]);
+  const av=(r,si)=>_pvaActArr(r.key,PVA_STAGES[si],r.act,r.plan);
+  const mineSrc=r=>{ if(STATE.din.manual[r.key+'|mine']) return 'Manual'; const gps=r.act?(PVA_STAGES[0].act(r.act)||null):null; if(gps) return 'GPS'; if(_pvaWeighMine(r.plan)) return 'Weighbridge'; if(STATE.din.wbfill&&STATE.din.wbfill[r.key+'|mine']) return 'Weighbridge'; return ''; };
+  const header=['Date','Vehicle','Mine Plan','Mine Actual','Mine source','Border Plan','Border Actual','Port Plan','Port Actual','Port back Plan','Port back Actual','Mine return Plan','Mine return Actual','Mine to Port (h)','Port to Mine (h)','Full cycle (h)','Status'];
+  const aoa=[header];
+  let mineAsP=0,mineNoAct=0,portAsP=0,portNoAct=0;
+  for(const r of rows){
+    const aMine=av(r,0), aPort=av(r,2), aRet=av(r,4);
+    const pMine=pv(r,0), pPort=pv(r,2);
+    if(pMine){ if(aMine) mineAsP++; else mineNoAct++; }
+    if(pPort){ if(aPort) portAsP++; else portNoAct++; }
+    const status=aRet?'Completed':(aMine||aPort||av(r,1)||av(r,3))?'In progress':'No actual';
+    aoa.push([ r.d, r.plate,
+      _pvaXName(pMine), _pvaXName(aMine), mineSrc(r),
+      _pvaXName(pv(r,1)), _pvaXName(av(r,1)),
+      _pvaXName(pPort), _pvaXName(aPort),
+      _pvaXName(pv(r,3)), _pvaXName(av(r,3)),
+      _pvaXName(pv(r,4)), _pvaXName(aRet),
+      hrs(_pvaMinDiff(aMine,aPort)), hrs(_pvaMinDiff(aPort,aRet)), hrs(_pvaMinDiff(aMine,aRet)), status ]);
+  }
+  const unplanned=seqs.filter(c=>!_pvaMatchPlanKey(c));
+  let mineNoPlan=0, portNoPlan=0;
+  for(const c of unplanned){
+    const aMine=c.loadingIn||c.xpplIn||null, aPort=c.chanMayIn||null, aRet=c.xpplR||null;
+    if(aMine) mineNoPlan++; if(aPort) portNoPlan++;
+    aoa.push([ c.cycleDate?_dinDKey(c.cycleDate):'', c.plate,
+      '', _pvaXName(aMine), aMine?'GPS':'',
+      '', _pvaXName(c.lalayOutIn||null),
+      '', _pvaXName(aPort),
+      '', _pvaXName(c.lalayBackIn||null),
+      '', _pvaXName(aRet),
+      hrs(_pvaMinDiff(aMine,aPort)), hrs(_pvaMinDiff(aPort,aRet)), hrs(_pvaMinDiff(aMine,aRet)), 'Without plan' ]);
+  }
+  const sum=[
+    ['Performance summary - vehicles arriving by location (whole dataset)'],
+    [],
+    ['Location','As planned','Not as planned','Without plan'],
+    ['Mine (loading)', mineAsP, mineNoAct, mineNoPlan],
+    ['Port (unloading)', portAsP, portNoAct, portNoPlan],
+    [],
+    ['Plan cycles', rows.length],
+    ['Unplanned cycles', unplanned.length],
+    [],
+    ['Definitions'],
+    ['As planned','Plan time exists and an actual time was recorded'],
+    ['Not as planned','Plan time exists but no actual time was recorded'],
+    ['Without plan','Actual recorded with no matching plan (unplanned cycle)']
+  ];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'Summary');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Timeline');
+  XLSX.writeFile(wb, 'LA_PlanVsActual_'+tsForFile()+'.xlsx');
+  try{ toast('Exported '+(aoa.length-1)+' rows'); }catch(e){}
 }
 
 function renderDinPVA() {
