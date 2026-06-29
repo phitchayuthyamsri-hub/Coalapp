@@ -4700,11 +4700,12 @@ async function withProgress(title, fn) {
 const DIN_LS_KEY = 'actualGpsDataInput_v1';
 STATE.din = STATE.din || { plan: {}, weigh: {}, status: null, statusFrom: '', statusTo: '' };
 
-function dinSave() { try { const { plan, status, statusFrom, statusTo, manual, assign } = STATE.din; localStorage.setItem(DIN_LS_KEY, JSON.stringify({ plan, status, statusFrom, statusTo, manual, assign })); } catch (e) {} }
+function dinSave() { try { const { plan, status, statusFrom, statusTo, manual, assign, wbfill } = STATE.din; localStorage.setItem(DIN_LS_KEY, JSON.stringify({ plan, status, statusFrom, statusTo, manual, assign, wbfill })); } catch (e) {} }
 function dinLoad() {
-  try { const raw = localStorage.getItem(DIN_LS_KEY); if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') STATE.din = Object.assign({ plan: {}, weigh: {}, status: null, statusFrom: '', statusTo: '', manual: {}, assign: {} }, d); } } catch (e) {}
+  try { const raw = localStorage.getItem(DIN_LS_KEY); if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') STATE.din = Object.assign({ plan: {}, weigh: {}, status: null, statusFrom: '', statusTo: '', manual: {}, assign: {}, wbfill: {} }, d); } } catch (e) {}
   STATE.din.weigh = _weighSeed();   // baked history + saved monthly updates (persisted)
   STATE.din.manual = STATE.din.manual || {}; STATE.din.assign = STATE.din.assign || {};
+  STATE.din.wbfill = STATE.din.wbfill || {};   // plate|date|stage -> ISO (weighbridge Mine time kept after it resolved into a PvA row; small, persisted)
 }
 
 // Weighbridge is now persisted as a per-plate×month aggregate (the only form the tab needs).
@@ -5240,13 +5241,19 @@ function _pvaActArr(key, st, act, plan) {
   const m = STATE.din.manual[key + '|' + st.key]; if (m) return new Date(m);
   const gps = act ? (st.act(act) || null) : null;
   if (gps) return gps;
-  if (st.key === 'mine' && plan) return _pvaWeighMine(plan);
+  if (st.key === 'mine') {
+    const live = plan ? _pvaWeighMine(plan) : null;
+    if (live) return live;
+    const saved = STATE.din.wbfill && STATE.din.wbfill[key + '|' + st.key];
+    if (saved) { const d = new Date(saved); if (!isNaN(d.getTime())) return d; }
+  }
   return null;
 }
 
 function renderDinPVA() {
   const tbl = document.getElementById('dinPvaTable'); if (!tbl) return;
   _pvaBuildWBIdx();   // weighbridge load-time index for this render (in-session only)
+  let _wbDirty = false;   // a live weighbridge fill needs persisting into din.wbfill
   const plans = Object.values(STATE.din.plan || {});
   const seqs = (STATE.sequences || []).filter(c => c.plate);
   const actByPlan = {};
@@ -5310,6 +5317,7 @@ function renderDinPVA() {
       const av = _pvaActArr(r.key, st, r.act, r.plan);
       const _gpsAv = r.act ? (st.act(r.act) || null) : null;
       const _fromWB = !!(av && !mIso && !_gpsAv && st.key === 'mine');
+      if (_fromWB) { const _lv = _pvaWeighMine(r.plan); if (_lv) { const _iso = _lv.toISOString(), _wk = r.key + '|' + st.key; if (STATE.din.wbfill[_wk] !== _iso) { STATE.din.wbfill[_wk] = _iso; _wbDirty = true; } } }
       tds += `<td class="cht plan${pv ? '' : ' blank'}">${_pvaFmtDT(pv)}</td>`;
       tds += `<td class="cht act pva-cell${av ? '' : ' blank'}${mIso ? ' manual' : ''}${_fromWB ? ' wbfill' : ''}" data-pva="cell" data-key="${r.key}" data-stage="${st.key}" data-plan="${st.plan && r.plan[st.plan] || ''}">${_pvaFmtDT(av)}${_fromWB ? '<sup class="wbsrc" title="from weighbridge">wb</sup>' : ''}</td>`;
     }
@@ -5319,6 +5327,7 @@ function renderDinPVA() {
     const dd = `${_dinPad(+r.d.slice(8, 10))}/${_dinPad(+r.d.slice(5, 7))}/${r.d.slice(2, 4)}`;
     tbody += `<tr class="chrow${inc}" data-plate="${escapeHtml(r.plate)}" data-date="${r.d}"><td><span class="chd">${dd}</span></td><td>${escapeHtml(r.plate)}${manualSeen ? '<span class="mantag">manual</span>' : ''}${inc ? '<span class="chincb">⏳</span>' : ''}</td>${tds}</tr>`;
   }
+  if (_wbDirty) dinSave();
   tbody += '</tbody>';
   tbl.querySelector('thead').innerHTML = '';   // we set full table at once
   tbl.innerHTML = thead + tbody;
