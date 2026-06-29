@@ -4843,7 +4843,7 @@ async function dinIngestWeigh(file) {
   }
   if (h < 0) throw new Error('Weighbridge: need a sheet with Truck No / Net Weight / Date Out');
   const toMin = v => { if (v == null || v === '') return null; if (v instanceof Date) return v.getHours() * 60 + v.getMinutes(); if (typeof v === 'number') { const t = (v % 1) * 24, hh = Math.floor(t); return hh * 60 + Math.round((t - hh) * 60); } const m = String(v).match(/(\d{1,2}):(\d{2})/); return m ? (+m[1] * 60 + +m[2]) : null; };
-  const toDate = v => { if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate()); const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[1] - 1, +m[2]); } return null; };
+  const toDate = v => { if (v instanceof Date) { if (isNaN(v)) return null; const _d = new Date(v.getTime() + 12 * 36e5); return new Date(_d.getFullYear(), _d.getMonth(), _d.getDate()); } const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[1] - 1, +m[2]); } return null; };
   const normW = s => String(s || '').toUpperCase().replace(/[\s.\-_/\\]/g, '');
   const isoMin = d => `${d.getFullYear()}-${_dinPad(d.getMonth() + 1)}-${_dinPad(d.getDate())}T${_dinPad(d.getHours())}:${_dinPad(d.getMinutes())}`;
 
