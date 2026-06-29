@@ -5172,18 +5172,36 @@ function _pvaMinDiff(a, b) { return (a && b) ? Math.round((b - a) / 6e4) : null;
 // slicer state
 let pvaYearSel = null, pvaMonthSel = null, pvaDateSel = null, pvaCompSel = null, pvaDateAnchor = -1, pvaSearch = '';
 const _PVA_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-// match an actual sequence cycle to a plan cycle: same plate, closest cycleDate within 3 days, honoring manual assignment
+// Match an actual sequence cycle to a plan cycle (same plate), honoring a manual
+// assignment first. An actual only FULFILS a plan if its real Mine-load time is
+// at/after the plan's scheduled load: a truck that loaded BEFORE the plan was
+// loading without it, so it belongs to an earlier plan or to Unplanned. Among the
+// qualifying plans, pick the one whose load time is closest to the actual load.
+const PVA_EARLY_GRACE_MS = 3 * 36e5;    // tolerate a load up to this much BEFORE plan (early loading); set 0 for strict
+const PVA_MATCH_WINDOW_MS = 3 * 864e5;  // ignore plans whose load is more than this before the actual
 function _pvaMatchPlanKey(c) {
   const ak = _pvaActKey(c);
-  if (STATE.din.assign[ak]) return STATE.din.assign[ak];
+  if (STATE.din.assign[ak]) return STATE.din.assign[ak];   // manual override wins
   const p = _dinNorm(c.plate); if (!c.cycleDate) return null;
-  let best = null, bestDiff = Infinity;
+  const aRaw = c.loadingIn || c.xpplIn || null;            // actual Mine-load time
+  const aLoad = aRaw ? new Date(aRaw) : null;
+  let best = null, bestScore = Infinity;
   for (const k in STATE.din.plan) {
     const pl = STATE.din.plan[k]; if (_dinNorm(pl.plate) !== p) continue;
-    const diff = Math.abs(new Date(pl.date + 'T00:00:00') - new Date(_dinDKey(c.cycleDate) + 'T00:00:00'));
-    if (diff < bestDiff) { bestDiff = diff; best = k; }
+    const planLoad = pl.loadStart ? new Date(pl.loadStart) : new Date(pl.date + 'T00:00:00');
+    if (isNaN(planLoad.getTime())) continue;
+    if (aLoad && !isNaN(aLoad.getTime())) {
+      const gap = aLoad - planLoad;                         // >0 = loaded after the plan
+      if (gap < -PVA_EARLY_GRACE_MS) continue;              // loaded before plan -> not this plan
+      if (gap > PVA_MATCH_WINDOW_MS) continue;              // plan too far in the past
+      const score = Math.abs(gap);
+      if (score < bestScore) { bestScore = score; best = k; }
+    } else {                                                // no actual load time -> legacy nearest-date match
+      const diff = Math.abs(planLoad - new Date(_dinDKey(c.cycleDate) + 'T00:00:00'));
+      if (diff <= PVA_MATCH_WINDOW_MS && diff < bestScore) { bestScore = diff; best = k; }
+    }
   }
-  return (best && bestDiff <= 3 * 864e5) ? best : null;
+  return best;
 }
 // per-location plan/actual accessors (actual honors manual override per stage)
 function _pvaPlanArr(pl, st) { const v = pl[st.plan]; return v ? new Date(v) : null; }
