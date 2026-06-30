@@ -1101,6 +1101,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .stcell.st-vac{color:#38bdf8;background:rgba(56,189,248,.12);border-color:#1c4a5e}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .stcell.st-lic{color:#fb923c;background:rgba(251,146,60,.12);border-color:#6a3f1c}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .stcell.st-other{color:var(--muted);background:var(--panel2);border-color:var(--line)}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .stcell.st-accident{color:#fff;background:#c4231f;border-color:#c4231f}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .stcell.st-remove{color:#9aa4ad;background:rgba(120,130,140,.12);border-color:#3a444d;text-decoration:line-through}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .dwslice{flex-wrap:wrap;align-items:center;gap:8px}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .dwslice-row{display:flex;gap:14px;flex-wrap:wrap}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .dwhalf{flex:1 1 0;min-width:240px}
@@ -2169,6 +2171,8 @@ tbody tr:hover td { background: #1f2a33 !important; }
 .stcell.st-vac{color:#38bdf8;background:rgba(56,189,248,.12);border-color:#1c4a5e}
 .stcell.st-lic{color:#fb923c;background:rgba(251,146,60,.12);border-color:#6a3f1c}
 .stcell.st-other{color:var(--muted);background:var(--panel2);border-color:var(--line)}
+.stcell.st-accident{color:#fff;background:#c4231f;border-color:#c4231f}
+.stcell.st-remove{color:#9aa4ad;background:rgba(120,130,140,.12);border-color:#3a444d;text-decoration:line-through}
 .seq-table tbody tr:hover td, .route-table tbody tr:hover td,
 .seq-table tbody tr:hover td:nth-child(1), .seq-table tbody tr:hover td:nth-child(2), .seq-table tbody tr:hover td:nth-child(3) { background: #1f2a33 !important; color: var(--ink) !important; }
 input, select, textarea {
@@ -5086,7 +5090,7 @@ function renderDinStatus() {
 _DIN_SORT_RENDER['dinStatusTable'] = renderDinStatus;
 function _dinFleetStatusCls(s) { const x = (s || '').toLowerCase(); if (x === 'online') return 'st-front'; if (x === 'maintenance') return 'st-maint'; if (x === 'breakdown') return 'st-lic'; if (x === 'deactivated') return 'st-other'; return 'st-other'; }
 const _DIN_NOTE_CLS = { 'back haul': 'st-back', 'front haul': 'st-front', 'maintenance': 'st-maint', 'waiting to unload': 'st-wait', 'driver on vacation': 'st-vac', 'out of date of truck license': 'st-lic' };
-function _dinNoteCls(n) { return _DIN_NOTE_CLS[(n || '').toLowerCase()] || 'st-other'; }
+function _dinNoteCls(n) { const s = (n || '').toLowerCase().trim(); if (_DIN_NOTE_CLS[s]) return _DIN_NOTE_CLS[s]; if (s.indexOf('accident') >= 0) return 'st-accident'; if (s.indexOf('remov') >= 0) return 'st-remove'; return 'st-other'; }
 
 // ---- Wiring (drop zones + clear + status date filter) ----
 function setupDataInputUI() {
