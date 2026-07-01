@@ -10320,7 +10320,7 @@ function computePerf(){
   const gpsError=new Set([...manualAll, ...wbAll]).size;  // manual OR weighbridge Mine time = a GPS error (once per cycle)
   const manualSet=new Set(manualAll);
   const manualPlanned=[], manualUnplanned=[];            // reclassified arrivals (no GPS actual that day)
-  for(const k of manualAll){ if(actualKeys.has(k)) continue;   // GPS already captured → no reclassify
+  for(const k of new Set([...manualAll, ...wbAll])){ if(actualKeys.has(k)) continue;   // manual OR weighbridge = GPS-missed arrival; already captured by GPS → no reclassify
     const pl=k.split('|')[0], d=k.split('|')[1];
     if(planByKey[k] && noShowKeySet.has(k)) manualPlanned.push({plate:pl,d,key:k});
     else if(!planByKey[k]) manualUnplanned.push({plate:pl,d,key:k}); }
