@@ -2423,13 +2423,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <label>&nbsp;</label>
         <button class="secondary small" id="btnResetFilters">Reset filters</button>
       </div>
-      <div class="fb-item" style="margin-left:auto">
-        <label>&nbsp;</label>
-        <div class="btn-row">
-          <button class="secondary" id="btnExportCsv" disabled>Export CSV</button>
-          <button id="btnExportXlsx" disabled>Export xlsx</button>
-        </div>
-      </div>
+
     </div>
 
     <div class="panel flex">
@@ -6523,8 +6517,7 @@ function renderTable() {
   document.getElementById('tableCount').textContent = countText;
 
   const hasData = STATE.visits.length > 0;
-  document.getElementById('btnExportCsv').disabled = !hasData;
-  document.getElementById('btnExportXlsx').disabled = !hasData;
+
 }
 
 function getAnchorColor(id) {
@@ -6580,22 +6573,7 @@ function getExportRows() {
   }));
 }
 
-document.getElementById('btnExportCsv').addEventListener('click', () => {
-  const rows = getExportRows();
-  if (!rows.length) return;
-  const cols = Object.keys(rows[0]);
-  const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => csvEscape(r[c])).join(','))).join('\n');
-  download(csv, `ActualGPS_${tsForFile()}.csv`, 'text/csv;charset=utf-8;');
-});
-
-document.getElementById('btnExportXlsx').addEventListener('click', () => {
-  const rows = getExportRows();
-  if (!rows.length) return;
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Visits');
-  XLSX.writeFile(wb, `ActualGPS_${tsForFile()}.xlsx`);
-});
+// (top-bar Visits export removed — use the Sequence / Route panel exports)
 
 function csvEscape(v) {
   const s = String(v ?? '');
