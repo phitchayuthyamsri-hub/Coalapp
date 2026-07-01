@@ -4857,6 +4857,7 @@ async function dinIngestWeigh(file) {
   const isoMin = d => `${d.getFullYear()}-${_dinPad(d.getMonth() + 1)}-${_dinPad(d.getDate())}T${_dinPad(d.getHours())}:${_dinPad(d.getMinutes())}`;
 
   const agg = {}; const rawByMonth = {}; let maxMonth = null, n = 0;  // rawByMonth feeds the Daily/Weekly report
+  const contractSets = {};   // per plate x month, distinct Contract No(s)
   // Also capture per-ticket Mine load-in times into the in-session loadActual store so the
   // PvA weighbridge fallback works from this same upload (in-memory only; never persisted).
   const _laMap = new Map();
@@ -4873,6 +4874,7 @@ async function dinIngestWeigh(file) {
     const mo = `${DoT.getFullYear()}-${_dinPad(DoT.getMonth() + 1)}`;
     if (!maxMonth || mo > maxMonth) maxMonth = mo;
     const k = p + '|' + mo;
+    if (col.contract >= 0) { const _cc = String(r[col.contract] || '').trim(); if (_cc) (contractSets[k] = contractSets[k] || new Set()).add(_cc); }
     const g = agg[k] || (agg[k] = { plate: p, month: mo, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null });
     g.loads++; if (dwell != null) { g.dwellSum += dwell; g.dwellN++; } if (net != null) { g.netSum += net; g.netN++; }
     const ts = isoMin(DoT); if (!g.last || ts > g.last) g.last = ts;
@@ -4882,6 +4884,7 @@ async function dinIngestWeigh(file) {
     n++;
   }
   if (!n || !maxMonth) throw new Error('Weighbridge: no rows with a valid Date Out parsed');
+  for (const _k in agg) agg[_k].contract = contractSets[_k] ? [...contractSets[_k]].sort().join(', ') : '';
   STATE.loadActual = [..._laMap.values()];   // in-session per-ticket Mine load-in times (feeds the PvA blue weighbridge fallback)
 
   // Replace every month present in this upload; keep months not in the file untouched.
@@ -4997,16 +5000,22 @@ function renderDinWeigh() {
   const byPlate = {}; const months = new Set();
   for (const r of recs) {
     months.add(r.month);
-    const g = byPlate[r.plate] || (byPlate[r.plate] = { plate: r.plate, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null });
+    const g = byPlate[r.plate] || (byPlate[r.plate] = { plate: r.plate, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null, _contracts: {} });
     g.loads += r.loads || 0; g.dwellSum += r.dwellSum || 0; g.dwellN += r.dwellN || 0; g.netSum += r.netSum || 0; g.netN += r.netN || 0;
+    if (r.contract) String(r.contract).split(',').forEach(c => { c = c.trim(); if (c) g._contracts[c] = 1; });
     if (r.last && (!g.last || r.last > g.last)) g.last = r.last;
   }
   const rows = Object.values(byPlate);
+  const _wPlan = new Set(Object.values(STATE.din.plan || {}).map(pl => normPlateStrict(pl.plate)).filter(Boolean));
+  const _wFleet = new Set(Object.keys(STATE.fleet || {}).map(normPlateStrict).filter(Boolean));
+  const _dinIsPlanned = pl => { const kk = normPlateStrict(pl); return _wPlan.has(kk) && (_wFleet.size ? _wFleet.has(kk) : true); };
   // derive sortable values per row
   for (const r of rows) {
     r._avgDwell = r.dwellN ? r.dwellSum / r.dwellN : null;
     r._totNet = r.netN ? r.netSum : null;
     r._avgNet = r.netN ? r.netSum / r.netN : null;
+    r._contract = Object.keys(r._contracts || {}).sort().join(', ');
+    r._project = _dinIsPlanned(r.plate) ? 'On project' : 'Off project';
   }
   const wsVal = (r, k) => {
     switch (k) {
@@ -5016,6 +5025,8 @@ function renderDinWeigh() {
       case 'tnet': return r._totNet;
       case 'anet': return r._avgNet;
       case 'last': return r.last || '';
+      case 'project': return r._project;
+      case 'contract': return r._contract;
       default: return r.plate;
     }
   };
@@ -5026,15 +5037,17 @@ function renderDinWeigh() {
   const mlist = [...months].sort();
   const mrange = mlist.length ? (mlist[0] === mlist[mlist.length - 1] ? mlist[0] : mlist[0] + ' → ' + mlist[mlist.length - 1]) : '';
   if (cntEl) cntEl.textContent = `${srows.length} trucks · ${totalLoads.toLocaleString()} loadings · ${mlist.length} month${mlist.length > 1 ? 's' : ''}${mrange ? ' (' + mrange + ')' : ''}`;
-  const cols = [['plate', 'Plate'], ['loads', 'Loadings'], ['dwell', 'Avg dwell (min)'], ['tnet', 'Total net'], ['anet', 'Avg net'], ['last', 'Last load']];
+  const cols = [['plate', 'Plate'], ['project', 'Project'], ['loads', 'Loadings'], ['dwell', 'Avg dwell (min)'], ['tnet', 'Total net'], ['anet', 'Avg net'], ['last', 'Last load'], ['contract', 'Contract']];
   tbl.querySelector('thead').innerHTML = _dinSortHead('dinWeighTable', cols, renderDinWeigh);
   tbl.querySelector('tbody').innerHTML = srows.map(r => `<tr>
     <td>${escapeHtml(r.plate)}</td>
+    <td>${r._project === 'On project' ? '<span class="stcell st-front">On project</span>' : '<span class="stcell st-other">Off project</span>'}</td>
     <td>${r.loads}</td>
     <td>${r._avgDwell != null ? Math.round(r._avgDwell) : '<span style="color:var(--muted)">—</span>'}</td>
     <td>${r._totNet != null ? Math.round(r._totNet) : '<span style="color:var(--muted)">—</span>'}</td>
     <td>${r._avgNet != null ? Math.round(r._avgNet) : '<span style="color:var(--muted)">—</span>'}</td>
-    <td>${_dinFmt(r.last)}</td></tr>`).join('');
+    <td>${_dinFmt(r.last)}</td>
+    <td>${r._contract ? escapeHtml(r._contract) : '<span style="color:var(--muted)">—</span>'}</td></tr>`).join('');
 }
 _DIN_SORT_RENDER['dinWeighTable'] = renderDinWeigh;
 
@@ -9849,7 +9862,7 @@ function acpBuild(){
   for(var ak in (din.assign||{})){ var pv=din.assign[ak]; var a=ak.split('|'), pp=String(pv).split('|');
     ACS.merges[normPlate(a[0])+'|'+a.slice(1).join('|')]=normPlate(pp[0])+'|'+pp.slice(1).join('|'); }
   ACS.weigh={};
-  for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0)}; }
+  for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0),contract:w.contract||''}; }
   ACS.manual={};
   for(var _mk in (din.manual||{})){ var _a=_mk.split("|"); if(_a.length>=2 && hasLatin(normPlate(_a[0]))) ACS.manual[normPlate(_a[0])+"|"+_a[1]]=true; }  // any manual stage entry marks that cycle as a GPS error (counted once)
   ACS.wb={};
@@ -10020,10 +10033,10 @@ function exportPerfKpiData(){
   const hrs=m=>(m==null?'':Math.round(m/6)/10);
   const fISO=iso=>_pvaXName(fromIso(iso));
   // Sheet 1 - Trips per truck: weighbridge loadings per truck, with on/off project
-  const s1=[['Plate','Month','Loadings','Project']];
+  const s1=[['Plate','Month','Loadings','Contract','Project']];
   Object.values(ACS.weigh||{}).filter(w=>inMon(w.month)&&inEffMon(w.plate,w.month))
     .sort((a,b)=> a.plate<b.plate?-1:a.plate>b.plate?1:(a.month<b.month?-1:1))
-    .forEach(w=> s1.push([w.plate, w.month, w.loads, isPlanned(w.plate)?'On project':'Off project']));
+    .forEach(w=> s1.push([w.plate, w.month, w.loads, w.contract||'', isPlanned(w.plate)?'On project':'Off project']));
   // Sheet 2 - Time per trip (GPS), project trucks only: Mine in -> back at mine
   const s2=[['Plate','Cycle date','Mine in (GPS)','Back at mine (GPS)','Full cycle (h)']];
   (P.actsInRange||[]).filter(a=>isPlanned(a.plate))
