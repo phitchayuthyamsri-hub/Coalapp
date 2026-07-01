@@ -10102,7 +10102,7 @@ function renderPerf(p){
         : single('Trucks loading','\u2014','load a Weighbridge file to compare')
           + single('Trips / truck', k.tripPerTruck!=null?k.tripPerTruck.toFixed(1):'\u2014','cycles per active truck'))
       + single('Plan achievement', (k.planPct!=null?k.planPct:0)+'%','came as planned \u00f7 plan')
-      + cmp('Time / trip','plan: 48h full-cycle target \u00b7 actual: Mine \u2192 back at mine', fmtDur(2880), k.timePerTrip!=null?fmtDur(k.timePerTrip):'\u2014', k.timePerTrip, 2880, 'Plan', 'Actual', true)
+      + cmp('Time / trip','plan: 48h full-cycle target \u00b7 actual: ' + (k.timeSrc==='weighbridge'?'weighbridge (load \u2192 next load)':'GPS (Mine \u2192 back at mine)'), fmtDur(2880), k.timePerTrip!=null?fmtDur(k.timePerTrip):'\u2014', k.timePerTrip, 2880, 'Plan', 'Actual', true)
       + single('GPS error', (k.gpsPct!=null?k.gpsPct:0)+'%','manual + weighbridge \u00f7 plan');
   }
   const oel=document.getElementById('perfOntime');
@@ -10555,6 +10555,18 @@ function computePerf(){
     for(const w of wl){ const c=isPlanned(w.plate)?co.planned:co.off; c.trucks.add(w.plate); c.loads+=w.loads; totLoads+=w.loads;
       if(!isPlanned(w.plate)){ co.off.dwellSum+=w.dwellSum; co.off.dwellN+=w.dwellN; } }   // off dwell = weighbridge in->out
     for(const a of actUniq){ if(!isPlanned(a.plate)) continue; const L=loc(a,'LOADING'); const m=L?durMin(L.in,L.out):null; if(m!=null) co.planned.dwell.push(m); }  // as-planned dwell = sequence GPS loading
+    // Weighbridge-based Time/trip: average gap between a project truck's consecutive loadings
+    // (GPS is unreliable). Gaps beyond the cap are treated as idle, not a real cycle.
+    const WB_TRIP_CAP_MIN = 12 * 24 * 60;   // 12 days
+    const _wbByP = {};
+    for (const _r of (STATE.loadActual || [])) { if (!_r || !_r.loadIn) continue; const _np = normPlate(_r.plate); if (!isPlanned(_np)) continue;
+      const _t = +new Date(_r.loadIn); if (isNaN(_t)) continue; const _d = new Date(_t); const _ym = `${_d.getFullYear()}-${_dinPad(_d.getMonth()+1)}`; if (!inMon(_ym)) continue;
+      (_wbByP[_np] = _wbByP[_np] || []).push(_t); }
+    const _wbGaps = [];
+    for (const _np in _wbByP) { const _arr = _wbByP[_np].sort((a,b)=>a-b); for (let _i=1;_i<_arr.length;_i++){ const _g = Math.round((_arr[_i]-_arr[_i-1])/6e4); if (_g>0 && _g<=WB_TRIP_CAP_MIN) _wbGaps.push(_g); } }
+    const _wbTrip = avgDur(_wbGaps);
+    kpi.timeSrc = 'GPS';
+    if (_wbTrip.avg != null) { kpi.timePerTrip = _wbTrip.avg; kpi.timeSrc = 'weighbridge'; }
     const pack=(c,useAgg)=>({trucks:c.trucks.size,loads:c.loads,perTruck:c.trucks.size?c.loads/c.trucks.size:null,dwell:useAgg?(c.dwellN?c.dwellSum/c.dwellN:null):avgDur(c.dwell).avg});
     const P=pack(co.planned,false), O=pack(co.off,true);
     weigh={ planned:P, off:O, total:totLoads, dwellMissing:(co.off.dwellN===0) };
