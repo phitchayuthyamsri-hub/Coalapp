@@ -2611,6 +2611,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <div class="panel flex">
       <h2>Weighbridge
         <span style="display:inline-flex;gap:6px">
+          <button class="secondary small" id="dinWeighExport">Export to Excel</button>
           <button class="secondary small" id="dinWeighClear">Clear</button>
         </span>
       </h2>
@@ -4846,7 +4847,7 @@ async function dinIngestWeigh(file) {
       const lc = (rr[i] || []).map(c => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
       const find = kw => lc.findIndex(x => x.includes(kw));
       const cP = find('truckno'), cN = find('netweight'), cDo = find('dateout');
-      if (cP >= 0 && cN >= 0 && cDo >= 0) { rows = rr; h = i; col = { plate: cP, net: cN, din: find('datein'), tin: find('timein'), dout: cDo, tout: find('timeout'), contract: find('contractno'), customer: find('customername'), market: find('ovsdmt') }; break; }
+      if (cP >= 0 && cN >= 0 && cDo >= 0) { rows = rr; h = i; col = { plate: cP, net: cN, din: find('datein'), tin: find('timein'), dout: cDo, tout: find('timeout'), contract: ['contractno','contratno','contract','contrat'].reduce((a,kw)=>a>=0?a:find(kw),-1), customer: find('customername'), market: find('ovsdmt') }; break; }
     }
     if (h >= 0) break;
   }
@@ -5050,6 +5051,21 @@ function renderDinWeigh() {
     <td>${r._contract ? escapeHtml(r._contract) : '<span style="color:var(--muted)">—</span>'}</td></tr>`).join('');
 }
 _DIN_SORT_RENDER['dinWeighTable'] = renderDinWeigh;
+function exportDinWeigh(){
+  if(typeof XLSX==='undefined'){ try{toast('Excel library not ready',true);}catch(e){} return; }
+  const recs=Object.values(STATE.din.weigh||{});
+  if(!recs.length){ toast('No weighbridge data',true); return; }
+  const wPlan=new Set(Object.values(STATE.din.plan||{}).map(pl=>normPlateStrict(pl.plate)).filter(Boolean));
+  const wFleet=new Set(Object.keys(STATE.fleet||{}).map(normPlateStrict).filter(Boolean));
+  const isPlanned=pl=>{ const k=normPlateStrict(pl); return wPlan.has(k)&&(wFleet.size?wFleet.has(k):true); };
+  const aoa=[['Plate','Month','Project','Contract','Loadings','Avg dwell (min)','Total net','Last load']];
+  recs.slice().sort((a,b)=> a.plate<b.plate?-1:a.plate>b.plate?1:(a.month<b.month?-1:1))
+    .forEach(w=> aoa.push([ w.plate, w.month, isPlanned(w.plate)?'On project':'Off project', w.contract||'', w.loads||0, (w.dwellN?Math.round(w.dwellSum/w.dwellN):''), (w.netN?Math.round(w.netSum):''), w.last||'' ]));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Weighbridge');
+  XLSX.writeFile(wb, 'Weighbridge_'+tsForFile()+'.xlsx');
+  try{ toast('Weighbridge exported ('+recs.length+' rows)'); }catch(e){}
+}
 
 function renderDinStatus() {
   const tbl = document.getElementById('dinStatusTable'); if (!tbl) return;
@@ -5137,6 +5153,7 @@ function setupDataInputUI() {
   const clr = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
   clr('dinPlanClear', () => { STATE.din.plan = {}; dinSave(); renderDinPlan(); });
   clr('dinWeighClear', () => { STATE.din.weigh = {}; weighSave(); renderDinWeigh(); });
+  { const _web=document.getElementById('dinWeighExport'); if(_web) _web.addEventListener('click', exportDinWeigh); }
   clr('dinStatusClear', () => { STATE.din.status = null; dinSave(); renderDinStatus(); });
 
   const sf = document.getElementById('dinStatusFrom'), stp = document.getElementById('dinStatusTo');
