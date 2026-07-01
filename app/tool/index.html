@@ -4242,6 +4242,8 @@ function normPlateStrict(p) {
 // loadActual:   [{ plate, key, loadIn: Date|null, net: number|null, ticket }]
 STATE.dispatchPlan = STATE.dispatchPlan || [];
 STATE.loadActual   = STATE.loadActual   || [];
+function saveLoadActual(){ try { localStorage.setItem('coalRptLoadActual_v1', JSON.stringify((STATE.loadActual||[]).map(r=>[r.key||'', r.plate||'', r.loadIn? new Date(r.loadIn).getTime():0, r.net==null?'':r.net, r.mkt||'']))); } catch(e){} }
+function loadLoadActual(){ try { const raw=localStorage.getItem('coalRptLoadActual_v1'); if(!raw) return; const d=JSON.parse(raw); if(Array.isArray(d)) STATE.loadActual=d.map(a=>({key:a[0],plate:a[1],loadIn:a[2]? new Date(a[2]):null,net:(a[3]===''?null:+a[3]),ticket:'',mkt:a[4]||''})); } catch(e){} }
 
 // Coerce a cell (Date, Excel serial, or string) to a JS Date or null.
 function toDate(v) {
@@ -4890,6 +4892,7 @@ async function dinIngestWeigh(file) {
   if (!n || !maxMonth) throw new Error('Weighbridge: no rows with a valid Date Out parsed');
   for (const _k in agg) agg[_k].contract = contractSets[_k] ? [...contractSets[_k]].sort().join(', ') : '';
   STATE.loadActual = [..._laMap.values()];   // in-session per-ticket Mine load-in times (feeds the PvA blue weighbridge fallback)
+  saveLoadActual();
 
   // Replace every month present in this upload; keep months not in the file untouched.
   const monthsInFile = new Set(Object.values(agg).map(g => g.month));
@@ -9522,6 +9525,7 @@ function setupStatusUI() {
           toast(`Plan loaded: ${STATE.dispatchPlan.length} plates`);
         } else {
           STATE.loadActual = parseLoadActual(wb);
+          saveLoadActual();
           if (info) info.textContent = `${file.name} · ${STATE.loadActual.length} fleet loadings`;
           toast(`Loading data: ${STATE.loadActual.length} fleet records`);
         }
@@ -9840,6 +9844,7 @@ loadFleetFromStorage();
 setupFleetUI();
 renderFleetUI();
 dinLoad();
+loadLoadActual();
 setupDataInputUI();
 loadSubFleet();
 wireSubFleet();
@@ -10089,6 +10094,7 @@ function renderPerf(p){
   if(kel){
     const w=k.weigh||null, P=w&&w.planned, O=w&&w.off, hasW=!!(w&&(w.total||0)>0);
     const f1=v=>v==null?'\u2014':(+v).toFixed(1);
+    const f2=v=>v==null?'\u2014':(+v).toFixed(2);
     const pctDiff=(pv,ov,inv)=>{ if(pv==null||ov==null||ov===0) return ''; const d=Math.round((pv-ov)/ov*100);
       const cls=d===0?'':(inv?(d>0?'down':'up'):(d>0?'up':'down')); return `<span class="kcdiff ${cls}">${d>0?'+':''}${d}%</span>`; };
     const cmp=(title,sub,lv,rv,pv,ov,llbl,rlbl,inv)=>`<div class="kcard cmp">
@@ -10102,7 +10108,7 @@ function renderPerf(p){
     kel.innerHTML=
       (hasW
         ? cmp('Trucks loading','distinct trucks loaded at mine', P.trucks, O.trucks, null, null)
-          + cmp('Trips / truck','weighbridge loadings \u00f7 trucks', f1(P.perTruck), f1(O.perTruck), P.perTruck, O.perTruck)
+          + cmp('Trips / truck','weighbridge loadings \u00f7 trucks', f2(P.perTruck), f2(O.perTruck), P.perTruck, O.perTruck)
         : single('Trucks loading','\u2014','load a Weighbridge file to compare')
           + single('Trips / truck', k.tripPerTruck!=null?k.tripPerTruck.toFixed(1):'\u2014','cycles per active truck'))
       + single('Plan achievement', (k.planPct!=null?k.planPct:0)+'%','came as planned \u00f7 plan')
