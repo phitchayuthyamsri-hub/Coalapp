@@ -2634,6 +2634,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <select id="perfMonthSel" class="pmsel"></select>
         <button id="pmYearBtn" class="pmbtn">Year</button>
         <select id="perfYearSel" class="pmsel" style="display:none"></select>
+        <label class="toggle" style="margin-left:14px">Market <select id="perfMarketSel" class="pmsel" style="margin-left:4px"><option value="all">All</option><option value="dmt">Domestic</option><option value="ovs">Oversea</option></select></label>
         <span class="rngnote" id="perfRangeNote"></span>
         <label class="toggle" style="margin-left:14px"><input type="checkbox" id="perfWbOnly"> &#9888; WB-error only</label>
         <button id="perfKpiExportBtn" class="pmbtn" style="margin-left:14px">&#11015;&#65039; Export KPI data</button>
@@ -4865,9 +4866,10 @@ async function dinIngestWeigh(file) {
   for (const _e of (STATE.loadActual || [])) { if (_e && _e.key && _e.loadIn) { const _t = new Date(_e.loadIn); if (!isNaN(_t.getTime())) _laMap.set(_e.key + '|' + _t.getTime(), _e); } }
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i] || []; const p = normW(r[col.plate]); if (!p) continue;
+    const _mkt = col.market >= 0 ? (function(m){ return /OVS|OVER|EXPORT/.test(m) ? 'OVS' : (/DMT|DOMES|LOCAL/.test(m) ? 'DMT' : ''); })(String(r[col.market] || '').toUpperCase()) : '';
     const Din = toDate(r[col.din]); const tin = col.tin >= 0 ? toMin(r[col.tin]) : null;
     let DinT = Din ? new Date(Din) : null; if (DinT && tin != null) DinT.setHours(Math.floor(tin / 60), tin % 60, 0, 0);
-    { const _sk = normPlateStrict(r[col.plate]); if (_sk && DinT && !isNaN(DinT.getTime())) { const _net = Number(String(r[col.net]).replace(/[^\d.\-]/g, '')) || null; _laMap.set(_sk + '|' + DinT.getTime(), { plate: String(r[col.plate] || '').trim(), key: _sk, loadIn: new Date(DinT), net: _net, ticket: '' }); } }
+    { const _sk = normPlateStrict(r[col.plate]); if (_sk && DinT && !isNaN(DinT.getTime())) { const _net = Number(String(r[col.net]).replace(/[^\d.\-]/g, '')) || null; _laMap.set(_sk + '|' + DinT.getTime(), { plate: String(r[col.plate] || '').trim(), key: _sk, loadIn: new Date(DinT), net: _net, ticket: '', mkt: _mkt }); } }
     const Do = toDate(r[col.dout]) || Din; if (!Do) continue;        // Date Out (col H) is the reference
     const to = col.tout >= 0 ? toMin(r[col.tout]) : null; const DoT = new Date(Do); if (to != null) DoT.setHours(Math.floor(to / 60), to % 60, 0, 0);
     let dwell = null; if (DinT && tin != null && to != null) { dwell = Math.round((DoT - DinT) / 6e4); if (dwell < 0 || dwell > 1440) dwell = null; }
@@ -4876,8 +4878,9 @@ async function dinIngestWeigh(file) {
     if (!maxMonth || mo > maxMonth) maxMonth = mo;
     const k = p + '|' + mo;
     if (col.contract >= 0) { const _cc = String(r[col.contract] || '').trim(); if (_cc) (contractSets[k] = contractSets[k] || new Set()).add(_cc); }
-    const g = agg[k] || (agg[k] = { plate: p, month: mo, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null });
+    const g = agg[k] || (agg[k] = { plate: p, month: mo, loads: 0, dwellSum: 0, dwellN: 0, netSum: 0, netN: 0, last: null, loadsDMT: 0, loadsOVS: 0 });
     g.loads++; if (dwell != null) { g.dwellSum += dwell; g.dwellN++; } if (net != null) { g.netSum += net; g.netN++; }
+    if (_mkt === 'OVS') g.loadsOVS++; else if (_mkt === 'DMT') g.loadsDMT++;
     const ts = isoMin(DoT); if (!g.last || ts > g.last) g.last = ts;
     const _dIn = Din ? `${Din.getFullYear()}-${_dinPad(Din.getMonth()+1)}-${_dinPad(Din.getDate())}` : `${DoT.getFullYear()}-${_dinPad(DoT.getMonth()+1)}-${_dinPad(DoT.getDate())}`;
     const _tm = (tin!=null?tin:(to!=null?to:null)); const _ap = (_tm!=null && _tm>=720) ? 'n' : 'd';  // day(AM)/night(PM)
@@ -9879,7 +9882,7 @@ function acpBuild(){
   for(var ak in (din.assign||{})){ var pv=din.assign[ak]; var a=ak.split('|'), pp=String(pv).split('|');
     ACS.merges[normPlate(a[0])+'|'+a.slice(1).join('|')]=normPlate(pp[0])+'|'+pp.slice(1).join('|'); }
   ACS.weigh={};
-  for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0),contract:w.contract||''}; }
+  for(var wk in (din.weigh||{})){ var w=din.weigh[wk]; ACS.weigh[wk]={plate:normPlate(w.plate),month:w.month||'',loads:(+w.loads||0),dwellSum:(+w.dwellSum||0),dwellN:(+w.dwellN||0),contract:w.contract||'',loadsDMT:(+w.loadsDMT||0),loadsOVS:(+w.loadsOVS||0)}; }
   ACS.manual={};
   for(var _mk in (din.manual||{})){ var _a=_mk.split("|"); if(_a.length>=2 && hasLatin(normPlate(_a[0]))) ACS.manual[normPlate(_a[0])+"|"+_a[1]]=true; }  // any manual stage entry marks that cycle as a GPS error (counted once)
   ACS.wb={};
@@ -10077,6 +10080,7 @@ function exportPerfKpiData(){
 }
 
 let perfWbOnly=false;   // Performance: show only trucks flagged GPS-error (weighbridge)
+let perfMarket='all';   // Performance: OVS_DMT market filter (all | dmt | ovs)
 function renderPerf(p){
   const cards=document.getElementById('cards');
   const pctColor=p.pct>=80?'#34d399':p.pct>=50?'#e0a93f':'#f87171';
@@ -10552,14 +10556,14 @@ function computePerf(){
     const mk=()=>({trucks:new Set(),loads:0,dwellSum:0,dwellN:0,dwell:[]});
     const co={planned:mk(),off:mk()};
     let totLoads=0;
-    for(const w of wl){ const c=isPlanned(w.plate)?co.planned:co.off; c.trucks.add(w.plate); c.loads+=w.loads; totLoads+=w.loads;
+    for(const w of wl){ const _l = perfMarket==='dmt'?(w.loadsDMT||0):perfMarket==='ovs'?(w.loadsOVS||0):(w.loads||0); if(perfMarket!=='all' && _l<=0) continue; const c=isPlanned(w.plate)?co.planned:co.off; c.trucks.add(w.plate); c.loads+=_l; totLoads+=_l;
       if(!isPlanned(w.plate)){ co.off.dwellSum+=w.dwellSum; co.off.dwellN+=w.dwellN; } }   // off dwell = weighbridge in->out
     for(const a of actUniq){ if(!isPlanned(a.plate)) continue; const L=loc(a,'LOADING'); const m=L?durMin(L.in,L.out):null; if(m!=null) co.planned.dwell.push(m); }  // as-planned dwell = sequence GPS loading
     // Weighbridge-based Time/trip: average gap between a project truck's consecutive loadings
     // (GPS is unreliable). Gaps beyond the cap are treated as idle, not a real cycle.
     const WB_TRIP_CAP_MIN = 12 * 24 * 60;   // 12 days
     const _wbByP = {};
-    for (const _r of (STATE.loadActual || [])) { if (!_r || !_r.loadIn) continue; const _np = normPlate(_r.plate); if (!isPlanned(_np)) continue;
+    for (const _r of (STATE.loadActual || [])) { if (!_r || !_r.loadIn) continue; if (perfMarket!=='all' && _r.mkt !== (perfMarket==='dmt'?'DMT':'OVS')) continue; const _np = normPlate(_r.plate); if (!isPlanned(_np)) continue;
       const _t = +new Date(_r.loadIn); if (isNaN(_t)) continue; const _d = new Date(_t); const _ym = `${_d.getFullYear()}-${_dinPad(_d.getMonth()+1)}`; if (!inMon(_ym)) continue;
       (_wbByP[_np] = _wbByP[_np] || []).push(_t); }
     const _wbGaps = [];
@@ -10620,6 +10624,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var dc=document.getElementById('dailyRangeClear'); if(dc) dc.addEventListener('click',function(){ perfMode='range'; refreshPm(); setPerfRange(null,null); });
     var wbo=document.getElementById('perfWbOnly'); if(wbo) wbo.addEventListener('change',function(e){ perfWbOnly=e.target.checked; render(); });
     var kb=document.getElementById('perfKpiExportBtn'); if(kb) kb.addEventListener('click', exportPerfKpiData);
+    var mks=document.getElementById('perfMarketSel'); if(mks) mks.addEventListener('change',function(e){ perfMarket=e.target.value; render(); });
     var sg=document.getElementById('symGrid'); if(sg) sg.addEventListener('click',function(e){
       var th=e.target.closest('th.sortable'); if(!th) return; var col=th.dataset.col;
       if(dailySort.col===col) dailySort.dir=-dailySort.dir; else { dailySort.col=col; dailySort.dir=1; }
