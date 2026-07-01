@@ -4242,8 +4242,9 @@ function normPlateStrict(p) {
 // loadActual:   [{ plate, key, loadIn: Date|null, net: number|null, ticket }]
 STATE.dispatchPlan = STATE.dispatchPlan || [];
 STATE.loadActual   = STATE.loadActual   || [];
-function saveLoadActual(){ try { localStorage.setItem('coalRptLoadActual_v1', JSON.stringify((STATE.loadActual||[]).map(r=>[r.key||'', r.plate||'', r.loadIn? new Date(r.loadIn).getTime():0, r.net==null?'':r.net, r.mkt||'']))); } catch(e){} }
-function loadLoadActual(){ try { const raw=localStorage.getItem('coalRptLoadActual_v1'); if(!raw) return; const d=JSON.parse(raw); if(Array.isArray(d)) STATE.loadActual=d.map(a=>({key:a[0],plate:a[1],loadIn:a[2]? new Date(a[2]):null,net:(a[3]===''?null:+a[3]),ticket:'',mkt:a[4]||''})); } catch(e){} }
+function _laIdb(mode, cb){ try{ const rq=indexedDB.open('coalappLA',1); rq.onupgradeneeded=function(){ try{ rq.result.createObjectStore('kv'); }catch(e){} }; rq.onsuccess=function(){ try{ cb(rq.result.transaction('kv',mode).objectStore('kv')); }catch(e){ cb(null); } }; rq.onerror=function(){ cb(null); }; }catch(e){ cb(null); } }
+function saveLoadActual(){ try{ localStorage.removeItem('coalRptLoadActual_v1'); }catch(e){} const data=(STATE.loadActual||[]).map(r=>[r.key||'', r.plate||'', r.loadIn? new Date(r.loadIn).getTime():0, r.net==null?'':r.net, r.mkt||'']); _laIdb('readwrite', function(st){ if(st) try{ st.put(data,'loadActual'); }catch(e){} }); }
+function loadLoadActual(cb){ try{ localStorage.removeItem('coalRptLoadActual_v1'); }catch(e){} _laIdb('readonly', function(st){ if(!st){ cb&&cb(); return; } try{ const g=st.get('loadActual'); g.onsuccess=function(){ const d=g.result; if(Array.isArray(d)) STATE.loadActual=d.map(a=>({key:a[0],plate:a[1],loadIn:a[2]? new Date(a[2]):null,net:(a[3]===''?null:+a[3]),ticket:'',mkt:a[4]||''})); cb&&cb(); }; g.onerror=function(){ cb&&cb(); }; }catch(e){ cb&&cb(); } }); }
 
 // Coerce a cell (Date, Excel serial, or string) to a JS Date or null.
 function toDate(v) {
@@ -9844,7 +9845,7 @@ loadFleetFromStorage();
 setupFleetUI();
 renderFleetUI();
 dinLoad();
-loadLoadActual();
+loadLoadActual(function(){ try{ if(window.renderPerfTab) window.renderPerfTab(); if(typeof renderDinPVA==='function') renderDinPVA(); }catch(e){} });
 setupDataInputUI();
 loadSubFleet();
 wireSubFleet();
