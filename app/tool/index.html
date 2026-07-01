@@ -3032,6 +3032,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <button class="small secondary" id="fleetTemplateBtn">Download template</button>
         <button class="small secondary" id="fleetUploadBtn">Upload xlsx</button>
         <button class="small secondary" id="fleetExportBtn">Export to Excel</button>
+        <button class="small secondary" id="fleetClearBtn" style="color:#f87171;border-color:#7a3a3a">Clear all</button>
         <input type="file" id="fleetFileInput" accept=".xlsx,.xls,.csv" style="display:none">
       </div>
       <div class="table-wrap">
@@ -5519,6 +5520,18 @@ function setupFleetUI() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Fleet');
     XLSX.writeFile(wb, 'Fleet_export.xlsx');
     toast('Fleet exported');
+  });
+
+  const clrBtn = document.getElementById('fleetClearBtn');
+  if (clrBtn) clrBtn.addEventListener('click', () => {
+    const n = Object.keys(STATE.fleet).length;
+    if (!n) { toast('Fleet database is already empty', true); return; }
+    if (!confirm('Clear the entire fleet database (' + n + ' trucks)? This removes all statuses, phones, dates and GPS providers; you can re-upload afterward. This cannot be undone.')) return;
+    STATE.fleet = {};
+    saveFleetToStorage();
+    renderFleetUI();
+    recomputeVisits();
+    toast('Fleet database cleared (' + n + ' trucks)');
   });
 
   const upBtn = document.getElementById('fleetUploadBtn');
