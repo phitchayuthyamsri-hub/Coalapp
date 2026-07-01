@@ -10562,7 +10562,12 @@ function computePerf(){
     const mk=()=>({trucks:new Set(),loads:0,dwellSum:0,dwellN:0,dwell:[]});
     const co={planned:mk(),off:mk()};
     let totLoads=0;
-    for(const w of wl){ const _l = perfMarket==='dmt'?(w.loadsDMT||0):perfMarket==='ovs'?(w.loadsOVS||0):(w.loads||0); if(perfMarket!=='all' && _l<=0) continue; const c=isPlanned(w.plate)?co.planned:co.off; c.trucks.add(w.plate); c.loads+=_l; totLoads+=_l;
+    // Market split from the persisted loadActual (survives refresh); falls back to the
+    // din.weigh aggregate. Keyed with normPlateStrict to match ACS.weigh plates.
+    const _mkt = {};
+    if (perfMarket !== 'all') { for (const _r of (STATE.loadActual || [])) { if (!_r || !_r.loadIn || !_r.mkt) continue; const _t = new Date(_r.loadIn); if (isNaN(_t.getTime())) continue; const _ym = _t.getFullYear() + '-' + _dinPad(_t.getMonth()+1); if (!inMon(_ym)) continue; const _k = normPlateStrict(_r.plate); if (!_k) continue; const _o = _mkt[_k] || (_mkt[_k] = {dmt:0, ovs:0}); if (_r.mkt === 'OVS') _o.ovs++; else if (_r.mkt === 'DMT') _o.dmt++; } }
+    const _mload = w => { if (perfMarket === 'all') return w.loads || 0; const _m = _mkt[normPlateStrict(w.plate)]; if (_m) return _m[perfMarket] || 0; return perfMarket === 'dmt' ? (w.loadsDMT || 0) : (w.loadsOVS || 0); };
+    for(const w of wl){ const _l = _mload(w); if(perfMarket!=='all' && _l<=0) continue; const c=isPlanned(w.plate)?co.planned:co.off; c.trucks.add(w.plate); c.loads+=_l; totLoads+=_l;
       if(!isPlanned(w.plate)){ co.off.dwellSum+=w.dwellSum; co.off.dwellN+=w.dwellN; } }   // off dwell = weighbridge in->out
     for(const a of actUniq){ if(!isPlanned(a.plate)) continue; const L=loc(a,'LOADING'); const m=L?durMin(L.in,L.out):null; if(m!=null) co.planned.dwell.push(m); }  // as-planned dwell = sequence GPS loading
     // Weighbridge-based Time/trip: average gap between a project truck's consecutive loadings
