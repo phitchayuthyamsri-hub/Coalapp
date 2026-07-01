@@ -7993,6 +7993,19 @@ document.getElementById('btnExportSeqXlsx').addEventListener('click', () => {
   XLSX.writeFile(wb, `Sequence_${tsForFile()}.xlsx`);
 });
 
+// Port dwell split: unload+queue is counted only from PORT_OPEN_HOUR on the EXIT (last)
+// day to departure; waiting is everything before that (arrival -> that opening). A truck
+// that sits several days therefore only counts the last day's working time.
+const PORT_OPEN_HOUR = 7;   // port starts working ~07:00 (tunable)
+function _portSplit(pin, pout) {
+  if (!pin || !pout || isNaN(pin.getTime()) || isNaN(pout.getTime()) || pout <= pin) return { total: null, wait: null, work: null };
+  let workStart = new Date(pout.getFullYear(), pout.getMonth(), pout.getDate(), PORT_OPEN_HOUR, 0, 0, 0);
+  if (pout < workStart) workStart = new Date(workStart.getTime() - 864e5);   // left before opening -> previous day's opening
+  if (workStart < pin) workStart = pin;                                      // arrived after opening -> no waiting
+  const total = pout - pin, work = pout - workStart, wait = total - work;
+  return { total, wait, work };
+}
+function _phrs(ms) { return ms == null ? '' : Math.round(ms / 36e5 * 10) / 10; }   // ms -> hours, 1 dp
 function getSeqExportRows() {
   const rows = STATE.sequences.filter(sequenceMatchesFilters);
   return rows.map((c, i) => {
@@ -8000,6 +8013,7 @@ function getSeqExportRows() {
     if (c.backhaulType === 'ql49') backhaulRoute = 'QL 49';
     else if (c.backhaulType === 'detour') backhaulRoute = 'Detour: ' + c.detourName;
     else if (c.backhaulType === 'both') backhaulRoute = c.backhaulSummary;
+    const ps = _portSplit(c.chanMayIn, c.chanMayOut);
     return {
       'No.': i + 1,
       'Plate': c.plate,
@@ -8014,6 +8028,9 @@ function getSeqExportRows() {
       'QL 49 — Out (out)': c.ql49OutOut ? fmtDateTime(c.ql49OutOut) : '',
       'ChanMay — In': c.chanMayIn ? fmtDateTime(c.chanMayIn) : '',
       'ChanMay — Out': c.chanMayOut ? fmtDateTime(c.chanMayOut) : '',
+      'Port dwell (h)': _phrs(ps.total),
+      'Port waiting (h)': _phrs(ps.wait),
+      'Port unload+queue (h)': _phrs(ps.work),
       'QL 49 — In (back)': c.ql49BackIn ? fmtDateTime(c.ql49BackIn) : '',
       'QL 49 — Out (back)': c.ql49BackOut ? fmtDateTime(c.ql49BackOut) : '',
       'Detour — In': c.detourIn ? fmtDateTime(c.detourIn) : '',
