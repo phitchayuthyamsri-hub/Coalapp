@@ -2633,6 +2633,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <select id="perfMonthSel" class="pmsel"></select>
         <span class="rngnote" id="perfRangeNote"></span>
         <label class="toggle" style="margin-left:14px"><input type="checkbox" id="perfWbOnly"> &#9888; WB-error only</label>
+        <button id="perfKpiExportBtn" class="pmbtn" style="margin-left:14px">&#11015;&#65039; Export KPI data</button>
         <button id="perfShotBtn" class="pmbtn" style="margin-left:auto;background:#2dd4bf;color:#06231f;font-weight:700">&#128247; Screenshot</button>
       </div>
       <div class="perf-section">
@@ -10003,6 +10004,46 @@ function renderBackhaul(p){
       ${card('detour','Dakrong Passage','via Detour In/Out (P/Q)','detour')}
     </div></div>`;
 }
+// Export the raw data behind the Trips/truck and Time/trip KPI cards (3 sheets).
+function exportPerfKpiData(){
+  if(typeof XLSX==='undefined'){ try{toast('Excel library not ready',true);}catch(e){} return; }
+  const P=computePerf();
+  const planPlates=new Set();
+  for(const kk in ACS.plan){ const d=kk.split('|')[1]; if(inPerfRange(d)&&inEff(ACS.plan[kk].plate,d)) planPlates.add(ACS.plan[kk].plate); }
+  const fleetAll=new Set(ACS.fleet||[]);
+  const isPlanned=pl=>planPlates.has(pl)&&(fleetAll.size?fleetAll.has(pl):true);
+  const mFrom=perfRange.from?perfRange.from.slice(0,7):null, mTo=perfRange.to?perfRange.to.slice(0,7):null;
+  const inMon=m=>{ if(!m) return false; if(mFrom&&m<mFrom) return false; if(mTo&&m>mTo) return false; return true; };
+  const inEffMon=(pl,m)=>{ const me=(ACS.fleetMeta||{})[pl]||{}; if(me.effFrom&&m<me.effFrom.slice(0,7)) return false; if(me.effTo&&m>me.effTo.slice(0,7)) return false; return true; };
+  const hrs=m=>(m==null?'':Math.round(m/6)/10);
+  const fISO=iso=>_pvaXName(fromIso(iso));
+  // Sheet 1 - Trips per truck: weighbridge loadings per truck, with on/off project
+  const s1=[['Plate','Month','Loadings','Project']];
+  Object.values(ACS.weigh||{}).filter(w=>inMon(w.month)&&inEffMon(w.plate,w.month))
+    .sort((a,b)=> a.plate<b.plate?-1:a.plate>b.plate?1:(a.month<b.month?-1:1))
+    .forEach(w=> s1.push([w.plate, w.month, w.loads, isPlanned(w.plate)?'On project':'Off project']));
+  // Sheet 2 - Time per trip (GPS), project trucks only: Mine in -> back at mine
+  const s2=[['Plate','Cycle date','Mine in (GPS)','Back at mine (GPS)','Full cycle (h)']];
+  (P.actsInRange||[]).filter(a=>isPlanned(a.plate))
+    .sort((a,b)=> a.plate<b.plate?-1:a.plate>b.plate?1:(a.d<b.d?-1:1))
+    .forEach(a=>{ const L=a.ent&&a.ent.locs; const mi=(L&&L.MINE)?L.MINE.in:null; const br=L?L.BACK_RET:null;
+      s2.push([a.plate, a.d, fISO(mi), fISO(br), hrs(durMin(mi,br))]); });
+  // Sheet 3 - Time per trip (Weighbridge), project trucks only: gap between consecutive loadings
+  const s3=[['Plate','Trip #','Previous load (WB)','This load (WB)','Trip time (h)']];
+  const byPlate={};
+  (STATE.loadActual||[]).forEach(r=>{ if(!r||!r.loadIn) return; const np=normPlate(r.plate); if(!isPlanned(np)) return;
+    const t=new Date(r.loadIn); if(isNaN(t.getTime())) return; const mo=t.getFullYear()+'-'+_dinPad(t.getMonth()+1); if(!inMon(mo)) return;
+    (byPlate[np]=byPlate[np]||[]).push(t); });
+  Object.keys(byPlate).sort().forEach(np=>{ const arr=byPlate[np].sort((a,b)=>a-b);
+    for(let i=1;i<arr.length;i++){ s3.push([np, i, _pvaXName(arr[i-1]), _pvaXName(arr[i]), hrs(Math.round((arr[i]-arr[i-1])/6e4))]); } });
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s1), 'Trips per truck');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s2), 'Time per trip (GPS)');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s3), 'Time per trip (WB)');
+  XLSX.writeFile(wb, 'PerfKPI_raw_'+tsForFile()+'.xlsx');
+  try{ toast('KPI raw data exported'); }catch(e){}
+}
+
 let perfWbOnly=false;   // Performance: show only trucks flagged GPS-error (weighbridge)
 function renderPerf(p){
   const cards=document.getElementById('cards');
@@ -10527,6 +10568,7 @@ function applyPerfYesterday(){ perfMode='yesterday'; const d=new Date(); d.setDa
     var dt=document.getElementById('dailyTo'); if(dt) dt.addEventListener('change',function(e){ perfMode='range'; refreshPm(); setPerfRange(perfRange.from, e.target.value); });
     var dc=document.getElementById('dailyRangeClear'); if(dc) dc.addEventListener('click',function(){ perfMode='range'; refreshPm(); setPerfRange(null,null); });
     var wbo=document.getElementById('perfWbOnly'); if(wbo) wbo.addEventListener('change',function(e){ perfWbOnly=e.target.checked; render(); });
+    var kb=document.getElementById('perfKpiExportBtn'); if(kb) kb.addEventListener('click', exportPerfKpiData);
     var sg=document.getElementById('symGrid'); if(sg) sg.addEventListener('click',function(e){
       var th=e.target.closest('th.sortable'); if(!th) return; var col=th.dataset.col;
       if(dailySort.col===col) dailySort.dir=-dailySort.dir; else { dailySort.col=col; dailySort.dir=1; }
