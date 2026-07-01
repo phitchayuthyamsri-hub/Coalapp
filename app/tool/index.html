@@ -2631,6 +2631,8 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <span class="pcl">PERIOD</span>
         <button id="pmMonthBtn" class="pmbtn">Month</button>
         <select id="perfMonthSel" class="pmsel"></select>
+        <button id="pmYearBtn" class="pmbtn">Year</button>
+        <select id="perfYearSel" class="pmsel" style="display:none"></select>
         <span class="rngnote" id="perfRangeNote"></span>
         <label class="toggle" style="margin-left:14px"><input type="checkbox" id="perfWbOnly"> &#9888; WB-error only</label>
         <button id="perfKpiExportBtn" class="pmbtn" style="margin-left:14px">&#11015;&#65039; Export KPI data</button>
@@ -9818,7 +9820,7 @@ setTimeout(function(){ try{ injectPageHelp();
 (function(){
   var perfRange={from:null,to:null};
   var _nowYM=function(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');};
-  var perfMode='month', perfMonth=_nowYM();
+  var perfMode='month', perfMonth=_nowYM(), perfYear=_nowYM().slice(0,4);
   var dailySort={col:null,dir:1}, statusSort={col:null,dir:1};
   var ACS={fleet:[],plan:{},actual:{},merges:{},weigh:{},manual:{},fleetMeta:{},status:null,issues:[],recos:[]};
   var PERF_NOTES_KEY='actualGpsPerfNotes_v1';
@@ -10549,21 +10551,28 @@ function perfMonthsList(){ const s=new Set();
 function populatePerfMonths(){ const sel=document.getElementById('perfMonthSel'); if(!sel) return;
   const ms=perfMonthsList(); if(!ms.includes(perfMonth)) perfMonth=ms[0];
   sel.innerHTML=ms.map(m=>{const a=m.split('-'); return `<option value="${m}"${m===perfMonth?' selected':''}>${_MON[+a[1]-1]} ${a[0]}</option>`;}).join(''); }
-function refreshPm(){ const mb=document.getElementById('pmMonthBtn'), yb=document.getElementById('pmYestBtn'), sel=document.getElementById('perfMonthSel');
+function refreshPm(){ const mb=document.getElementById('pmMonthBtn'), yb=document.getElementById('pmYestBtn'), sel=document.getElementById('perfMonthSel'), syb=document.getElementById('pmYearBtn'), ysel=document.getElementById('perfYearSel');
   if(mb) mb.classList.toggle('active', perfMode==='month');
   if(yb) yb.classList.toggle('active', perfMode==='yesterday');
-  if(sel) sel.style.display = perfMode==='month'?'':'none'; }
+  if(syb) syb.classList.toggle('active', perfMode==='year');
+  if(sel) sel.style.display = perfMode==='month'?'':'none';
+  if(ysel) ysel.style.display = perfMode==='year'?'':'none'; }
 function applyPerfMonth(ym){ perfMode='month'; perfMonth=ym; const a=ym.split('-').map(Number); const last=new Date(a[0],a[1],0).getDate();
   populatePerfMonths(); refreshPm(); setPerfRange(`${ym}-01`, `${ym}-${String(last).padStart(2,'0')}`); }
 function applyPerfYesterday(){ perfMode='yesterday'; const d=new Date(); d.setDate(d.getDate()-1);
   const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; refreshPm(); setPerfRange(ds,ds); }
+function perfYearsList(){ const s=new Set(perfMonthsList().map(m=>m.slice(0,4))); s.add(_nowYM().slice(0,4)); return [...s].sort().reverse(); }
+function populatePerfYears(){ const sel=document.getElementById('perfYearSel'); if(!sel) return; const ys=perfYearsList(); if(!ys.includes(perfYear)) perfYear=ys[0]; sel.innerHTML=ys.map(y=>`<option value="${y}"${y===perfYear?' selected':''}>${y}</option>`).join(''); }
+function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); refreshPm(); setPerfRange(`${y}-01-01`, `${y}-12-31`); }
 
   function render(){ try{ var p=computePerf(); renderPerf(p); renderIssues(); renderRecos(); }catch(e){ console.error('perf render',e); } }
-  function renderPerfTab(){ try{ acpLoadNotes(); acpBuild(); populatePerfMonths(); refreshPm(); applyPerfMonth(perfMonth); }catch(e){ console.error('perf tab',e);} }
+  function renderPerfTab(){ try{ acpLoadNotes(); acpBuild(); populatePerfMonths(); populatePerfYears(); refreshPm(); applyPerfMonth(perfMonth); }catch(e){ console.error('perf tab',e);} }
   (function wire(){
     var mb=document.getElementById('pmMonthBtn'); if(mb) mb.addEventListener('click',function(){applyPerfMonth(perfMonth);});
     var yb=document.getElementById('pmYestBtn'); if(yb) yb.addEventListener('click',applyPerfYesterday);
     var sel=document.getElementById('perfMonthSel'); if(sel) sel.addEventListener('change',function(e){applyPerfMonth(e.target.value);});
+    var syb=document.getElementById('pmYearBtn'); if(syb) syb.addEventListener('click',function(){applyPerfYear(perfYear);});
+    var ysel=document.getElementById('perfYearSel'); if(ysel) ysel.addEventListener('change',function(e){applyPerfYear(e.target.value);});
     var df=document.getElementById('dailyFrom'); if(df) df.addEventListener('change',function(e){ perfMode='range'; refreshPm(); setPerfRange(e.target.value, perfRange.to); });
     var dt=document.getElementById('dailyTo'); if(dt) dt.addEventListener('change',function(e){ perfMode='range'; refreshPm(); setPerfRange(perfRange.from, e.target.value); });
     var dc=document.getElementById('dailyRangeClear'); if(dc) dc.addEventListener('click',function(){ perfMode='range'; refreshPm(); setPerfRange(null,null); });
@@ -10824,7 +10833,7 @@ function buildStandalonePerf() {
   const a4 = wrap && wrap.querySelector('.perf-a4');
   if (!a4) return '<!DOCTYPE html><meta charset="utf-8"><body>No performance data.</body>';
   const clone = a4.cloneNode(true);
-  ['#pmMonthBtn', '#pmYestBtn', '#perfMonthSel', '#perfShotBtn'].forEach(sel => { const e = clone.querySelector(sel); if (e) e.remove(); });
+  ['#pmMonthBtn', '#pmYestBtn', '#perfMonthSel', '#pmYearBtn', '#perfYearSel', '#perfShotBtn'].forEach(sel => { const e = clone.querySelector(sel); if (e) e.remove(); });
   const L = _leanPerfCss();
   const lang = (typeof LANG !== 'undefined') ? LANG : 'en';
   return '<!DOCTYPE html>\n<html lang="' + lang + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
