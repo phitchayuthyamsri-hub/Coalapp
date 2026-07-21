@@ -6790,18 +6790,40 @@ function _sDayHdr(iso){ const d=new Date(iso+'T00:00:00'); return _SWD[d.getDay(
 function _sPhoneDigits(plate){ const m=fleetMeta(plate)||{}; return String(m.phone||'').replace(/[^0-9]/g,''); }
 function _sendEntries(){
   const out=[];
+  const D=function(v){ const d=v? new Date(v):null; return (d && !isNaN(d.getTime()))? d : null; };
+  const dp=(STATE.din && STATE.din.plan) ? STATE.din.plan : null;
+  if(dp && Object.keys(dp).length){
+    // Persistent, merged plan store (survives refresh, keeps every uploaded date).
+    Object.keys(dp).forEach(function(k){
+      const r=dp[k]; if(!r || !r.plate || !r.date) return;
+      out.push({ plate:r.plate, key:r.plate, iso:r.date,
+        loadStart:D(r.loadStart), mineArrive:D(r.mineArrive), depMine:D(r.depMine),
+        borderArrive:D(r.borderArrive), depBorder:D(r.depBorder),
+        portArrive:D(r.portArrive), depPort:D(r.depPort),
+        borderBack:D(r.borderBack), mineReturn:D(r.mineReturn) });
+    });
+    return out;
+  }
+  // Fallback: the transient plan from the last uploaded file only.
   (STATE.dispatchPlan||[]).forEach(function(p){
     const d = p.loadStart || p.portArrive; if(!d) return;
-    out.push({ plate:(p.plate||p.key), key:p.key, loadStart:p.loadStart||null, portArrive:p.portArrive||null, iso:_isoDay(d) });
+    out.push({ plate:(p.plate||p.key), key:p.key, iso:_isoDay(d),
+      loadStart:p.loadStart||null, portArrive:p.portArrive||null });
   });
   return out;
 }
 function planMsg(plate, iso, e){
-  const extra=[];
-  if(e.loadStart)  extra.push('Load start: '+_sDT(e.loadStart));
-  if(e.portArrive) extra.push('Arrive port: '+_sDT(e.portArrive));
+  const L=[];
+  const add=function(lbl,d){ if(d) L.push(lbl+': '+_sDT(d)); };
+  add('Load start',     e.loadStart);
+  add('Arrive mine',    e.mineArrive);
+  add('Depart mine',    e.depMine);
+  add('Arrive border',  e.borderArrive);
+  add('Arrive port',    e.portArrive);
+  add('Border (return)',e.borderBack);
+  add('Mine (return)',  e.mineReturn);
   let m = '*Dispatch Plan*\n'+'Truck: '+plate+'\n'+'Date: '+_sDayHdr(iso);
-  if(extra.length) m += '\n\n'+extra.join('\n');
+  if(L.length) m += '\n\n'+L.join('\n');
   return m;
 }
 function _waUrl(e){ return 'https://wa.me/'+_sPhoneDigits(e.plate)+'?text='+encodeURIComponent(planMsg(e.plate, sendDate, e)); }
@@ -6851,7 +6873,7 @@ function renderSend(){
   const rows=day.map(function(e){
     const digits=_sPhoneDigits(e.plate); const shown=(fleetMeta(e.plate)||{}).phone||'—';
     if(digits) withPhone++; else noPhone++;
-    const summary=[e.loadStart, e.portArrive].map(_sDT).join('  →  ');
+    const summary=[e.loadStart, e.borderArrive, e.portArrive].map(_sDT).join('  →  ');
     const btn = digits ? '<button class="wa-send" data-plate="'+e.plate+'">WhatsApp</button>'
                        : '<span class="wa-nophone">add phone in Fleet</span>';
     return '<tr><td class="mono">'+e.plate+'</td><td>'+shown+'</td><td class="wa-sum">'+summary+'</td><td>'+btn+'</td></tr>';
@@ -6863,7 +6885,7 @@ function renderSend(){
     + '<button class="send-all-btn" id="sendAllBtn"'+(withPhone?'':' disabled')+'>📲 Send all ('+withPhone+')</button>'
     + '<span class="help-text">'+day.length+' trucks planned · '+withPhone+' with phone'+(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')+'</span>'
     + '</div>'
-    + '<div style="overflow:auto"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Port (plan)</th><th></th></tr></thead><tbody>'
+    + '<div style="overflow:auto"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Border → Port (plan)</th><th></th></tr></thead><tbody>'
     + (rows || '<tr><td colspan="4">No trucks planned this date.</td></tr>')
     + '</tbody></table></div>';
   const sel=document.getElementById('sendDateSel');
