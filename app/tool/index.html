@@ -2246,6 +2246,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <button data-page="data" data-subtab="timeline" data-perm="timeline">Timeline</button>
   <button data-page="truckstatus">Truck Status</button>
   <button data-page="pva">Plan vs Actual</button>
+  <button data-page="send">📲 Send Plan</button>
   <button data-page="subfleet">Subcontractor fleet status</button>
   <div class="nav-group" id="navDataInput">
     <button type="button" class="nav-group-btn" id="navDataInputBtn">Data input ▾</button>
@@ -2567,6 +2568,17 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 </div>
 
 <!-- ============ PAGE: DISTANCES ============ -->
+<!-- ============ PAGE: SEND PLAN ============ -->
+<div class="page" data-page-panel="send">
+  <div class="page-pad">
+    <div class="panel">
+      <h2>Send Plan to Drivers</h2>
+      <div class="help-text" style="margin-bottom:10px">Pick a plan date, then send each driver their plan over WhatsApp. Phone numbers come from the <b>Fleet</b> page. <b>Send all</b> steps through every planned driver — WhatsApp requires you to press Send for each message.</div>
+      <div id="sendBody"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ PAGE: DISPATCH PLAN ============ -->
 <div class="page" data-page-panel="plan">
   <div class="page-pad">
@@ -6765,6 +6777,143 @@ function refreshAllTables() {
   if (typeof renderTimeline === 'function') renderTimeline();
 }
 
+/* ===== SEND PLAN TO DRIVERS (WhatsApp, free wa.me links) =====
+   Per-driver dispatch send, plus a "Send all" stepper that walks through every
+   planned driver one tap each. WhatsApp blocks true auto-send from links; the
+   official Business API is the upgrade that makes Send-all fully automatic. */
+let sendDate = null;
+const _SMON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const _SWD  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function _isoDay(d){ const m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return d.getFullYear()+'-'+m+'-'+day; }
+function _sDT(d){ if(!d) return '—'; return d.getDate()+' '+_SMON[d.getMonth()]+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function _sDayHdr(iso){ const d=new Date(iso+'T00:00:00'); return _SWD[d.getDay()]+' '+d.getDate()+' '+_SMON[d.getMonth()]+' '+d.getFullYear(); }
+function _sPhoneDigits(plate){ const m=fleetMeta(plate)||{}; return String(m.phone||'').replace(/[^0-9]/g,''); }
+function _sendEntries(){
+  const out=[];
+  (STATE.dispatchPlan||[]).forEach(function(p){
+    const d = p.loadStart || p.portArrive; if(!d) return;
+    out.push({ plate:(p.plate||p.key), key:p.key, loadStart:p.loadStart||null, portArrive:p.portArrive||null, iso:_isoDay(d) });
+  });
+  return out;
+}
+function planMsg(plate, iso, e){
+  const extra=[];
+  if(e.loadStart)  extra.push('Load start: '+_sDT(e.loadStart));
+  if(e.portArrive) extra.push('Arrive port: '+_sDT(e.portArrive));
+  let m = '*Dispatch Plan*\n'+'Truck: '+plate+'\n'+'Date: '+_sDayHdr(iso);
+  if(extra.length) m += '\n\n'+extra.join('\n');
+  return m;
+}
+function _waUrl(e){ return 'https://wa.me/'+_sPhoneDigits(e.plate)+'?text='+encodeURIComponent(planMsg(e.plate, sendDate, e)); }
+function _sendInjectCss(){
+  if(document.getElementById('sendCss')) return;
+  const s=document.createElement('style'); s.id='sendCss';
+  s.textContent = [
+    '.send-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}',
+    '.send-date{padding:5px 8px;border:1px solid #cfd8e3;border-radius:7px;font-size:13px}',
+    '.send-tbl{border-collapse:collapse;width:100%;font-size:13px}',
+    '.send-tbl th,.send-tbl td{border:1px solid #e6ecf3;padding:6px 9px;text-align:left}',
+    '.send-tbl th{background:#f2f6fb;color:#0a4ea3;font-weight:600}',
+    '.send-tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}',
+    '.wa-sum{color:#3a3a3c}',
+    '.wa-send{background:#25D366;color:#fff;border:0;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}',
+    '.wa-send.sent{background:#8a8f98}',
+    '.wa-nophone{color:#c4231f;font-size:12px}',
+    '.send-all-btn{background:#0071e3;color:#fff;border:0;border-radius:7px;padding:7px 15px;font-size:13px;font-weight:600;cursor:pointer}',
+    '.send-all-btn:disabled{background:#9aa0a6;cursor:default}',
+    '#waStep{position:fixed;inset:0;background:rgba(20,28,38,.55);display:none;align-items:center;justify-content:center;z-index:99999}',
+    '#waStep.on{display:flex}',
+    '.wa-card{background:#fff;border-radius:14px;padding:22px 24px;max-width:430px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.3)}',
+    '.wa-card h3{margin:0 0 4px;font-size:16px}',
+    '.wa-prog{font-size:12px;color:#86868b;margin-bottom:10px}',
+    '.wa-bar{height:6px;background:#eef1f5;border-radius:4px;overflow:hidden;margin-bottom:14px}',
+    '.wa-bar i{display:block;height:100%;background:#25D366;width:0;transition:width .2s}',
+    '.wa-msg{white-space:pre-wrap;background:#f7faff;border:1px solid #e3ecf7;border-radius:8px;padding:10px;font-size:12.5px;max-height:170px;overflow:auto;margin-bottom:14px}',
+    '.wa-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}',
+    '.wa-actions button{border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}',
+    '.wa-open{background:#25D366;color:#fff}',
+    '.wa-next{background:#0071e3;color:#fff}',
+    '.wa-skip{background:#eef1f5;color:#3a3a3c}',
+    '.wa-close{background:#fff;color:#86868b}'
+  ].join('');
+  document.head.appendChild(s);
+}
+function renderSend(){
+  _sendInjectCss();
+  const el=document.getElementById('sendBody'); if(!el) return;
+  const ents=_sendEntries();
+  if(!ents.length){ el.innerHTML='<div class="help-text">No dispatch plan loaded. Import a plan on <b>Data input ▾ → Dispatch Plan</b> first.</div>'; return; }
+  const dates=Array.from(new Set(ents.map(function(e){return e.iso;}))).sort();
+  if(!sendDate || dates.indexOf(sendDate)<0) sendDate=dates[dates.length-1];
+  const day=ents.filter(function(e){return e.iso===sendDate;}).sort(function(a,b){return a.plate<b.plate?-1:1;});
+  const opts=dates.map(function(d){return '<option value="'+d+'"'+(d===sendDate?' selected':'')+'>'+_sDayHdr(d)+'</option>';}).join('');
+  let withPhone=0, noPhone=0;
+  const rows=day.map(function(e){
+    const digits=_sPhoneDigits(e.plate); const shown=(fleetMeta(e.plate)||{}).phone||'—';
+    if(digits) withPhone++; else noPhone++;
+    const summary=[e.loadStart, e.portArrive].map(_sDT).join('  →  ');
+    const btn = digits ? '<button class="wa-send" data-plate="'+e.plate+'">WhatsApp</button>'
+                       : '<span class="wa-nophone">add phone in Fleet</span>';
+    return '<tr><td class="mono">'+e.plate+'</td><td>'+shown+'</td><td class="wa-sum">'+summary+'</td><td>'+btn+'</td></tr>';
+  }).join('');
+  el.innerHTML =
+    '<div class="send-ctrl">'
+    + '<span class="pcl">Plan date</span>'
+    + '<select id="sendDateSel" class="send-date">'+opts+'</select>'
+    + '<button class="send-all-btn" id="sendAllBtn"'+(withPhone?'':' disabled')+'>📲 Send all ('+withPhone+')</button>'
+    + '<span class="help-text">'+day.length+' trucks planned · '+withPhone+' with phone'+(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')+'</span>'
+    + '</div>'
+    + '<div style="overflow:auto"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Port (plan)</th><th></th></tr></thead><tbody>'
+    + (rows || '<tr><td colspan="4">No trucks planned this date.</td></tr>')
+    + '</tbody></table></div>';
+  const sel=document.getElementById('sendDateSel');
+  if(sel) sel.addEventListener('change', function(ev){ sendDate=ev.target.value; renderSend(); });
+  el.querySelectorAll('.wa-send').forEach(function(b){
+    b.addEventListener('click', function(){
+      const e=day.find(function(x){return x.plate===b.dataset.plate;}); if(!e) return;
+      if(!_sPhoneDigits(e.plate)) return;
+      window.open(_waUrl(e), '_blank');
+      b.classList.add('sent'); b.textContent='Sent ✓';
+    });
+  });
+  const sab=document.getElementById('sendAllBtn');
+  if(sab) sab.addEventListener('click', function(){ _sendAllStart(day.filter(function(e){return _sPhoneDigits(e.plate);})); });
+}
+let _waQ=[], _waI=0;
+function _ensureStepDom(){
+  if(document.getElementById('waStep')) return;
+  const d=document.createElement('div'); d.id='waStep';
+  d.innerHTML='<div class="wa-card"><h3 id="waTitle"></h3><div class="wa-prog" id="waProg"></div>'
+    + '<div class="wa-bar"><i id="waBarI"></i></div><div class="wa-msg" id="waMsg"></div>'
+    + '<div class="wa-actions"><button class="wa-skip" id="waSkip">Skip</button>'
+    + '<button class="wa-open" id="waOpen">Open WhatsApp ▸</button>'
+    + '<button class="wa-next" id="waNext">Next ▸</button>'
+    + '<button class="wa-close" id="waCloseB">Close</button></div></div>';
+  document.body.appendChild(d);
+  d.querySelector('#waOpen').addEventListener('click', function(){ const e=_waQ[_waI]; if(e) window.open(_waUrl(e), '_blank'); });
+  d.querySelector('#waNext').addEventListener('click', _waAdvance);
+  d.querySelector('#waSkip').addEventListener('click', _waAdvance);
+  d.querySelector('#waCloseB').addEventListener('click', _sendAllDone);
+}
+function _waAdvance(){ _waI++; if(_waI>=_waQ.length) _sendAllDone(); else _waRender(); }
+function _waRender(){
+  const e=_waQ[_waI]; if(!e){ _sendAllDone(); return; }
+  document.getElementById('waTitle').textContent = e.plate + '  ·  ' + ((fleetMeta(e.plate)||{}).phone||'');
+  document.getElementById('waProg').textContent = 'Driver '+(_waI+1)+' of '+_waQ.length;
+  document.getElementById('waBarI').style.width = (_waI/_waQ.length*100)+'%';
+  document.getElementById('waMsg').textContent = planMsg(e.plate, sendDate, e);
+}
+function _sendAllStart(list){
+  _waQ=(list||[]).slice(); _waI=0;
+  if(!_waQ.length) return;
+  _ensureStepDom();
+  document.getElementById('waStep').classList.add('on');
+  _waRender();
+}
+function _sendAllDone(){ const s=document.getElementById('waStep'); if(s) s.classList.remove('on'); _waQ=[]; _waI=0; try{ renderSend(); }catch(e){} }
+/* ===== END SEND PLAN ===== */
+
+
 // ============================================================
 // PAGE NAVIGATION (top-level)
 // ============================================================
@@ -6788,6 +6937,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'truckstatus') { renderDinStatus(); }
     if (t === 'weigh') { renderDinWeigh(); }
     if (t === 'pva') { renderDinPVA(); }
+    if (t === 'send') { renderSend(); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }
