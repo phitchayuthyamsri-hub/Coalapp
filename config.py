@@ -63,8 +63,10 @@ def gps_providers_config():
         },
         "adsun": {
             "enabled": _truthy(os.environ.get("GPS_ADSUN_ENABLED")),
-            "base_url": os.environ.get("GPS_ADSUN_BASE_URL", "").rstrip("/"),
-            "token": os.environ.get("GPS_ADSUN_TOKEN", ""),
-            "plates": _plates(os.environ.get("GPS_ADSUN_PLATES")),
+            "base_url": os.environ.get("GPS_ADSUN_BASE_URL", "https://shareapi.adsun.vn").rstrip("/"),
+            "username": os.environ.get("GPS_ADSUN_USERNAME", ""),   # ShareAPI account (not the portal login)
+            "password": os.environ.get("GPS_ADSUN_PASSWORD", ""),
+            "auth_mode": os.environ.get("GPS_ADSUN_AUTH_MODE", "basic").strip().lower(),  # basic | query
+            "plates": _plates(os.environ.get("GPS_ADSUN_PLATES")),   # blank = all authorised vehicles
         },
     }

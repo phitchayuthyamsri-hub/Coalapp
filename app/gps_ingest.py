@@ -21,6 +21,7 @@ import json
 import base64
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime
 
 from .models import db, GpsPing, GpsIngestRun
@@ -39,6 +40,7 @@ def _parse_dt(v):
         return v
     s = str(v).strip().replace("T", " ")
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
                 "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y%m%d%H%M%S"):
         try:
             return datetime.strptime(s[:len(fmt) + 4].strip(), fmt)
@@ -63,6 +65,19 @@ def _http_post_json(url, payload, headers=None, timeout=45):
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, data=data, headers=h, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", "replace")
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {"_raw": raw[:2000]}
+
+
+def _http_get_json(url, headers=None, timeout=45):
+    h = {"Accept": "application/json"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, headers=h, method="GET")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8", "replace")
     try:
@@ -135,14 +150,53 @@ def _fetch_tct(cfg):
     return out
 
 
+def _adsun_request(cfg):
+    """Build the Adsun ShareAPI 'GpsInfos' request (url, headers).
+    API 1 returns the latest status of every authorised vehicle in one call.
+    Auth: Basic (recommended) or username/pwd query params (GPS_ADSUN_AUTH_MODE)."""
+    base = cfg["base_url"] + "/Vehicle/GpsInfos"
+    user = cfg.get("username", "")
+    pw = cfg.get("password", "")
+    headers = {}
+    if cfg.get("auth_mode", "basic") == "query":
+        url = base + "?username=" + urllib.parse.quote(user) + "&pwd=" + urllib.parse.quote(pw)
+    else:  # basic (recommended) — credentials in the Authorization header
+        url = base
+        tok = base64.b64encode((user + ":" + pw).encode("utf-8")).decode("ascii")
+        headers["Authorization"] = "Basic " + tok
+    return url, headers
+
+
 def _fetch_adsun(cfg):
-    """Adsun ShareAPI (REST). Placeholder until the ShareAPI docs + credentials
-    arrive; returns [] so a poll is a harmless no-op in the meantime."""
-    if not cfg.get("base_url") or not cfg.get("token"):
-        return []
-    # TODO: implement per Adsun ShareAPI docs — GET history by vehicle + time
-    # range (max 3 days/call, min 5s interval), map plate/time/lat/lng/speed.
-    return []
+    """Adsun ShareAPI API 1 (GpsInfos): latest status of all authorised vehicles."""
+    url, headers = _adsun_request(cfg)
+    data = _http_get_json(url, headers)
+    if not isinstance(data, dict):
+        raise RuntimeError("Adsun: unexpected response (not a JSON object)")
+    rows = data.get("Data")
+    if not isinstance(rows, list):
+        raise RuntimeError("Adsun returned no Data array (keys=%s)" % (list(data.keys()) if isinstance(data, dict) else None))
+    want = set(cfg.get("plates") or [])
+    out = []
+    for v in rows:
+        plate = v.get("Plate")
+        if want and _norm_plate(plate) not in want:
+            continue
+        # Adsun advises discarding positions when Gps is false (low reliability).
+        if v.get("Gps") is False:
+            continue
+        dt = _parse_dt(v.get("TimeUpdate"))
+        lat = _num(v.get("Lat"))
+        lng = _num(v.get("Lng"))
+        if dt is None or lat is None or lng is None:
+            continue
+        out.append({
+            "plate": str(plate).strip(),
+            "dt": dt, "lat": lat, "lng": lng,
+            "speed": _num(v.get("Speed")) or 0.0,
+            "status": ("stopped" if v.get("IsStop") else "moving"),
+        })
+    return out
 
 
 def _tct_vehicles(data):
@@ -175,7 +229,7 @@ def provider_ready(cfg, key):
     if key == "tct":
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key == "adsun":
-        return bool(cfg.get("base_url") and cfg.get("token"))
+        return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     return False
 
 
@@ -263,6 +317,9 @@ def debug_provider(app, key):
         if key == "tct":
             url, body, headers = _tct_request(pcfg)
             data = _http_post_json(url, body, headers)
+        elif key == "adsun":
+            url, headers = _adsun_request(pcfg)
+            data = _http_get_json(url, headers)
         else:
             return {"ok": False, "error": "no debug available for this provider yet"}
     except urllib.error.URLError as e:
@@ -273,9 +330,12 @@ def debug_provider(app, key):
     info = {"ok": True}
     if isinstance(data, dict):
         info["top_keys"] = list(data.keys())
-        info["message_result"] = data.get("MessageResult")
-        info["return_code"] = data.get("ReturnCode")
-        veh = _tct_vehicles(data)
+        info["message_result"] = data.get("MessageResult") or data.get("Description")
+        info["return_code"] = data.get("ReturnCode") if data.get("ReturnCode") is not None else data.get("Status")
+        if key == "adsun":
+            veh = data.get("Data") if isinstance(data.get("Data"), list) else None
+        else:
+            veh = _tct_vehicles(data)
         info["vehicles_count"] = len(veh) if isinstance(veh, list) else None
         if isinstance(veh, list) and veh and isinstance(veh[0], dict):
             info["first_vehicle_keys"] = list(veh[0].keys())[:25]
