@@ -285,6 +285,28 @@ def debug_provider(app, key):
     return info
 
 
+def latest_points(app):
+    """Latest stored position per (plate, source) for api:* sources — for the map."""
+    from sqlalchemy import func
+    sub = (db.session.query(GpsPing.plate, GpsPing.source, func.max(GpsPing.dt).label("mx"))
+           .filter(GpsPing.source.like("api:%"))
+           .group_by(GpsPing.plate, GpsPing.source).subquery())
+    q = (db.session.query(GpsPing)
+         .join(sub, (GpsPing.plate == sub.c.plate) &
+                    (GpsPing.source == sub.c.source) &
+                    (GpsPing.dt == sub.c.mx)))
+    out, seen = [], set()
+    for g in q.all():
+        k = (g.plate, g.source)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({"plate": g.plate, "lat": g.lat, "lng": g.lng,
+                    "dt": g.dt.strftime("%Y-%m-%d %H:%M:%S") if g.dt else None,
+                    "speed": g.speed, "status": g.status, "source": g.source})
+    return out
+
+
 def status_summary(app):
     """Per-provider and per-truck capture status for the /gps-capture page."""
     from sqlalchemy import func

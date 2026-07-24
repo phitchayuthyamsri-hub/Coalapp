@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GPS Capture — TMS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{--bg:#0e1418;--panel:#161e25;--panel2:#1d272f;--ink:#e6edf3;--muted:#8b98a5;--line:#2a343d;--accent:#25D366;--blue:#0071e3;--red:#ff6b6b;--amber:#ffd479}
   *{box-sizing:border-box}
@@ -52,6 +54,9 @@
     Use <b>Pull now</b> to run a one-off capture for testing. Automatic pulls run from a scheduled job on the server.
   </p>
   <div class="cards" id="cards"></div>
+
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured positions (map)</h2>
+  <div id="gpsMap" style="height:440px;border:1px solid var(--line);border-radius:12px;margin-bottom:24px;background:var(--panel2)"></div>
 
   <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured trucks (latest ping)</h2>
   <div id="truckWrap"><div class="empty">Loading…</div></div>
@@ -119,12 +124,33 @@ function truckTable(trucks){
   t.appendChild(tb); wrap.appendChild(t); return wrap;
 }
 
+let _map=null, _layer=null, _fitted=false;
+function loadMap(){
+  if(!window.L) return;   // Leaflet failed to load (offline) — skip the map
+  if(!_map){
+    _map = L.map('gpsMap').setView([16.3, 106.9], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(_map);
+    _layer = L.layerGroup().addTo(_map);
+  }
+  fetch('/api/gps/points').then(r=>r.json()).then(pts=>{
+    _layer.clearLayers(); const ll=[];
+    (pts||[]).forEach(p=>{
+      if(p.lat==null || p.lng==null) return;
+      const m = L.circleMarker([p.lat, p.lng], {radius:6, color:'#25D366', fillColor:'#25D366', fillOpacity:.85, weight:2});
+      m.bindPopup('<b>'+p.plate+'</b><br>'+(p.dt||'')+'<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):''));
+      m.addTo(_layer); ll.push([p.lat, p.lng]);
+    });
+    if(ll.length && !_fitted){ try{ _map.fitBounds(ll, {padding:[30,30], maxZoom:12}); _fitted=true; }catch(e){} }
+  }).catch(()=>{});
+}
+
 function load(){
   fetch('/api/gps/status').then(r=>r.json()).then(d=>{
     const cards = document.getElementById('cards'); cards.innerHTML='';
     (d.providers||[]).forEach(p=> cards.appendChild(providerCard(p)));
     const tw = document.getElementById('truckWrap'); tw.innerHTML=''; tw.appendChild(truckTable(d.trucks||[]));
   }).catch(()=>{ document.getElementById('truckWrap').innerHTML='<div class="empty">Failed to load status.</div>'; });
+  loadMap();
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);

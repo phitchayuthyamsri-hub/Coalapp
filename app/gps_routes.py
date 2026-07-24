@@ -35,6 +35,13 @@ def gps_status():
     return jsonify(gps_ingest.status_summary(current_app._get_current_object()))
 
 
+@bp.get("/api/gps/points")
+@login_required
+def gps_points():
+    _require_admin()
+    return jsonify(gps_ingest.latest_points(current_app._get_current_object()))
+
+
 @bp.post("/api/gps/pull/<provider>")
 @login_required
 def gps_pull(provider):
