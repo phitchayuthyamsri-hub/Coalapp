@@ -37,6 +37,15 @@
   td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
   .empty{color:var(--muted);padding:22px;text-align:center}
   .msg{font-size:12px;color:var(--muted);margin-left:10px}
+  /* blinking red truck markers */
+  .gps-divicon{background:transparent!important;border:0!important}
+  .gps-blip{display:block;width:12px;height:12px;border-radius:50%;background:#ff3b30;
+            box-shadow:0 0 0 0 rgba(255,59,48,.6);animation:gpsPulse 1.3s ease-out infinite}
+  @keyframes gpsPulse{
+    0%  {box-shadow:0 0 0 0 rgba(255,59,48,.6); opacity:1}
+    70% {box-shadow:0 0 0 15px rgba(255,59,48,0); opacity:1}
+    100%{box-shadow:0 0 0 0 rgba(255,59,48,0); opacity:.5}
+  }
 </style>
 </head>
 <body>
@@ -136,7 +145,7 @@ function loadMap(){
     _layer.clearLayers(); const ll=[];
     (pts||[]).forEach(p=>{
       if(p.lat==null || p.lng==null) return;
-      const m = L.circleMarker([p.lat, p.lng], {radius:6, color:'#25D366', fillColor:'#25D366', fillOpacity:.85, weight:2});
+      const m = L.marker([p.lat, p.lng], {icon: L.divIcon({className:'gps-divicon', html:'<span class="gps-blip"></span>', iconSize:[14,14], iconAnchor:[7,7]})});
       m.bindPopup('<b>'+p.plate+'</b><br>'+(p.dt||'')+'<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):''));
       m.addTo(_layer); ll.push([p.lat, p.lng]);
     });
