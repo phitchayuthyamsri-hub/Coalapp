@@ -217,6 +217,49 @@ def run_all(app):
     return results
 
 
+def debug_provider(app, key):
+    """Admin diagnostic: make the raw provider call and summarise the response
+    (top-level keys, MessageResult, vehicle count, first-vehicle field names) so
+    'no authorised vehicles' can be told apart from a response-shape mismatch.
+    Reads nothing sensitive back (credentials are in the request, not the reply).
+    Never raises."""
+    cfg = (app.config.get("_GPS_CFG") or {})
+    pcfg = cfg.get(key) or {}
+    if not provider_ready(pcfg, key):
+        return {"ok": False, "error": "provider not enabled / missing credentials"}
+    try:
+        if key == "tct":
+            url = pcfg["base_url"] + "/gps/tracking"
+            body = {"IsFuel": False}
+            headers = {}
+            if pcfg.get("auth_mode") == "header":
+                headers["CustomerCode"] = pcfg.get("customer_code", "")
+                headers["Key"] = pcfg.get("key", "")
+            else:
+                body["CustomerCode"] = pcfg.get("customer_code", "")
+                body["Key"] = pcfg.get("key", "")
+            data = _http_post_json(url, body, headers)
+        else:
+            return {"ok": False, "error": "no debug available for this provider yet"}
+    except urllib.error.URLError as e:
+        return {"ok": False, "error": "network: " + str(getattr(e, "reason", e))}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": type(e).__name__ + ": " + str(e)}
+
+    info = {"ok": True}
+    if isinstance(data, dict):
+        info["top_keys"] = list(data.keys())
+        info["message_result"] = data.get("MessageResult")
+        veh = data.get("Vehicles")
+        info["vehicles_count"] = len(veh) if isinstance(veh, list) else None
+        if isinstance(veh, list) and veh and isinstance(veh[0], dict):
+            info["first_vehicle_keys"] = list(veh[0].keys())[:25]
+        info["raw_snippet"] = json.dumps(data)[:1200]
+    else:
+        info["raw_snippet"] = str(data)[:1200]
+    return info
+
+
 def status_summary(app):
     """Per-provider and per-truck capture status for the /gps-capture page."""
     from sqlalchemy import func

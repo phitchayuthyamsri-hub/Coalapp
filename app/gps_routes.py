@@ -43,3 +43,12 @@ def gps_pull(provider):
         abort(404)
     res = gps_ingest.run_provider(current_app._get_current_object(), provider)
     return jsonify(res)
+
+
+@bp.post("/api/gps/debug/<provider>")
+@login_required
+def gps_debug(provider):
+    _require_admin()
+    if provider not in _PROVIDERS:
+        abort(404)
+    return jsonify(gps_ingest.debug_provider(current_app._get_current_object(), provider))

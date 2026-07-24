@@ -88,7 +88,20 @@ function providerCard(p){
       setTimeout(load, 600);
     }).catch(()=>{ msg.textContent='Request failed'; btn.disabled=false; });
   });
-  const line = el('div'); line.appendChild(btn); line.appendChild(msg); c.appendChild(line);
+  const dbg = el('button','pull','Diagnose');
+  dbg.style.background = '#4a5560'; dbg.style.marginLeft = '8px';
+  dbg.disabled = !(p.enabled && p.ready);
+  if(dbg.disabled) dbg.title = 'Enable the provider with credentials first';
+  const pre = el('pre');
+  pre.style.cssText = 'white-space:pre-wrap;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;margin-top:10px;max-height:230px;overflow:auto;display:none;color:var(--ink)';
+  dbg.addEventListener('click', ()=>{
+    pre.style.display='block'; pre.textContent='Running diagnostic…';
+    fetch('/api/gps/debug/'+p.key,{method:'POST'}).then(r=>r.json()).then(d=>{
+      pre.textContent = JSON.stringify(d, null, 2);
+    }).catch(()=>{ pre.textContent='Diagnostic failed'; });
+  });
+  const line = el('div'); line.appendChild(btn); line.appendChild(msg); line.appendChild(dbg);
+  c.appendChild(line); c.appendChild(pre);
   return c;
 }
 
