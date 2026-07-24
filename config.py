@@ -54,11 +54,12 @@ def gps_providers_config():
         "tct": {
             "enabled": _truthy(os.environ.get("GPS_TCT_ENABLED")),
             "base_url": os.environ.get("GPS_TCT_BASE_URL", "http://webapi.dientutct.com/apiwba").rstrip("/"),
-            "customer_code": os.environ.get("GPS_TCT_CUSTOMER_CODE", ""),               # from TCT "License" section
-            "key": os.environ.get("GPS_TCT_KEY", ""),                                   # secret API key from TCT
-            "auth_mode": os.environ.get("GPS_TCT_AUTH_MODE", "body").strip().lower(),   # body | header
-            "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),         # LocalTime (UTC+7) | UTCTime
-            "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                         # blank = all authorised vehicles
+            # TCT uses HTTP Basic Auth. New names preferred; fall back to the old ones.
+            "username": os.environ.get("GPS_TCT_USERNAME") or os.environ.get("GPS_TCT_CUSTOMER_CODE", ""),
+            "password": os.environ.get("GPS_TCT_PASSWORD") or os.environ.get("GPS_TCT_KEY", ""),
+            "auth_mode": os.environ.get("GPS_TCT_AUTH_MODE", "basic").strip().lower(),   # basic (confirmed) | body | header
+            "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),          # LocalTime (UTC+7) | UTCTime
+            "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                          # blank = all authorised vehicles
         },
         "adsun": {
             "enabled": _truthy(os.environ.get("GPS_ADSUN_ENABLED")),

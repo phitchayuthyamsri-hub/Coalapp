@@ -75,26 +75,32 @@ def _http_post_json(url, payload, headers=None, timeout=45):
 # Each returns a list of dicts: {plate, dt(datetime), lat, lng, speed, status}
 # May raise on hard failure; the runner records the error on the run row.
 
-def _fetch_tct(cfg):
-    """TCT 'Online data': current position of every vehicle the Key is authorised
-    for. TCT grants access via a CustomerCode + Key (per their "License" section).
-    Whether they travel in the body or as headers is configurable:
-      GPS_TCT_AUTH_MODE = body (default) | header
-    Adjust if the first pull returns Access Denied — no code change needed.
-    """
+def _tct_request(cfg):
+    """Build the TCT /gps/tracking request (url, body, headers).
+    Confirmed via TCT's Postman collection: the API uses HTTP Basic Auth
+    (GPS_TCT_AUTH_MODE=basic, the default). `body`/`header` modes are kept only
+    as fallbacks for experimentation."""
     url = cfg["base_url"] + "/gps/tracking"
     body = {"IsFuel": False}
     headers = {}
-    cc = cfg.get("customer_code", "")
-    api_key = cfg.get("key", "")
-    mode = cfg.get("auth_mode", "body")
+    user = cfg.get("username", "")
+    pw = cfg.get("password", "")
+    mode = cfg.get("auth_mode", "basic")
     if mode == "header":
-        headers["CustomerCode"] = cc
-        headers["Key"] = api_key
-    else:  # body (default): CustomerCode + Key travel in the request body
-        body["CustomerCode"] = cc
-        body["Key"] = api_key
+        headers["CustomerCode"] = user
+        headers["Key"] = pw
+    elif mode == "body":
+        body["CustomerCode"] = user
+        body["Key"] = pw
+    else:  # basic (default, confirmed) — HTTP Basic Authentication
+        tok = base64.b64encode((user + ":" + pw).encode("utf-8")).decode("ascii")
+        headers["Authorization"] = "Basic " + tok
+    return url, body, headers
 
+
+def _fetch_tct(cfg):
+    """TCT 'Online data': current position of every authorised vehicle."""
+    url, body, headers = _tct_request(cfg)
     data = _http_post_json(url, body, headers)
     if not isinstance(data, dict):
         raise RuntimeError("TCT: unexpected response (not a JSON object)")
@@ -167,7 +173,7 @@ def provider_ready(cfg, key):
     if not cfg.get("enabled"):
         return False
     if key == "tct":
-        return bool(cfg.get("base_url") and cfg.get("customer_code") and cfg.get("key"))
+        return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key == "adsun":
         return bool(cfg.get("base_url") and cfg.get("token"))
     return False
@@ -255,15 +261,7 @@ def debug_provider(app, key):
         return {"ok": False, "error": "provider not enabled / missing credentials"}
     try:
         if key == "tct":
-            url = pcfg["base_url"] + "/gps/tracking"
-            body = {"IsFuel": False}
-            headers = {}
-            if pcfg.get("auth_mode") == "header":
-                headers["CustomerCode"] = pcfg.get("customer_code", "")
-                headers["Key"] = pcfg.get("key", "")
-            else:
-                body["CustomerCode"] = pcfg.get("customer_code", "")
-                body["Key"] = pcfg.get("key", "")
+            url, body, headers = _tct_request(pcfg)
             data = _http_post_json(url, body, headers)
         else:
             return {"ok": False, "error": "no debug available for this provider yet"}
