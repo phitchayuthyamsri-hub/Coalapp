@@ -30,6 +30,16 @@ def register():
     return render_template("register.html")
 
 
+def _safe_next(target):
+    """Only allow same-site relative paths (e.g. "/gps-capture"); reject absolute
+    URLs and protocol-relative "//host" to avoid open-redirects."""
+    if not target:
+        return None
+    if target.startswith("/") and not target.startswith("//") and "\\" not in target:
+        return target
+    return None
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -42,9 +52,12 @@ def login():
             login_user(u)
             session.permanent = True
             activity.record_login(u, request)
-            return redirect(url_for("views.dashboard"))
+            target = _safe_next(session.pop("_login_next", None))
+            return redirect(target or url_for("views.dashboard"))
         flash("Invalid username or password.")
         return redirect(url_for("auth.login"))
+    # GET: remember where @login_required was sending the user, for after login.
+    session["_login_next"] = _safe_next(request.args.get("next"))
     return render_template("login.html")
 
 
