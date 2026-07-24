@@ -37,14 +37,24 @@
   td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
   .empty{color:var(--muted);padding:22px;text-align:center}
   .msg{font-size:12px;color:var(--muted);margin-left:10px}
-  /* blinking purple truck markers */
+  /* blinking truck markers, coloured by provider */
   .gps-divicon{background:transparent!important;border:0!important}
-  .gps-blip{display:block;width:12px;height:12px;border-radius:50%;background:#a855f7;
-            box-shadow:0 0 0 0 rgba(168,85,247,.6);animation:gpsPulse 1.3s ease-out infinite}
+  .gps-blip{display:block;width:12px;height:12px;border-radius:50%;
+            background:#a855f7;box-shadow:0 0 0 0 rgba(168,85,247,.6);
+            animation:gpsPulse 1.3s ease-out infinite}
+  /* TCT = red */
+  .gps-blip.tct{background:#ff3b30;box-shadow:0 0 0 0 rgba(255,59,48,.6);animation:gpsPulseRed 1.3s ease-out infinite}
+  /* Adsun = purple */
+  .gps-blip.adsun{background:#a855f7;box-shadow:0 0 0 0 rgba(168,85,247,.6);animation:gpsPulse 1.3s ease-out infinite}
   @keyframes gpsPulse{
     0%  {box-shadow:0 0 0 0 rgba(168,85,247,.6); opacity:1}
     70% {box-shadow:0 0 0 15px rgba(168,85,247,0); opacity:1}
     100%{box-shadow:0 0 0 0 rgba(168,85,247,0); opacity:.5}
+  }
+  @keyframes gpsPulseRed{
+    0%  {box-shadow:0 0 0 0 rgba(255,59,48,.6); opacity:1}
+    70% {box-shadow:0 0 0 15px rgba(255,59,48,0); opacity:1}
+    100%{box-shadow:0 0 0 0 rgba(255,59,48,0); opacity:.5}
   }
 </style>
 </head>
@@ -64,7 +74,12 @@
   </p>
   <div class="cards" id="cards"></div>
 
-  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured positions (map)</h2>
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured positions (map)
+    <span style="float:right;font-size:12px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff3b30;margin:0 4px 0 12px;vertical-align:middle"></span>TCT
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;margin:0 4px 0 12px;vertical-align:middle"></span>Adsun
+    </span>
+  </h2>
   <div id="gpsMap" style="height:440px;border:1px solid var(--line);border-radius:12px;margin-bottom:24px;background:var(--panel2)"></div>
 
   <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured trucks (latest ping)</h2>
@@ -145,7 +160,8 @@ function loadMap(){
     _layer.clearLayers(); const ll=[];
     (pts||[]).forEach(p=>{
       if(p.lat==null || p.lng==null) return;
-      const m = L.marker([p.lat, p.lng], {icon: L.divIcon({className:'gps-divicon', html:'<span class="gps-blip"></span>', iconSize:[14,14], iconAnchor:[7,7]})});
+      const prov = (p.source||'').indexOf('adsun')>=0 ? 'adsun' : ((p.source||'').indexOf('tct')>=0 ? 'tct' : '');
+      const m = L.marker([p.lat, p.lng], {icon: L.divIcon({className:'gps-divicon', html:'<span class="gps-blip '+prov+'"></span>', iconSize:[14,14], iconAnchor:[7,7]})});
       m.bindPopup('<b>'+p.plate+'</b><br>'+(p.dt||'')+'<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):''));
       m.addTo(_layer); ll.push([p.lat, p.lng]);
     });
