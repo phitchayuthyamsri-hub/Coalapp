@@ -76,26 +76,24 @@ def _http_post_json(url, payload, headers=None, timeout=45):
 # May raise on hard failure; the runner records the error on the run row.
 
 def _fetch_tct(cfg):
-    """TCT 'Online data': current position of every vehicle on the account.
-
-    The tracking request only documents `IsFuel`, and the credentials/auth are
-    granted-account specific, so how they travel is configurable:
-      GPS_TCT_AUTH_MODE = body (default) | header | basic
-    Adjust once TCT confirms — no code change needed.
+    """TCT 'Online data': current position of every vehicle the Key is authorised
+    for. TCT grants access via a CustomerCode + Key (per their "License" section).
+    Whether they travel in the body or as headers is configurable:
+      GPS_TCT_AUTH_MODE = body (default) | header
+    Adjust if the first pull returns Access Denied — no code change needed.
     """
     url = cfg["base_url"] + "/gps/tracking"
     body = {"IsFuel": False}
     headers = {}
+    cc = cfg.get("customer_code", "")
+    api_key = cfg.get("key", "")
     mode = cfg.get("auth_mode", "body")
-    if mode == "basic":
-        tok = base64.b64encode((cfg["username"] + ":" + cfg["password"]).encode()).decode()
-        headers["Authorization"] = "Basic " + tok
-    elif mode == "header":
-        headers["UserName"] = cfg["username"]
-        headers["Password"] = cfg["password"]
-    else:  # body (best guess for field names; easy to change here)
-        body["UserName"] = cfg["username"]
-        body["Password"] = cfg["password"]
+    if mode == "header":
+        headers["CustomerCode"] = cc
+        headers["Key"] = api_key
+    else:  # body (default): CustomerCode + Key travel in the request body
+        body["CustomerCode"] = cc
+        body["Key"] = api_key
 
     data = _http_post_json(url, body, headers)
     msg = str(data.get("MessageResult", "")) if isinstance(data, dict) else ""
@@ -143,7 +141,7 @@ def provider_ready(cfg, key):
     if not cfg.get("enabled"):
         return False
     if key == "tct":
-        return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
+        return bool(cfg.get("base_url") and cfg.get("customer_code") and cfg.get("key"))
     if key == "adsun":
         return bool(cfg.get("base_url") and cfg.get("token"))
     return False

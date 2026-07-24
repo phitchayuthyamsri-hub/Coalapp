@@ -54,11 +54,11 @@ def gps_providers_config():
         "tct": {
             "enabled": _truthy(os.environ.get("GPS_TCT_ENABLED")),
             "base_url": os.environ.get("GPS_TCT_BASE_URL", "http://webapi.dientutct.com/apiwba").rstrip("/"),
-            "username": os.environ.get("GPS_TCT_USERNAME", ""),
-            "password": os.environ.get("GPS_TCT_PASSWORD", ""),
-            "auth_mode": os.environ.get("GPS_TCT_AUTH_MODE", "body").strip().lower(),  # body | header | basic
-            "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),        # LocalTime (UTC+7) | UTCTime
-            "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                        # blank = all vehicles on account
+            "customer_code": os.environ.get("GPS_TCT_CUSTOMER_CODE", ""),               # from TCT "License" section
+            "key": os.environ.get("GPS_TCT_KEY", ""),                                   # secret API key from TCT
+            "auth_mode": os.environ.get("GPS_TCT_AUTH_MODE", "body").strip().lower(),   # body | header
+            "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),         # LocalTime (UTC+7) | UTCTime
+            "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                         # blank = all authorised vehicles
         },
         "adsun": {
             "enabled": _truthy(os.environ.get("GPS_ADSUN_ENABLED")),
