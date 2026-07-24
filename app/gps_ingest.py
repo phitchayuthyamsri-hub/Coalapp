@@ -96,11 +96,18 @@ def _fetch_tct(cfg):
         body["Key"] = api_key
 
     data = _http_post_json(url, body, headers)
-    msg = str(data.get("MessageResult", "")) if isinstance(data, dict) else ""
-    if "Access Denied" in msg:
-        raise RuntimeError("TCT returned Access Denied — check credentials / GPS_TCT_AUTH_MODE")
+    if not isinstance(data, dict):
+        raise RuntimeError("TCT: unexpected response (not a JSON object)")
+    if "Access Denied" in str(data.get("MessageResult", "")):
+        raise RuntimeError("TCT Access Denied — check CustomerCode/Key or GPS_TCT_AUTH_MODE")
 
-    vehicles = (data or {}).get("Vehicles") or []
+    vehicles = _tct_vehicles(data)
+    if vehicles is None:
+        rc = data.get("ReturnCode")
+        raise RuntimeError(
+            "TCT returned no vehicle list (ReturnCode=%s, ObjectReturn=%s). "
+            "Ask TCT what ReturnCode %s means and confirm the Key's authorised vehicles."
+            % (rc, type(data.get("ObjectReturn")).__name__, rc))
     tsf = cfg.get("timestamp_field", "LocalTime")
     want = set(cfg.get("plates") or [])
     out = []
@@ -130,6 +137,25 @@ def _fetch_adsun(cfg):
     # TODO: implement per Adsun ShareAPI docs — GET history by vehicle + time
     # range (max 3 days/call, min 5s interval), map plate/time/lat/lng/speed.
     return []
+
+
+def _tct_vehicles(data):
+    """Locate the vehicle list across TCT envelopes. Their doc shows
+    {MessageResult, Vehicles:[...]}, but the live API returns
+    {ReturnCode, ObjectReturn:<list|obj|null>}. Returns a list, or None when no
+    list is present (e.g. ObjectReturn is null)."""
+    v = data.get("Vehicles")                       # documented envelope
+    if isinstance(v, list):
+        return v
+    obj = data.get("ObjectReturn")                 # observed envelope
+    if isinstance(obj, list):
+        return obj
+    if isinstance(obj, dict):
+        for k in ("Vehicles", "List", "Data", "Items", "Result"):
+            if isinstance(obj.get(k), list):
+                return obj[k]
+        return [obj]                               # a single vehicle object
+    return None
 
 
 _CONNECTORS = {"tct": _fetch_tct, "adsun": _fetch_adsun}
@@ -250,7 +276,8 @@ def debug_provider(app, key):
     if isinstance(data, dict):
         info["top_keys"] = list(data.keys())
         info["message_result"] = data.get("MessageResult")
-        veh = data.get("Vehicles")
+        info["return_code"] = data.get("ReturnCode")
+        veh = _tct_vehicles(data)
         info["vehicles_count"] = len(veh) if isinstance(veh, list) else None
         if isinstance(veh, list) and veh and isinstance(veh[0], dict):
             info["first_vehicle_keys"] = list(veh[0].keys())[:25]
