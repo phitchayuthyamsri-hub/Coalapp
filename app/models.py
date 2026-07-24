@@ -133,3 +133,15 @@ class ActivityEvent(db.Model):
     ts = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     action = db.Column(db.String(40))   # open_tab | sort | upload | calculate | export | manual_time | language | edit
     detail = db.Column(db.String(300))
+
+
+class GpsIngestRun(db.Model):
+    """One row per GPS ingestion poll (audit trail + status for /gps-capture)."""
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(40), index=True)   # tct | adsun | ...
+    source = db.Column(db.String(120), default="")    # api:tct etc.
+    started = db.Column(db.DateTime, default=datetime.utcnow)
+    finished = db.Column(db.DateTime)
+    fetched = db.Column(db.Integer, default=0)        # rows returned by provider
+    inserted = db.Column(db.Integer, default=0)       # new rows stored (dedup'd)
+    error = db.Column(db.String(500), default="")

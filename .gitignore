@@ -1,0 +1,16 @@
+# Secrets / local config — NEVER commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local database & instance data
+*.db
+instance/
+
+# OS
+.DS_Store
+Thumbs.db

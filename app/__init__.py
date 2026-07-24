@@ -2,7 +2,7 @@ import os
 from flask import Flask
 from flask_login import LoginManager
 
-from config import Config
+from config import Config, gps_providers_config
 from .models import db, User
 
 login_manager = LoginManager()
@@ -18,6 +18,12 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # GPS ingestion config (inert unless a provider is enabled + credentialed).
+    try:
+        app.config["_GPS_CFG"] = gps_providers_config()
+    except Exception:
+        app.config["_GPS_CFG"] = {}
+
     db.init_app(app)
     login_manager.init_app(app)
 
@@ -27,6 +33,13 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(views_bp)
     app.register_blueprint(api_bp)
+
+    # GPS capture routes — isolated; a fault here must never break the main app.
+    try:
+        from .gps_routes import bp as gps_bp
+        app.register_blueprint(gps_bp)
+    except Exception as e:  # pragma: no cover
+        app.logger.warning("GPS routes not loaded: %s", e)
 
     @app.before_request
     def _make_session_permanent():

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPS Capture — TMS</title>
+<style>
+  :root{--bg:#0e1418;--panel:#161e25;--panel2:#1d272f;--ink:#e6edf3;--muted:#8b98a5;--line:#2a343d;--accent:#25D366;--blue:#0071e3;--red:#ff6b6b;--amber:#ffd479}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;font-size:14px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;margin:0}
+  header a{color:#9cd0ff;text-decoration:none;font-size:13px;margin-left:14px}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 20px 60px}
+  .note{color:var(--muted);font-size:12.5px;margin:0 0 16px;line-height:1.5}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h2{margin:0 0 4px;font-size:15px;text-transform:uppercase;letter-spacing:.4px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;margin-left:6px;vertical-align:middle}
+  .pill.on{background:#16351f;color:#7ee2a1}
+  .pill.off{background:#3a2a2a;color:#ffb0b0}
+  .pill.wait{background:#3a341a;color:var(--amber)}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .kv:last-of-type{border-bottom:0}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-weight:600}
+  .err{color:var(--red);font-size:12px;margin-top:8px;white-space:pre-wrap;word-break:break-word}
+  button{border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;color:#fff}
+  button.pull{background:var(--blue);margin-top:12px}
+  button.pull:disabled{background:#4a5560;cursor:not-allowed}
+  button.refresh{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}
+  th{background:var(--panel2);color:var(--ink);font-weight:600}
+  td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .empty{color:var(--muted);padding:22px;text-align:center}
+  .msg{font-size:12px;color:var(--muted);margin-left:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📡 GPS Capture</h1>
+  <div>
+    <button class="refresh" id="refreshBtn">Refresh</button>
+    <a href="/">Home</a><a href="/admin">Admin</a><a href="/logout">Log out</a>
+  </div>
+</header>
+<div class="wrap">
+  <p class="note">
+    Trial data capture — the system pulls positions from each GPS provider's API and stores them here.
+    A provider stays <b>dormant</b> until its credentials are set in the server <code>.env</code> and it is enabled.
+    Use <b>Pull now</b> to run a one-off capture for testing. Automatic pulls run from a scheduled job on the server.
+  </p>
+  <div class="cards" id="cards"></div>
+
+  <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured trucks (latest ping)</h2>
+  <div id="truckWrap"><div class="empty">Loading…</div></div>
+</div>
+
+<script>
+const PROV_LABEL = { tct: "TCT", adsun: "Adsun" };
+
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e; }
+
+function providerCard(p){
+  const c = el('div','card');
+  let pill = '<span class="pill off">disabled</span>';
+  if(p.enabled && p.ready) pill = '<span class="pill on">active</span>';
+  else if(p.enabled && !p.ready) pill = '<span class="pill wait">enabled · no credentials</span>';
+  else if(!p.enabled) pill = '<span class="pill off">off</span>';
+  c.appendChild(el('h2', null, (PROV_LABEL[p.key]||p.key) + pill));
+  const rows = [
+    ['Trial plates', (p.plates && p.plates.length) ? p.plates.join(', ') : 'all on account'],
+    ['Total pings stored', (p.total_pings||0).toLocaleString()],
+    ['Last pull', p.last_run || '—'],
+    ['Last pull result', (p.last_run ? ((p.last_fetched||0)+' fetched · '+(p.last_inserted||0)+' new') : '—')],
+  ];
+  rows.forEach(([k,v])=>{ const r=el('div','kv'); r.appendChild(el('span','k',k)); r.appendChild(el('span','v',v)); c.appendChild(r); });
+  if(p.last_error){ c.appendChild(el('div','err','⚠ '+p.last_error)); }
+  const btn = el('button','pull', 'Pull now');
+  btn.disabled = !(p.enabled && p.ready);
+  if(btn.disabled) btn.title = 'Set credentials in .env and enable this provider first';
+  const msg = el('span','msg','');
+  btn.addEventListener('click', ()=>{
+    btn.disabled=true; msg.textContent='Pulling…';
+    fetch('/api/gps/pull/'+p.key,{method:'POST'}).then(r=>r.json()).then(res=>{
+      msg.textContent = res.error ? ('Error: '+res.error) : ((res.fetched||0)+' fetched · '+(res.inserted||0)+' new');
+      setTimeout(load, 600);
+    }).catch(()=>{ msg.textContent='Request failed'; btn.disabled=false; });
+  });
+  const line = el('div'); line.appendChild(btn); line.appendChild(msg); c.appendChild(line);
+  return c;
+}
+
+function truckTable(trucks){
+  if(!trucks.length) return el('div','empty','No pings captured yet. Configure a provider and press Pull now.');
+  const wrap = el('div'); wrap.style.overflow='auto';
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th>Truck</th><th>Source</th><th>Last ping</th><th>Pings</th></tr></thead>';
+  const tb = el('tbody');
+  trucks.forEach(r=>{
+    const tr = el('tr');
+    tr.innerHTML = '<td class="mono">'+r.plate+'</td><td>'+r.source+'</td><td class="mono">'+(r.last||'—')+'</td><td>'+(r.count||0).toLocaleString()+'</td>';
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); wrap.appendChild(t); return wrap;
+}
+
+function load(){
+  fetch('/api/gps/status').then(r=>r.json()).then(d=>{
+    const cards = document.getElementById('cards'); cards.innerHTML='';
+    (d.providers||[]).forEach(p=> cards.appendChild(providerCard(p)));
+    const tw = document.getElementById('truckWrap'); tw.innerHTML=''; tw.appendChild(truckTable(d.trucks||[]));
+  }).catch(()=>{ document.getElementById('truckWrap').innerHTML='<div class="empty">Failed to load status.</div>'; });
+}
+
+document.getElementById('refreshBtn').addEventListener('click', load);
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
