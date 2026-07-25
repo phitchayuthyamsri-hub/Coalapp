@@ -22,9 +22,13 @@ import base64
 import urllib.request
 import urllib.error
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .models import db, GpsPing, GpsIngestRun
+
+# Operation timezone (Indochina, UTC+7). Server stores run times in UTC; the page
+# shows them in local time so they match the provider ping times (already UTC+7).
+_TZ_OFFSET = timedelta(hours=7)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -383,7 +387,7 @@ def status_summary(app):
             "ready": provider_ready(pcfg, key),
             "plates": pcfg.get("plates") or [],
             "total_pings": total,
-            "last_run": last.finished.strftime("%Y-%m-%d %H:%M") if last and last.finished else None,
+            "last_run": (last.finished + _TZ_OFFSET).strftime("%Y-%m-%d %H:%M") if last and last.finished else None,
             "last_fetched": last.fetched if last else None,
             "last_inserted": last.inserted if last else None,
             "last_error": (last.error if last else "") or "",
