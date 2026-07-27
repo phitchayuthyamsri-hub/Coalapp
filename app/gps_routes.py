@@ -6,7 +6,9 @@ Web routes for GPS capture (admin only):
 
 All routes are admin-gated and side-effect-free until a provider is configured.
 """
-from flask import Blueprint, render_template, jsonify, abort, current_app
+from datetime import datetime
+
+from flask import Blueprint, render_template, jsonify, abort, current_app, request
 from flask_login import login_required, current_user
 
 from . import gps_ingest
@@ -14,6 +16,18 @@ from . import gps_ingest
 bp = Blueprint("gps", __name__)
 
 _PROVIDERS = ("tct", "adsun")
+
+
+def _parse_arg_dt(v):
+    if not v:
+        return None
+    s = str(v).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            pass
+    return None
 
 
 def _require_admin():
@@ -59,3 +73,18 @@ def gps_debug(provider):
     if provider not in _PROVIDERS:
         abort(404)
     return jsonify(gps_ingest.debug_provider(current_app._get_current_object(), provider))
+
+
+@bp.get("/api/gps/trail")
+@login_required
+def gps_trail():
+    _require_admin()
+    plate = (request.args.get("plate") or "").strip()
+    source = (request.args.get("source") or "").strip()
+    f = _parse_arg_dt(request.args.get("from"))
+    t = _parse_arg_dt(request.args.get("to"))
+    if not plate or not f or not t:
+        return jsonify(ok=False, error="plate, from and to are required"), 400
+    if t <= f:
+        return jsonify(ok=False, error="'to' must be after 'from'"), 400
+    return jsonify(gps_ingest.fetch_trail(current_app._get_current_object(), source, plate, f, t))

@@ -81,6 +81,15 @@
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;margin:0 4px 0 12px;vertical-align:middle"></span>Adsun
     </span>
   </h2>
+  <div id="trailBar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:12.5px;color:var(--muted)">
+    <b style="color:var(--ink)">Trail:</b>
+    <select id="trailTruck" style="min-width:200px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12.5px"></select>
+    From <input type="datetime-local" id="trailFrom" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12.5px;color-scheme:dark">
+    To <input type="datetime-local" id="trailTo" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12.5px;color-scheme:dark">
+    <button id="trailBtn" style="background:#0071e3;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer">Load trail</button>
+    <button id="trailClear" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:12.5px;cursor:pointer">Clear</button>
+    <span id="trailMsg"></span>
+  </div>
   <div id="gpsMap" style="height:440px;border:1px solid var(--line);border-radius:12px;margin-bottom:24px;background:var(--panel2)"></div>
 
   <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Captured trucks (latest ping)</h2>
@@ -149,14 +158,17 @@ function truckTable(trucks){
   t.appendChild(tb); wrap.appendChild(t); return wrap;
 }
 
-let _map=null, _layer=null, _fitted=false;
+let _map=null, _layer=null, _trailLayer=null, _fitted=false, _trailWired=false;
+function _ensureMap(){
+  if(_map || !window.L) return;
+  _map = L.map('gpsMap').setView([16.3, 106.9], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(_map);
+  _layer = L.layerGroup().addTo(_map);
+  _trailLayer = L.layerGroup().addTo(_map);
+}
 function loadMap(){
   if(!window.L) return;   // Leaflet failed to load (offline) — skip the map
-  if(!_map){
-    _map = L.map('gpsMap').setView([16.3, 106.9], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(_map);
-    _layer = L.layerGroup().addTo(_map);
-  }
+  _ensureMap();
   fetch('/api/gps/points').then(r=>r.json()).then(pts=>{
     _layer.clearLayers(); const ll=[];
     (pts||[]).forEach(p=>{
@@ -170,13 +182,56 @@ function loadMap(){
   }).catch(()=>{});
 }
 
+function _pad2(n){ return (n<10?'0':'')+n; }
+function _localInput(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(d.getDate())+'T'+_pad2(d.getHours())+':'+_pad2(d.getMinutes()); }
+function populateTrailTrucks(trucks){
+  const sel=document.getElementById('trailTruck'); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const prov=(t.source||'').indexOf('adsun')>=0?'Adsun':'TCT'; return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
+  if(cur) sel.value=cur;
+}
+function drawTrail(pts, plate){
+  _ensureMap(); if(!_trailLayer) return;
+  _trailLayer.clearLayers();
+  const ll=(pts||[]).filter(function(p){return p.lat!=null&&p.lng!=null;}).map(function(p){return [p.lat,p.lng];});
+  if(!ll.length) return;
+  L.polyline(ll, {color:'#0071e3', weight:3, opacity:.85}).addTo(_trailLayer);
+  const s=pts[0], e=pts[pts.length-1];
+  L.circleMarker(ll[0], {radius:6,color:'#1f7a4d',fillColor:'#1f7a4d',fillOpacity:1,weight:2}).bindPopup('<b>'+plate+'</b><br>Start '+(s.dt||'')).addTo(_trailLayer);
+  L.circleMarker(ll[ll.length-1], {radius:6,color:'#c4231f',fillColor:'#c4231f',fillOpacity:1,weight:2}).bindPopup('<b>'+plate+'</b><br>End '+(e.dt||'')).addTo(_trailLayer);
+  try{ _map.fitBounds(ll, {padding:[30,30]}); }catch(err){}
+}
+function wireTrail(){
+  if(_trailWired) return; _trailWired=true;
+  const now=new Date(), yest=new Date(now.getTime()-24*3600*1000);
+  const f=document.getElementById('trailFrom'), t=document.getElementById('trailTo'), msg=document.getElementById('trailMsg');
+  if(f && !f.value) f.value=_localInput(yest);
+  if(t && !t.value) t.value=_localInput(now);
+  const btn=document.getElementById('trailBtn'), clr=document.getElementById('trailClear');
+  if(btn) btn.addEventListener('click', function(){
+    const sel=document.getElementById('trailTruck'); if(!sel || !sel.value){ msg.textContent='Pick a truck'; return; }
+    const parts=sel.value.split('|'); const plate=parts[0], source=parts[1]||'';
+    if(!f.value || !t.value){ msg.textContent='Set From and To'; return; }
+    msg.textContent='Loading trail…';
+    const q='?plate='+encodeURIComponent(plate)+'&source='+encodeURIComponent(source)+'&from='+encodeURIComponent(f.value)+'&to='+encodeURIComponent(t.value);
+    fetch('/api/gps/trail'+q).then(r=>r.json()).then(function(res){
+      if(!res || !res.ok){ msg.textContent='Error: '+((res&&res.error)||'failed'); return; }
+      drawTrail(res.points||[], plate);
+      msg.textContent=res.count+' points';
+    }).catch(function(){ msg.textContent='Request failed'; });
+  });
+  if(clr) clr.addEventListener('click', function(){ if(_trailLayer) _trailLayer.clearLayers(); if(msg) msg.textContent=''; });
+}
+
 function load(){
   fetch('/api/gps/status').then(r=>r.json()).then(d=>{
     const cards = document.getElementById('cards'); cards.innerHTML='';
     (d.providers||[]).forEach(p=> cards.appendChild(providerCard(p)));
     const tw = document.getElementById('truckWrap'); tw.innerHTML=''; tw.appendChild(truckTable(d.trucks||[]));
+    populateTrailTrucks(d.trucks||[]);
   }).catch(()=>{ document.getElementById('truckWrap').innerHTML='<div class="empty">Failed to load status.</div>'; });
   loadMap();
+  wireTrail();
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);

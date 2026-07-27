@@ -371,6 +371,72 @@ def latest_points(app):
     return out
 
 
+def _basic_headers(user, pw):
+    tok = base64.b64encode((user + ":" + pw).encode("utf-8")).decode("ascii")
+    return {"Authorization": "Basic " + tok}
+
+
+def _trail_tct(pcfg, plate, begin, end):
+    """TCT route history (POST /gps/route). Max 24h per call -> page in windows."""
+    url = pcfg["base_url"] + "/gps/route"
+    headers = _basic_headers(pcfg.get("username", ""), pcfg.get("password", ""))
+    pts, cur, guard = [], begin, 0
+    while cur < end and guard < 40:
+        guard += 1
+        ce = min(cur + timedelta(hours=24), end)
+        body = {"vehiclePlate": plate,
+                "fromDate": cur.strftime("%Y-%m-%d %H:%M:%S"),
+                "toDate": ce.strftime("%Y-%m-%d %H:%M:%S")}
+        data = _http_post_json(url, body, headers)
+        rows = data.get("Routes") if isinstance(data, dict) else None
+        if not isinstance(rows, list) and isinstance(data, dict):
+            rows = data.get("ObjectReturn") if isinstance(data.get("ObjectReturn"), list) else []
+        for r in (rows or []):
+            dt = _parse_dt(r.get("LocalTime") or r.get("UTCTime"))
+            lat = _num(r.get("Latitude")); lng = _num(r.get("Longitude"))
+            if dt and lat is not None and lng is not None:
+                pts.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
+        cur = ce
+    pts.sort(key=lambda p: p["dt"])
+    return pts
+
+
+def _trail_adsun(pcfg, plate, begin, end):
+    """Adsun trip history (GET /Vehicle/GpsHistoryV3)."""
+    q = ("?licensePlate=" + urllib.parse.quote(plate)
+         + "&beginTime=" + urllib.parse.quote(begin.strftime("%Y-%m-%d %H:%M:%S"))
+         + "&endTime=" + urllib.parse.quote(end.strftime("%Y-%m-%d %H:%M:%S")))
+    headers = _basic_headers(pcfg.get("username", ""), pcfg.get("password", ""))
+    data = _http_get_json(pcfg["base_url"] + "/Vehicle/GpsHistoryV3" + q, headers)
+    rows = data.get("Data") if isinstance(data, dict) and isinstance(data.get("Data"), list) else []
+    pts = []
+    for r in rows:
+        dt = _parse_dt(r.get("UpdateTime"))
+        lat = _num(r.get("Lat")); lng = _num(r.get("Lng"))
+        if dt and lat is not None and lng is not None:
+            pts.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
+    pts.sort(key=lambda p: p["dt"])
+    return pts
+
+
+def fetch_trail(app, source, plate, begin, end):
+    """On-demand breadcrumb trail for one truck over a time range (not stored)."""
+    cfg = (app.config.get("_GPS_CFG") or {})
+    key = "adsun" if "adsun" in (source or "") else ("tct" if "tct" in (source or "") else None)
+    if not key:
+        return {"ok": False, "error": "unknown source"}
+    pcfg = cfg.get(key) or {}
+    if not provider_ready(pcfg, key):
+        return {"ok": False, "error": "provider not enabled / missing credentials"}
+    try:
+        pts = _trail_tct(pcfg, plate, begin, end) if key == "tct" else _trail_adsun(pcfg, plate, begin, end)
+        return {"ok": True, "plate": plate, "source": source, "count": len(pts), "points": pts}
+    except urllib.error.URLError as e:
+        return {"ok": False, "error": "network: " + str(getattr(e, "reason", e))}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": type(e).__name__ + ": " + str(e)}
+
+
 def status_summary(app):
     """Per-provider and per-truck capture status for the /gps-capture page."""
     from sqlalchemy import func
