@@ -2247,6 +2247,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <button data-page="truckstatus">Truck Status</button>
   <button data-page="pva">Plan vs Actual</button>
   <button data-page="send">📲 Send Plan</button>
+  <button data-page="vlist">&#9989; Validated List</button>
   <button data-page="subfleet">Subcontractor fleet status</button>
   <div class="nav-group" id="navDataInput">
     <button type="button" class="nav-group-btn" id="navDataInputBtn">Data input ▾</button>
@@ -2568,6 +2569,20 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 </div>
 
 <!-- ============ PAGE: DISTANCES ============ -->
+<!-- ============ PAGE: VALIDATED LIST (WI LA-NT-001) ============ -->
+<div class="page" data-page-panel="vlist">
+  <div class="page-pad">
+    <div class="panel">
+      <h2>Validated List <span style="font-weight:400;text-transform:none;color:var(--muted);font-size:12px">WI LA-NT-001 &sect;4 windows &middot; &sect;5.3 return route</span></h2>
+      <div class="help-text" style="margin-bottom:10px">
+        Compile the list for one plan date: check each truck against the route windows, set the return route per truck, then have the Project Manager approve.
+        Hue is the default return route (48&nbsp;h cycle); QL49 is used only where the truck still reaches the mine in time for the next gate (72&nbsp;h cycle).
+      </div>
+      <div id="vlBody"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ PAGE: SEND PLAN ============ -->
 <div class="page" data-page-panel="send">
   <div class="page-pad">
@@ -6777,6 +6792,161 @@ function refreshAllTables() {
   if (typeof renderTimeline === 'function') renderTimeline();
 }
 
+/* ===== VALIDATED LIST (WI LA-NT-001) =====
+   Section 4 route windows evaluated per truck, and the Section 5.3 return-route
+   selection saved server-side (/api/wi/route) so route + cost is reportable per
+   truck per day. Window definitions come from /api/wi/windows so the rules live
+   in one place (app/wi_rules.py), not duplicated here. */
+let _vlDate = null, _vlDefs = null, _vlSaved = {};
+
+function _vlMins(hhmm){ const p = String(hhmm).split(':'); return (+p[0]) * 60 + (+p[1]); }
+function _vlIn(w, iso){
+  if (!iso || !w) return null;
+  const d = new Date(iso); if (isNaN(d.getTime())) return null;
+  const t = d.getHours() * 60 + d.getMinutes(), s = _vlMins(w.start), e = _vlMins(w.end);
+  return (s <= e) ? (t >= s && t <= e) : (t >= s || t <= e);
+}
+function _vlTick(ok){
+  if (ok === null || ok === undefined) return '<span style="color:var(--muted)">&mdash;</span>';
+  return ok ? '<span style="color:#34c759;font-weight:700">&#10004;</span>'
+            : '<span style="color:#ff6b6b;font-weight:700">&#10008;</span>';
+}
+function _vlPlanRows(){
+  const dp = (STATE.din && STATE.din.plan) ? STATE.din.plan : {};
+  return Object.keys(dp).map(function(k){ return dp[k]; }).filter(function(r){ return r && r.plate && r.date; });
+}
+function _vlInjectCss(){
+  if (document.getElementById('vlCss')) return;
+  const s = document.createElement('style'); s.id = 'vlCss';
+  s.textContent = [
+    '.vl-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}',
+    '.vl-ctrl select,.vl-ctrl input{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:13px}',
+    '.vl-tbl{border-collapse:collapse;width:100%;font-size:13px}',
+    '.vl-tbl th,.vl-tbl td{border:1px solid var(--line);padding:6px 9px;text-align:left;color:var(--ink);white-space:nowrap}',
+    '.vl-tbl th{background:var(--panel2);font-weight:600}',
+    '.vl-tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}',
+    '.vl-tbl select,.vl-tbl input{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12.5px}',
+    '.vl-tbl input.vl-cost{width:78px}',
+    '.vl-btn{background:#0071e3;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}',
+    '.vl-btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}',
+    '.vl-pill{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px}',
+    '.vl-pill.ok{background:#16351f;color:#7ee2a1}',
+    '.vl-pill.no{background:#3a341a;color:#ffd479}'
+  ].join('');
+  document.head.appendChild(s);
+}
+
+function renderVList(){
+  _vlInjectCss();
+  const el = document.getElementById('vlBody'); if (!el) return;
+  const rows = _vlPlanRows();
+  if (!rows.length){
+    el.innerHTML = '<div class="help-text">No dispatch plan loaded. Import a plan on <b>Data input &#9662; &rarr; Dispatch Plan</b> first.</div>';
+    return;
+  }
+  if (!_vlDefs){
+    fetch('/api/wi/windows').then(function(r){ return r.json(); }).then(function(d){ _vlDefs = d; renderVList(); }).catch(function(){
+      el.innerHTML = '<div class="help-text">Could not load the window rules.</div>';
+    });
+    return;
+  }
+  const dates = Array.from(new Set(rows.map(function(r){ return r.date; }))).sort();
+  if (!_vlDate || dates.indexOf(_vlDate) < 0) _vlDate = dates[dates.length - 1];
+  const day = rows.filter(function(r){ return r.date === _vlDate; }).sort(function(a, b){ return a.plate < b.plate ? -1 : 1; });
+
+  const gate = (_vlDefs.windows || []).filter(function(w){ return w.key === _vlDefs.binding_gate; })[0];
+  const routes = _vlDefs.routes || [];
+
+  let pass = 0, fail = 0, set = 0, appr = 0;
+  const body = day.map(function(r){
+    const sv = _vlSaved[r.plate] || {};
+    const ok = _vlIn(gate, r[gate.stage]);
+    if (ok === true) pass++; else if (ok === false) fail++;
+    if (sv.set_by) set++;
+    if (sv.approved_by) appr++;
+    const cur = sv.route || _vlDefs.default_route;
+    const opts = routes.map(function(o){
+      return '<option value="' + o.key + '"' + (o.key === cur ? ' selected' : '') + '>' + o.label + ' (' + o.cycle_hours + 'h)</option>';
+    }).join('');
+    return '<tr>'
+      + '<td class="mono">' + escapeHtml(r.plate) + '</td>'
+      + '<td>' + _dinFmt(r.loadStart) + '</td>'
+      + '<td>' + _dinFmt(r.depMine) + '</td>'
+      + '<td>' + _dinFmt(r[gate.stage]) + '</td>'
+      + '<td style="text-align:center">' + _vlTick(ok) + '</td>'
+      + '<td>' + _dinFmt(r.portArrive) + '</td>'
+      + '<td><select class="vl-route" data-plate="' + escapeHtml(r.plate) + '">' + opts + '</select></td>'
+      + '<td><input class="vl-cost" type="number" step="0.01" placeholder="USD" data-plate="' + escapeHtml(r.plate) + '" value="' + (sv.cost != null ? sv.cost : '') + '"></td>'
+      + '<td style="color:var(--muted)">' + escapeHtml(sv.set_by || '') + '</td>'
+      + '<td style="color:var(--muted)">' + (sv.approved_by ? escapeHtml(sv.approved_by) + ' &middot; ' + escapeHtml(sv.approved_at || '') : '') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const allAppr = day.length > 0 && appr === day.length;
+  el.innerHTML =
+    '<div class="vl-ctrl">'
+    + '<span class="pcl">Plan date</span>'
+    + '<select id="vlDateSel">' + dates.map(function(d){ return '<option value="' + d + '"' + (d === _vlDate ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select>'
+    + '<button class="vl-btn" id="vlApprove">Approve list</button>'
+    + '<button class="vl-btn sec" id="vlExport">Export xlsx</button>'
+    + '<span class="' + (allAppr ? 'vl-pill ok' : 'vl-pill no') + '">' + (allAppr ? 'Approved' : 'Not approved') + '</span>'
+    + '<span class="help-text">' + day.length + ' trucks &middot; gate ' + pass + ' pass / ' + fail + ' fail &middot; ' + set + ' route set</span>'
+    + '<span id="vlMsg" class="help-text"></span>'
+    + '</div>'
+    + '<div style="overflow:auto"><table class="vl-tbl"><thead><tr>'
+    + '<th>Truck</th><th>Load start</th><th>Depart mine</th><th>Arrive border</th>'
+    + '<th title="' + escapeHtml(gate.label) + ' ' + gate.start + '-' + gate.end + '">Gate ' + gate.start + '&ndash;' + gate.end + '</th>'
+    + '<th>Arrive port</th><th>Return route</th><th>Cost</th><th>Set by</th><th>Approved</th>'
+    + '</tr></thead><tbody>' + (body || '<tr><td colspan="10">No trucks planned this date.</td></tr>') + '</tbody></table></div>';
+
+  const msg = document.getElementById('vlMsg');
+  const sel = document.getElementById('vlDateSel');
+  if (sel) sel.addEventListener('change', function(e){ _vlDate = e.target.value; _vlLoadSaved(); });
+
+  function save(plate){
+    const rs = document.querySelector('.vl-route[data-plate="' + plate + '"]');
+    const cs = document.querySelector('.vl-cost[data-plate="' + plate + '"]');
+    if (!rs) return;
+    const payload = { plate: plate, date: _vlDate, route: rs.value, cost: (cs && cs.value !== '') ? cs.value : null };
+    if (msg) msg.textContent = 'Saving…';
+    fetch('/api/wi/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if (res && res.ok){ if (msg) msg.textContent = 'Saved ' + plate; _vlLoadSaved(); }
+        else if (msg) msg.textContent = 'Error: ' + ((res && res.error) || 'failed');
+      })
+      .catch(function(){ if (msg) msg.textContent = 'Save failed'; });
+  }
+  el.querySelectorAll('.vl-route').forEach(function(s){ s.addEventListener('change', function(){ save(s.dataset.plate); }); });
+  el.querySelectorAll('.vl-cost').forEach(function(i){ i.addEventListener('change', function(){ save(i.dataset.plate); }); });
+
+  const ap = document.getElementById('vlApprove');
+  if (ap) ap.addEventListener('click', function(){
+    if (msg) msg.textContent = 'Approving…';
+    fetch('/api/wi/route/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: _vlDate }) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if (res && res.ok){ if (msg) msg.textContent = 'Approved by ' + res.by; _vlLoadSaved(); }
+        else if (msg) msg.textContent = 'Error: ' + ((res && res.error) || 'failed');
+      })
+      .catch(function(){ if (msg) msg.textContent = 'Approve failed'; });
+  });
+  const ex = document.getElementById('vlExport');
+  if (ex) ex.addEventListener('click', function(){ window.open('/api/wi/route/export.xlsx?date=' + encodeURIComponent(_vlDate), '_blank'); });
+}
+
+function _vlLoadSaved(){
+  fetch('/api/wi/route?date=' + encodeURIComponent(_vlDate || ''))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _vlSaved = {};
+      (d.rows || []).forEach(function(x){ _vlSaved[x.plate] = x; });
+      renderVList();
+    })
+    .catch(function(){ renderVList(); });
+}
+/* ===== END VALIDATED LIST ===== */
+
 /* ===== SEND PLAN TO DRIVERS (WhatsApp, free wa.me links) =====
    Per-driver dispatch send, plus a "Send all" stepper that walks through every
    planned driver one tap each. WhatsApp blocks true auto-send from links; the
@@ -6960,6 +7130,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'weigh') { renderDinWeigh(); }
     if (t === 'pva') { renderDinPVA(); }
     if (t === 'send') { renderSend(); }
+    if (t === 'vlist') { _vlLoadSaved(); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }

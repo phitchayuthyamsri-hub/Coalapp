@@ -41,6 +41,13 @@ def create_app(config_class=Config):
     except Exception as e:  # pragma: no cover
         app.logger.warning("GPS routes not loaded: %s", e)
 
+    # WI LA-NT-001 routes (return route + windows) — likewise isolated.
+    try:
+        from .wi_routes import bp as wi_bp
+        app.register_blueprint(wi_bp)
+    except Exception as e:  # pragma: no cover
+        app.logger.warning("WI routes not loaded: %s", e)
+
     @app.before_request
     def _make_session_permanent():
         from flask import session

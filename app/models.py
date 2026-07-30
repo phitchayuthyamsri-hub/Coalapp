@@ -135,6 +135,27 @@ class ActivityEvent(db.Model):
     detail = db.Column(db.String(300))
 
 
+class ReturnRoute(db.Model):
+    """Per-truck, per-day return-route selection and cost (WI LA-NT-001 §5.3).
+
+    One row per truck per plan date — the route changes daily, so this is a
+    record, not an attribute of the truck. Retained so that "route selected and
+    cost incurred per truck" is reportable rather than absorbed.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    plate = db.Column(db.String(40), nullable=False)
+    key = db.Column(db.String(40), index=True, nullable=False)   # normalized plate
+    plan_date = db.Column(db.String(10), index=True, nullable=False)  # YYYY-MM-DD
+    route = db.Column(db.String(10), default="hue")   # hue (default) | ql49
+    cost_variance = db.Column(db.Float)               # only for the non-default route
+    note = db.Column(db.String(300), default="")
+    set_by = db.Column(db.String(80))
+    set_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approved_by = db.Column(db.String(80))
+    approved_at = db.Column(db.DateTime)
+    __table_args__ = (db.UniqueConstraint("key", "plan_date", name="uq_returnroute"),)
+
+
 class GpsIngestRun(db.Model):
     """One row per GPS ingestion poll (audit trail + status for /gps-capture)."""
     id = db.Column(db.Integer, primary_key=True)
