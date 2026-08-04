@@ -18,6 +18,7 @@ docs left unclear are read from config so they can be corrected without a code
 change (see GPS_TCT_AUTH_MODE etc.).
 """
 import json
+import time
 import base64
 import urllib.request
 import urllib.error
@@ -376,47 +377,100 @@ def _basic_headers(user, pw):
     return {"Authorization": "Basic " + tok}
 
 
+# Trail limits: cap the requested range, page it in provider-sized windows, and
+# stop before the web worker's own timeout would kill the request. A window that
+# errors is skipped and reported, so one bad call cannot sink the whole trail.
+# Per-provider range caps. TCT pages 24h windows back-to-back without complaint.
+# Adsun caps a history query at ~3 days AND rate-limits successive calls (the
+# guide says 10s; measured ~30s), so an Adsun trail is a single call per click.
+TRAIL_MAX_DAYS = {"tct": 14, "adsun": 3}
+_TRAIL_DEADLINE_S = 25     # stop paging after this many seconds, return partial
+_TRAIL_CALL_TIMEOUT = 12   # per provider call
+
+
+def _err_str(e):
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code == 429:
+            return "provider rate limit — wait about 30 seconds and try again"
+        return ("HTTP %s %s" % (e.code, e.reason or "")).strip()
+    if isinstance(e, urllib.error.URLError):
+        return str(e.reason or e) or "connection failed"
+    return (type(e).__name__ + ": " + str(e)).strip()
+
+
+def _trail_paged(begin, end, window, fetch_window, gap_s=0):
+    """Walk [begin, end) in `window`-sized chunks calling fetch_window(cur, ce),
+    sleeping gap_s between chunks (provider rate limits). Returns
+    (points, errors, truncated)."""
+    pts, errors = [], []
+    cur, deadline = begin, time.time() + _TRAIL_DEADLINE_S
+    truncated, first = False, True
+    while cur < end:
+        if not first and gap_s:
+            if time.time() + gap_s > deadline:
+                truncated = True
+                break
+            time.sleep(gap_s)
+        if time.time() > deadline:
+            truncated = True
+            break
+        first = False
+        ce = min(cur + window, end)
+        try:
+            pts.extend(fetch_window(cur, ce))
+        except Exception as e:  # noqa: BLE001 - keep going; report per window
+            errors.append(_err_str(e))
+        cur = ce
+    pts.sort(key=lambda p: p["dt"])
+    return pts, errors, truncated
+
+
 def _trail_tct(pcfg, plate, begin, end):
-    """TCT route history (POST /gps/route). Max 24h per call -> page in windows."""
+    """TCT route history (POST /gps/route) — max 24h per call, so page by day."""
     url = pcfg["base_url"] + "/gps/route"
     headers = _basic_headers(pcfg.get("username", ""), pcfg.get("password", ""))
-    pts, cur, guard = [], begin, 0
-    while cur < end and guard < 40:
-        guard += 1
-        ce = min(cur + timedelta(hours=24), end)
+
+    def fetch_window(cur, ce):
         body = {"vehiclePlate": plate,
                 "fromDate": cur.strftime("%Y-%m-%d %H:%M:%S"),
                 "toDate": ce.strftime("%Y-%m-%d %H:%M:%S")}
-        data = _http_post_json(url, body, headers)
+        data = _http_post_json(url, body, headers, timeout=_TRAIL_CALL_TIMEOUT)
         rows = data.get("Routes") if isinstance(data, dict) else None
         if not isinstance(rows, list) and isinstance(data, dict):
             rows = data.get("ObjectReturn") if isinstance(data.get("ObjectReturn"), list) else []
+        out = []
         for r in (rows or []):
             dt = _parse_dt(r.get("LocalTime") or r.get("UTCTime"))
             lat = _num(r.get("Latitude")); lng = _num(r.get("Longitude"))
             if dt and lat is not None and lng is not None:
-                pts.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
-        cur = ce
-    pts.sort(key=lambda p: p["dt"])
-    return pts
+                out.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
+        return out
+
+    return _trail_paged(begin, end, timedelta(hours=24), fetch_window)
 
 
 def _trail_adsun(pcfg, plate, begin, end):
-    """Adsun trip history (GET /Vehicle/GpsHistoryV3)."""
-    q = ("?licensePlate=" + urllib.parse.quote(plate)
-         + "&beginTime=" + urllib.parse.quote(begin.strftime("%Y-%m-%d %H:%M:%S"))
-         + "&endTime=" + urllib.parse.quote(end.strftime("%Y-%m-%d %H:%M:%S")))
+    """Adsun trip history (GET /Vehicle/GpsHistoryV3). One call per trail: the
+    range cap (3 days) guarantees a single window, because Adsun rate-limits
+    successive history calls far harder than documented (~30s, measured)."""
     headers = _basic_headers(pcfg.get("username", ""), pcfg.get("password", ""))
-    data = _http_get_json(pcfg["base_url"] + "/Vehicle/GpsHistoryV3" + q, headers)
-    rows = data.get("Data") if isinstance(data, dict) and isinstance(data.get("Data"), list) else []
-    pts = []
-    for r in rows:
-        dt = _parse_dt(r.get("UpdateTime"))
-        lat = _num(r.get("Lat")); lng = _num(r.get("Lng"))
-        if dt and lat is not None and lng is not None:
-            pts.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
-    pts.sort(key=lambda p: p["dt"])
-    return pts
+
+    def fetch_window(cur, ce):
+        q = ("?licensePlate=" + urllib.parse.quote(plate)
+             + "&beginTime=" + urllib.parse.quote(cur.strftime("%Y-%m-%d %H:%M:%S"))
+             + "&endTime=" + urllib.parse.quote(ce.strftime("%Y-%m-%d %H:%M:%S")))
+        data = _http_get_json(pcfg["base_url"] + "/Vehicle/GpsHistoryV3" + q, headers,
+                              timeout=_TRAIL_CALL_TIMEOUT)
+        rows = data.get("Data") if isinstance(data, dict) and isinstance(data.get("Data"), list) else []
+        out = []
+        for r in rows:
+            dt = _parse_dt(r.get("UpdateTime"))
+            lat = _num(r.get("Lat")); lng = _num(r.get("Lng"))
+            if dt and lat is not None and lng is not None:
+                out.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat, "lng": lng, "speed": _num(r.get("Speed")) or 0.0})
+        return out
+
+    return _trail_paged(begin, end, timedelta(days=3), fetch_window)
 
 
 def fetch_trail(app, source, plate, begin, end):
@@ -428,13 +482,25 @@ def fetch_trail(app, source, plate, begin, end):
     pcfg = cfg.get(key) or {}
     if not provider_ready(pcfg, key):
         return {"ok": False, "error": "provider not enabled / missing credentials"}
+    max_days = TRAIL_MAX_DAYS.get(key, 3)
+    if (end - begin) > timedelta(days=max_days):
+        return {"ok": False,
+                "error": "range too long for %s — choose %d days or fewer per trail" % (key.upper(), max_days)}
     try:
-        pts = _trail_tct(pcfg, plate, begin, end) if key == "tct" else _trail_adsun(pcfg, plate, begin, end)
-        return {"ok": True, "plate": plate, "source": source, "count": len(pts), "points": pts}
-    except urllib.error.URLError as e:
-        return {"ok": False, "error": "network: " + str(getattr(e, "reason", e))}
+        fn = _trail_tct if key == "tct" else _trail_adsun
+        pts, errors, truncated = fn(pcfg, plate, begin, end)
+        note_bits = []
+        if errors:
+            uniq = sorted(set(errors))
+            note_bits.append("%d window(s) failed: %s" % (len(errors), "; ".join(uniq[:3])))
+        if truncated:
+            note_bits.append("stopped early at the %ds time budget — narrow the range for the rest" % _TRAIL_DEADLINE_S)
+        out = {"ok": True, "plate": plate, "source": source, "count": len(pts), "points": pts}
+        if note_bits:
+            out["note"] = " · ".join(note_bits)
+        return out
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": type(e).__name__ + ": " + str(e)}
+        return {"ok": False, "error": _err_str(e)}
 
 
 def status_summary(app):
