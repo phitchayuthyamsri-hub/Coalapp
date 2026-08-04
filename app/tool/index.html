@@ -2247,7 +2247,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <button data-page="truckstatus">Truck Status</button>
   <button data-page="pva">Plan vs Actual</button>
   <button data-page="send">📲 Send Plan</button>
-  <button data-page="vlist">&#9989; Validated List</button>
+  <!-- Validated List tab hidden: the WI process runs as a manual, not in-program.
+       Re-enable by restoring: <button data-page="vlist">&#9989; Validated List</button> -->
+  <button data-page="gpscap">📡 GPS Capture</button>
   <button data-page="subfleet">Subcontractor fleet status</button>
   <div class="nav-group" id="navDataInput">
     <button type="button" class="nav-group-btn" id="navDataInputBtn">Data input ▾</button>
@@ -2569,6 +2571,17 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 </div>
 
 <!-- ============ PAGE: DISTANCES ============ -->
+<!-- ============ PAGE: GPS CAPTURE (embedded) ============ -->
+<div class="page" data-page-panel="gpscap">
+  <div class="page-pad">
+    <div class="panel">
+      <h2>GPS Capture <span style="font-weight:400;text-transform:none;color:var(--muted);font-size:12px">live pull from provider APIs · admin only</span></h2>
+      <div class="help-text" style="margin-bottom:10px">Provider status, captured positions on the map, per-truck trail, and manual Pull now. Scheduled pulls run on the server whether or not this page is open.</div>
+      <iframe id="gpscapFrame" data-src="/gps-capture" title="GPS Capture" style="width:100%;height:calc(100vh - 230px);min-height:560px;border:1px solid var(--line);border-radius:10px;background:#0e1418"></iframe>
+    </div>
+  </div>
+</div>
+
 <!-- ============ PAGE: VALIDATED LIST (WI LA-NT-001) ============ -->
 <div class="page" data-page-panel="vlist">
   <div class="page-pad">
@@ -7131,6 +7144,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'pva') { renderDinPVA(); }
     if (t === 'send') { renderSend(); }
     if (t === 'vlist') { _vlLoadSaved(); }
+    if (t === 'gpscap') { const _gf = document.getElementById('gpscapFrame'); if (_gf && !_gf.getAttribute('src')) _gf.setAttribute('src', _gf.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }
