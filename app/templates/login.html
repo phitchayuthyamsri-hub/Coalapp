@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
+<script>
+/* If the session expires while an embedded page (e.g. the GPS Capture tab) is
+   open, its iframe gets redirected here. Logging in inside a frame strands the
+   user, so break out and log in at the top level, returning to the tool. */
+if (window.top !== window.self) {
+  try { window.top.location.href = "/login?next=/tool"; } catch (e) {}
+}
+</script>
 <div class="authbox">
   <h1>Please login</h1>
   <form method="post" action="{{ url_for('auth.login') }}">
