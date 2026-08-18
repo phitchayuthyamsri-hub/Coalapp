@@ -47,7 +47,11 @@ def login():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
-        u = User.query.filter_by(username=username).first()
+        # Case-insensitive, to match how accounts are created: admin_create and
+        # _ensure_admin both compare lowercased, so "piramon.bu@..." and
+        # "Piramon.Bu@..." are already the same account. Requiring the exact
+        # original casing here locked people out of their own usernames.
+        u = User.query.filter(db.func.lower(User.username) == username.lower()).first()
         if u and u.check_password(password):
             login_user(u)
             session.permanent = True
