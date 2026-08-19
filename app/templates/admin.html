@@ -87,6 +87,19 @@ function tabCheckboxes(allowed){
 function langSelect(v){ return '<select class="f-lang"><option value="en"'+(v!=='vi'?' selected':'')+'>English</option><option value="vi"'+(v==='vi'?' selected':'')+'>Tiếng Việt</option></select>'; }
 function pageSelect(v){ return '<select class="f-page"><option value="">(default: first allowed)</option>'+TABS.map(t=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>'; }
 
+// Operational role. Decides who may submit the day's truck list and who may
+// confirm it - not the same thing as the admin flag, which is about access.
+const ROLES = [['spectator','Spectator — view only'],
+               ['subcontractor','Subcontractor — uploads own fleet only'],
+               ['monitor','Monitor'],
+               ['supervisor','Supervisor — submits the list'],
+               ['manager','Manager — confirms the list'],['admin','Admin']];
+function roleSelect(v){
+  const cur = v || 'monitor';
+  return '<select class="f-role">'+ROLES.map(r=>'<option value="'+r[0]+'"'
+    +(cur===r[0]?' selected':'')+'>'+r[1]+'</option>').join('')+'</select>';
+}
+
 function collectTabs(el){
   const boxes = Array.from(el.querySelectorAll('.tabchk'));
   const checked = boxes.filter(b=>b.checked).map(b=>b.value);
@@ -106,6 +119,7 @@ function renderCreate(){
     + '<div class="field"><input type="password" class="f-pass" placeholder="password"><small>password</small></div>'
     + '<div class="field">'+langSelect('en')+'<small>language</small></div>'
     + '<div class="field">'+pageSelect('')+'<small>default page</small></div>'
+    + '<div class="field">'+roleSelect('monitor')+'<small>role</small></div>'
     + '<label class="chk"><input type="checkbox" class="f-edit" checked> can edit</label>'
     + '<label class="chk"><input type="checkbox" class="f-admin"> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
@@ -125,6 +139,7 @@ function renderCreate(){
       default_page: el.querySelector('.f-page').value,
       can_edit: el.querySelector('.f-edit').checked,
       is_admin: el.querySelector('.f-admin').checked,
+      role: el.querySelector('.f-role').value,
       apps: collectApps(el),
       tabs: collectTabs(el)
     };
@@ -141,10 +156,13 @@ function userCard(u){
   const allowed = u.tabs === null ? ALL : u.tabs;
   el.innerHTML =
     '<div class="row">'
-    + '<span class="uname">'+esc(u.username)+(u.is_admin?' <span class="pill">admin</span>':'')+'</span>'
+    + '<span class="uname">'+esc(u.username)
+      +' <span class="pill">'+esc(u.role||'monitor')+'</span>'
+      +(u.is_admin?' <span class="pill">admin</span>':'')+'</span>'
     + '<div class="field"><input type="password" class="f-pass" placeholder="leave blank to keep"><small>reset password</small></div>'
     + '<div class="field">'+langSelect(u.lang)+'<small>language</small></div>'
     + '<div class="field">'+pageSelect(u.default_page)+'<small>default page</small></div>'
+    + '<div class="field">'+roleSelect(u.role)+'<small>role</small></div>'
     + '<label class="chk"><input type="checkbox" class="f-edit"'+(u.can_edit?' checked':'')+'> can edit</label>'
     + '<label class="chk"><input type="checkbox" class="f-admin"'+(u.is_admin?' checked':'')+'> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
@@ -163,6 +181,7 @@ function userCard(u){
       default_page: el.querySelector('.f-page').value,
       can_edit: el.querySelector('.f-edit').checked,
       is_admin: el.querySelector('.f-admin').checked,
+      role: el.querySelector('.f-role').value,
       apps: collectApps(el)
     };
     const pw = el.querySelector('.f-pass').value; if(pw) body.password = pw;

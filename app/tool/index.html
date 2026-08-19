@@ -2241,28 +2241,57 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 
 <!-- ===== TOP-LEVEL PAGE NAV (v34) ===== -->
 <nav class="page-nav" id="pageNav">
-  <button data-page="perf" class="active">Performance</button>
-  <button data-page="daily">Daily performance</button>
-  <button data-page="data" data-subtab="timeline" data-perm="timeline">Timeline</button>
-  <button data-page="truckstatus">Truck Status</button>
-  <button data-page="pva">Plan vs Actual</button>
-  <button data-page="send">📲 Send Plan</button>
-  <!-- Validated List tab hidden: the WI process runs as a manual, not in-program.
-       Re-enable by restoring: <button data-page="vlist">&#9989; Validated List</button> -->
-  <button data-page="gpscap">📡 GPS Capture</button>
-  <button data-page="subfleet">Subcontractor fleet status</button>
-  <div class="nav-group" id="navDataInput">
-    <button type="button" class="nav-group-btn" id="navDataInputBtn">Data input ▾</button>
-    <div class="nav-group-menu" id="navDataInputMenu">
-      <button data-page="anchors">Parameter</button>
-      <button data-page="data" data-subtab="sequence">Sequence/Route</button>
-      <button data-page="gps">GPS Data</button>
-      <button data-page="plan">Dispatch Plan</button>
-      <button data-page="weigh">Weighbridge</button>
+  <!-- Operations stays a direct tab: it is the only thing here touched every
+       shift, and burying the daily work two clicks deep costs more than it tidies.
+       Everything else is looked at occasionally, which is what groups are for. -->
+  <button data-page="ops">🚚 Operations</button>
+
+  <div class="nav-group">
+    <button type="button" class="nav-group-btn">Reports ▾</button>
+    <div class="nav-group-menu">
+      <button data-page="perf" class="active">Performance</button>
+      <button data-page="daily">Daily performance</button>
+      <button data-page="pva">Plan vs Actual</button>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <button type="button" class="nav-group-btn">Plan ▾</button>
+    <div class="nav-group-menu">
+      <button data-page="data" data-subtab="timeline">Gantt chart</button>
+      <button data-page="send">📲 Send Plan</button>
+      <button data-page="plan" data-admin="1">Dispatch Plan</button>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <button type="button" class="nav-group-btn">Truck ▾</button>
+    <div class="nav-group-menu">
+      <button data-page="truckstatus">Truck Status</button>
+      <button data-page="subfleet">Subcontractor fleet status</button>
       <button data-page="fleet">Fleet</button>
     </div>
   </div>
-  <button data-page="guide">📖 Guide</button>
+
+  <div class="nav-group">
+    <button type="button" class="nav-group-btn">Inputs ▾</button>
+    <div class="nav-group-menu">
+      <button data-page="weigh">Weighbridge</button>
+      <button data-page="data" data-subtab="sequence">Sequence/Route</button>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <button type="button" class="nav-group-btn">Setting ▾</button>
+    <div class="nav-group-menu">
+      <button data-page="anchors">Parameter</button>
+      <button data-page="gps" data-admin="1">GPS Data</button>
+      <button data-page="gpscap" data-admin="1">📡 GPS Capture</button>
+      <button data-page="guide">📖 Guide</button>
+    </div>
+  </div>
+  <!-- Validated List tab hidden: the WI process runs as a manual, not in-program.
+       Re-enable by restoring: <button data-page="vlist">&#9989; Validated List</button> -->
 </nav>
 
 <!-- ============ PAGE: ANCHORS ============ -->
@@ -2572,6 +2601,14 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 
 <!-- ============ PAGE: DISTANCES ============ -->
 <!-- ============ PAGE: GPS CAPTURE (embedded) ============ -->
+<div class="page" data-page-panel="ops">
+  <div class="page-pad">
+    <iframe id="opsFrame" data-src="/ops?embed=1" title="Operations"
+            style="width:100%;height:calc(100vh - 150px);min-height:620px;border:0;
+                   border-radius:10px;background:#0b1220"></iframe>
+  </div>
+</div>
+
 <div class="page" data-page-panel="gpscap">
   <div class="page-pad">
     <div class="panel">
@@ -7128,12 +7165,13 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     document.querySelectorAll('#pageNav button[data-page]').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('[data-page-panel]').forEach(p => p.classList.toggle('active', p.dataset.pagePanel === t));
     if (btn.dataset.subtab) { const _sb=document.querySelector('.tab-btn[data-tab="'+btn.dataset.subtab+'"]'); if (_sb) _sb.click(); }
-    // "Data input" group highlights when one of its pages is active; close its menu.
-    const grp = document.getElementById('navDataInput');
-    if (grp) {
-      grp.classList.toggle('active-group', !!btn.closest('#navDataInputMenu'));
-      grp.classList.remove('open');
-    }
+    // Whichever group owns the page now showing wears the highlight; all of them
+    // close. Written against the groups that exist rather than one named id.
+    const own = btn.closest('.nav-group');
+    document.querySelectorAll('#pageNav .nav-group').forEach(g => {
+      g.classList.toggle('active-group', g === own);
+      g.classList.remove('open');
+    });
     // Per-page refresh hooks
     if (t === 'anchors') { setTimeout(() => map.invalidateSize(), 60); }
     if (t === 'data') { renderTable(); renderSequenceTable(); renderTimeline(); }
@@ -7145,20 +7183,39 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'send') { renderSend(); }
     if (t === 'vlist') { _vlLoadSaved(); }
     if (t === 'gpscap') { const _gf = document.getElementById('gpscapFrame'); if (_gf && !_gf.getAttribute('src')) _gf.setAttribute('src', _gf.dataset.src); }
+    if (t === 'ops') { const _of = document.getElementById('opsFrame'); if (_of && !_of.getAttribute('src')) _of.setAttribute('src', _of.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }
     try { injectPageHelp(); } catch (e) {}
   });
 });
-// Data-input dropdown toggle
+// Dropdowns: one handler for every group in the bar.
 (function () {
-  const grp = document.getElementById('navDataInput');
-  const gbtn = document.getElementById('navDataInputBtn');
-  if (grp && gbtn) {
-    gbtn.addEventListener('click', (e) => { e.stopPropagation(); grp.classList.toggle('open'); });
-    document.addEventListener('click', () => grp.classList.remove('open'));
-  }
+  const groups = Array.from(document.querySelectorAll('#pageNav .nav-group'));
+  groups.forEach(grp => {
+    const gbtn = grp.querySelector('.nav-group-btn');
+    if (!gbtn) return;
+    gbtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = grp.classList.contains('open');
+      groups.forEach(g => g.classList.remove('open'));   // one at a time
+      grp.classList.toggle('open', !open);
+    });
+  });
+  document.addEventListener('click', () => groups.forEach(g => g.classList.remove('open')));
+})();
+
+// Admin-only entries. The page never asked who was using it, so nothing was ever
+// hidden; data-admin items are removed unless /api/me says admin. Hidden by
+// default and revealed on the answer, so a failed call cannot expose anything.
+(function () {
+  const marked = () => Array.from(document.querySelectorAll('#pageNav [data-admin]'));
+  marked().forEach(el => { el.style.display = 'none'; });
+  fetch('/api/me', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .then(me => { if (me && me.is_admin) marked().forEach(el => { el.style.display = ''; }); })
+    .catch(() => {});
 })();
 
 // Inner tab switching (Anchors / Routes) on the Anchors page

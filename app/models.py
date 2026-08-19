@@ -21,6 +21,12 @@ class User(UserMixin, db.Model):
     default_page = db.Column(db.String(20))   # tab key to open on login
     can_edit = db.Column(db.Boolean, default=True, nullable=False)
     allowed_apps = db.Column(db.Text)   # JSON list of app keys; NULL = all apps
+    # spectator = read-only observer (no submit, no confirm, no upload)
+    role = db.Column(db.String(20), default="monitor")
+    # spectator | subcontractor | monitor | supervisor | manager | admin
+    # Set only for role='subcontractor': which company this login belongs to.
+    # It scopes everything they can see to their own trucks.
+    subcontractor_id = db.Column(db.Integer, index=True)
 
     def set_password(self, pw):
         self.pw_hash = generate_password_hash(pw)
@@ -156,6 +162,79 @@ class ReturnRoute(db.Model):
     __table_args__ = (db.UniqueConstraint("key", "plan_date", name="uq_returnroute"),)
 
 
+class Shift(db.Model):
+    """A monitoring shift. Shifts are DATA, not code - NT can add, remove or
+    retime them without a rebuild (the 2-or-3 shift question stays open)."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(60), nullable=False)
+    start_hhmm = db.Column(db.String(5), default="06:00")   # local time, UTC+7
+    end_hhmm = db.Column(db.String(5), default="14:00")
+    ordering = db.Column(db.Integer, default=0)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+
+
+class ShiftCheck(db.Model):
+    """One agenda line on a shift. `code` names the corridor event the check
+    asks about; it maps onto the Anchor roles the geofence engine already
+    detects, so a check is answered from GPS rather than by hand."""
+    id = db.Column(db.Integer, primary_key=True)
+    shift_id = db.Column(db.Integer, index=True, nullable=False)
+    code = db.Column(db.String(30), nullable=False)
+    # arrive_mine | load_done | depart_border | depart_ql49 | arrive_port | unload_done
+    label = db.Column(db.String(160), default="")
+    ordering = db.Column(db.Integer, default=0)
+
+
+class DailyList(db.Model):
+    """The day's truck list as it moves supervisor -> manager.
+
+    draft -> submitted -> confirmed, or submitted -> rejected (back to draft).
+    Once confirmed the list is locked: only a manager or an admin may change it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    list_date = db.Column(db.String(10), index=True, nullable=False)   # YYYY-MM-DD
+    # One list per subcontractor per day - the manager reviews each company's
+    # list separately. NULL means a legacy list from before per-sub lists.
+    subcontractor_id = db.Column(db.Integer, index=True)
+    state = db.Column(db.String(12), default="draft", nullable=False)
+    submitted_by = db.Column(db.String(80))
+    submitted_at = db.Column(db.DateTime)
+    confirmed_by = db.Column(db.String(80))
+    confirmed_at = db.Column(db.DateTime)
+    rejected_by = db.Column(db.String(80))
+    rejected_at = db.Column(db.DateTime)
+    reject_reason = db.Column(db.String(400), default="")
+
+    __table_args__ = (db.UniqueConstraint("list_date", "subcontractor_id",
+                                          name="uq_daily_list"),)
+
+    @property
+    def locked(self):
+        return self.state == "confirmed"
+
+
+class DailyListRow(db.Model):
+    """One truck on the day's list.
+
+    Each row carries its own state, separate from the list's. Ticking a truck
+    sends it; leaving it unticked holds it as `pending` with a written reason,
+    so a truck that is not going is parked rather than deleted and can still be
+    sent or rejected later.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    list_id = db.Column(db.Integer, index=True, nullable=False)
+    plate = db.Column(db.String(40), nullable=False)
+    key = db.Column(db.String(40), index=True)     # normalised plate
+    ready = db.Column(db.Boolean, default=True, nullable=False)   # the tick
+    state = db.Column(db.String(10), default="pending")       # pending|approved|denied
+    location = db.Column(db.String(60), default="")           # from the sheet
+    sheet_status = db.Column(db.String(30), default="")       # Loaded / Empty
+    reason = db.Column(db.String(300), default="")  # required when held back (Gap Rule)
+    arrive_date = db.Column(db.String(10), default="")  # planned arrival at the mine
+    arrive_hhmm = db.Column(db.String(5), default="")
+    note = db.Column(db.String(300), default="")
+
+
 class GpsIngestRun(db.Model):
     """One row per GPS ingestion poll (audit trail + status for /gps-capture)."""
     id = db.Column(db.Integer, primary_key=True)
@@ -166,3 +245,78 @@ class GpsIngestRun(db.Model):
     fetched = db.Column(db.Integer, default=0)        # rows returned by provider
     inserted = db.Column(db.Integer, default=0)       # new rows stored (dedup'd)
     error = db.Column(db.String(500), default="")
+
+class Subcontractor(db.Model):
+    """A haulage company committed to the project."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    short = db.Column(db.String(40), default="")      # what appears in tables
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    contact = db.Column(db.String(200), default="")
+    added = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class FleetCommitment(db.Model):
+    """One truck committed by one subcontractor for the project.
+
+    This is the contract, not a convenience index. The fleet is agreed up front
+    and holds for the project, so a truck cannot leave by quietly missing from
+    tomorrow's sheet - it leaves only by an explicit, recorded release. Daily
+    readiness is measured against these rows.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    subcontractor_id = db.Column(db.Integer, index=True, nullable=False)
+    plate = db.Column(db.String(40), nullable=False)
+    key = db.Column(db.String(40), index=True, nullable=False)   # normalised
+    committed_from = db.Column(db.String(10), default="")        # YYYY-MM-DD
+    released_on = db.Column(db.String(10), default="")           # set = no longer committed
+    release_reason = db.Column(db.String(300), default="")
+    released_by = db.Column(db.String(80), default="")
+    released_at = db.Column(db.DateTime)
+    note = db.Column(db.String(300), default="")
+    __table_args__ = (db.UniqueConstraint("subcontractor_id", "key",
+                                          name="uq_commitment"),)
+
+    @property
+    def committed(self):
+        return not self.released_on
+
+class PlanSetting(db.Model):
+    """A tunable number the planner uses.
+
+    These are estimates that will be corrected as the operation runs, so they are
+    rows rather than constants - changing a loading time or a gate window must not
+    require a deployment.
+    """
+    key = db.Column(db.String(40), primary_key=True)
+    value = db.Column(db.String(40), default="")
+    label = db.Column(db.String(160), default="")
+    unit = db.Column(db.String(20), default="")
+    group = db.Column(db.String(30), default="")
+    ordering = db.Column(db.Integer, default=0)
+    updated_by = db.Column(db.String(80), default="")
+    updated_at = db.Column(db.DateTime)
+
+
+class PlanSnapshot(db.Model):
+    """A week's plan, frozen at the moment it was issued.
+
+    The plan the subcontractor works to has to stop moving, for two reasons.
+    It is the document they were sent - recomputing it later would quietly
+    rewrite what they agreed to. And it is what the revision is compared
+    against: a baseline recomputed from today's readiness moves whenever the
+    day moves, so every difference cancels itself out and the comparison reads
+    zero however badly the day went.
+
+    The figures are stored WITH the rows, because a difference can only be
+    attributed to a factor if the assumptions behind the promise are known.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    week_start = db.Column(db.String(10), index=True, nullable=False)  # Monday
+    # NULL means the snapshot covers every company, planned together.
+    subcontractor_id = db.Column(db.Integer, index=True)
+    issued_by = db.Column(db.String(80), default="")
+    issued_at = db.Column(db.DateTime, default=datetime.utcnow)
+    note = db.Column(db.String(300), default="")
+    rows = db.Column(db.JSON)        # the planned loops, exactly as issued
+    figures = db.Column(db.JSON)     # every planning figure in force that day

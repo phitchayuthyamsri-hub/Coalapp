@@ -17,6 +17,16 @@ from . import parsers, engine
 bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def w(*a, **k):
+        if not getattr(current_user, "is_admin", False):
+            abort(403)
+        return f(*a, **k)
+    return w
+
+
 @bp.after_request
 def _no_store(resp):
     # shared-store reads must never be served from browser cache (multi-user staleness)
@@ -36,8 +46,10 @@ def _save_tmp():
     return path, None
 
 
+# Admin only, alongside the menu entry. The manual GPS upload is transitional -
+# positions now arrive from the provider APIs - so it is kept, gated, not removed.
 @bp.post("/upload/gps")
-@login_required
+@admin_required
 def upload_gps():
     path, err = _save_tmp()
     if err:
@@ -54,7 +66,7 @@ def upload_gps():
 
 
 @bp.post("/upload/plan")
-@login_required
+@admin_required
 def upload_plan():
     path, err = _save_tmp()
     if err:
@@ -580,6 +592,12 @@ def kv_delete(key):
 # ── Access control: identity + admin-managed tab access ──────────────────────
 APP_KEYS = ["tms", "report"]
 
+# Operational role. Drives the shift board and the daily-list approval chain:
+# a supervisor submits the day's list, a manager confirms it, and only a manager
+# or an admin may change it once confirmed.
+ROLE_KEYS = ["spectator", "subcontractor", "monitor", "supervisor",
+             "manager", "admin"]
+
 TAB_KEYS = ["perf","daily","timeline","pva","subfleet","anchors","data","gps","plan",
             "truckstatus","weigh","fleet","guide"]
 
@@ -602,14 +620,6 @@ def _apps_of(u):
         return None
 
 
-def admin_required(f):
-    @wraps(f)
-    @login_required
-    def w(*a, **k):
-        if not getattr(current_user, "is_admin", False):
-            abort(403)
-        return f(*a, **k)
-    return w
 
 
 @bp.get("/me")
@@ -632,7 +642,8 @@ def admin_users():
         out.append({"id": u.id, "username": u.username,
                     "is_admin": bool(u.is_admin), "tabs": _tabs_of(u),
                     "lang": (u.lang or "en"), "default_page": (u.default_page or ""),
-                    "can_edit": bool(u.can_edit), "apps": _apps_of(u)})
+                    "can_edit": bool(u.can_edit), "apps": _apps_of(u),
+                    "role": (u.role or "monitor")})
     return jsonify(out)
 
 
@@ -658,6 +669,10 @@ def admin_update(uid):
         u.default_page = dp if dp in TAB_KEYS else None
     if "can_edit" in d:
         u.can_edit = bool(d["can_edit"])
+    if "role" in d:
+        r = str(d["role"] or "").lower()
+        if r in ROLE_KEYS:
+            u.role = r
     if "apps" in d:
         a = d["apps"]
         u.allowed_apps = None if a is None else json.dumps([str(x) for x in a if str(x) in APP_KEYS])
@@ -686,6 +701,8 @@ def admin_create():
     u.set_password(str(password))
     u.is_admin = bool(d.get("is_admin", False))
     u.can_edit = bool(d.get("can_edit", True))
+    r = str(d.get("role") or "monitor").lower()
+    u.role = r if r in ROLE_KEYS else "monitor"
     u.lang = "vi" if str(d.get("lang", "en")).lower() == "vi" else "en"
     dp = str(d.get("default_page") or "")
     u.default_page = dp if dp in TAB_KEYS else None

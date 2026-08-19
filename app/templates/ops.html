@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coal Operations &middot; Coal project</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111a2b;--line:#233149;--txt:#e7ecf5;--mut:#8b9ab4;
+        --acc:#2dd4bf}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);overflow:hidden;
+       font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+       display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:16px;padding:10px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  h1{font-size:16px;margin:0;white-space:nowrap}
+  .sub{color:var(--mut);font-size:11.5px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;
+        font-weight:700;text-transform:uppercase;background:#1e293b;color:var(--acc);
+        border:1px solid var(--line)}
+
+  /* The three jobs, in the order the day runs: who is going, what the plan says,
+     what actually happened. Same page, so moving between them is a glance. */
+  nav{display:flex;gap:6px}
+  nav button{background:transparent;border:1px solid transparent;color:var(--mut);
+             padding:7px 16px;border-radius:999px;font:inherit;font-size:13px;
+             cursor:pointer;white-space:nowrap}
+  nav button:hover{color:var(--txt);border-color:var(--line)}
+  nav button.on{background:#16233a;border-color:var(--acc);color:var(--txt);font-weight:700}
+  nav button small{display:block;font-size:10px;font-weight:400;color:var(--mut);
+                   text-transform:uppercase;letter-spacing:.4px}
+  nav button.on small{color:var(--acc)}
+
+  .frames{position:relative;flex:1;min-height:0}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none;
+         background:var(--bg)}
+  iframe.on{display:block}
+  .boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        color:var(--mut);font-size:13px}
+
+  /* Embedded in the tool, which already shows a title and the account links.
+     The tabs stay - they are the only navigation these three pages have. */
+  body.embed header{padding:6px 12px;background:transparent;border-bottom:0}
+  body.embed .brand, body.embed .chrome{display:none}
+</style>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+<header>
+  <div class="brand">
+    <h1>Coal Operations</h1>
+    <div class="sub">XPPL Mine &rarr; Lalay &rarr; Chan May &middot; local time (UTC+7)</div>
+  </div>
+  <nav>
+    <button class="tab on" data-tab="readiness" data-src="/shift-board?embed=1">
+      Readiness<small>who is going</small></button>
+    <button class="tab" data-tab="planner" data-src="/planner?embed=1">
+      Planner<small>what the plan says</small></button>
+    <button class="tab" data-tab="monitor" data-src="/monitor?embed=1">
+      Monitor<small>what happened</small></button>
+  </nav>
+  <div class="spacer"></div>
+  <a href="#" id="openTab" title="Open the current view in its own tab">Open alone</a>
+  <span class="chrome"><span class="pill" id="rolePill">&hellip;</span></span>
+  <span class="chrome"><a href="/tool">Tool</a></span>
+  <span class="chrome"><a href="/logout" style="color:var(--mut)">Log out</a></span>
+</header>
+
+<div class="frames" id="frames">
+  <div class="boot" id="boot">Loading&hellip;</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const FRAMES = {};
+
+// Each view is built once, on first visit, and then kept. Switching tabs after
+// that is instant and nothing is reloaded - a monitor left on a shift does not
+// lose it because somebody looked at the plan.
+function show(name){
+  const btn = document.querySelector('.tab[data-tab="' + name + '"]');
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b === btn));
+  if (!FRAMES[name]){
+    const f = document.createElement('iframe');
+    f.src = btn.dataset.src;
+    f.title = btn.dataset.tab;
+    $('#frames').appendChild(f);
+    FRAMES[name] = f;
+  }
+  Object.keys(FRAMES).forEach(k => FRAMES[k].classList.toggle('on', k === name));
+  // A hidden frame has no size, so anything that measures itself - the corridor
+  // map above all - would come back wrong. Tell the view it has room now.
+  try { FRAMES[name].contentWindow.dispatchEvent(new Event('resize')); }
+  catch (e) { /* not loaded yet; it will size itself on first paint */ }
+  const boot = $('#boot');
+  if (boot) boot.remove();
+  $('#openTab').href = btn.dataset.src.replace('?embed=1', '');
+  try { localStorage.setItem('opsTab', name); } catch (e) { /* private mode */ }
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+}
+
+document.querySelectorAll('.tab').forEach(b =>
+  b.onclick = () => show(b.dataset.tab));
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+
+(async function(){
+  try {
+    const me = await (await fetch('/api/shift/subcontractors')).json();
+    $('#rolePill').textContent = me.role || 'monitor';
+  } catch (e) { $('#rolePill').textContent = ''; }
+  let want = location.hash.slice(1);
+  if (!want){
+    try { want = localStorage.getItem('opsTab') || 'readiness'; } catch (e) { want = 'readiness'; }
+  }
+  show(document.querySelector('.tab[data-tab="' + want + '"]') ? want : 'readiness');
+})();
+</script>
+</body>
+</html>

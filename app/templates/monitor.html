@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Monitor &middot; Coal project</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111a2b;--line:#233149;--txt:#e7ecf5;--mut:#8b9ab4;
+        --acc:#2dd4bf;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--blind:#60a5fa}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:18px;max-width:1500px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px;margin-bottom:16px}
+  .card.sticky{position:sticky;top:56px;z-index:40}
+  h2{margin:0 0 4px;font-size:15px}
+  .hint{color:var(--mut);font-size:12px;margin:0 0 12px}
+  label.f{display:inline-flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut)}
+  input,select,button{font:inherit}
+  input[type=date],select{background:#0c1523;color:var(--txt);
+        border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  button{background:#1e293b;color:var(--txt);border:1px solid var(--line);
+         border-radius:8px;padding:8px 14px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .stats{display:flex;gap:20px;margin-left:auto;flex-wrap:wrap;align-items:flex-end}
+  .stat{text-align:center}
+  .stat .n{font-size:20px;font-weight:800}
+  .stat .l{font-size:10px;color:var(--mut);text-transform:uppercase}
+  .banner{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;border:1px solid}
+  .b-none{background:#1e293b55;border-color:var(--line);color:var(--mut)}
+  .b-bad{background:#ef444418;border-color:#ef444466;color:#fca5a5}
+  .b-ok{background:#22c55e18;border-color:#22c55e55;color:#86efac}
+
+  .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px}
+  .chk{border:1px solid var(--line);border-radius:10px;background:#0c1523;padding:13px 14px}
+  .chk h3{margin:0 0 2px;font-size:13.5px}
+  .chk .code{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+  /* One bar, four states, in the order a truck passes through them. It is the
+     shift's whole agenda line at a glance. */
+  .bar{display:flex;height:9px;border-radius:5px;overflow:hidden;margin:11px 0 9px;
+       background:#1a2437}
+  .bar i{display:block;height:9px}
+  .b-done{background:var(--ok)}
+  .b-pend{background:var(--warn)}
+  .b-miss{background:var(--bad)}
+  .b-unv{background:var(--blind)}
+  .tags{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--mut)}
+  .tags b{font-size:13px}
+  .tags .t-done b{color:var(--ok)}
+  .tags .t-pend b{color:var(--warn)}
+  .tags .t-miss b{color:var(--bad)}
+  .tags .t-unv b{color:var(--blind)}
+  details{margin-top:9px}
+  details summary{cursor:pointer;color:var(--acc);font-size:12px}
+  .plates{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .plate{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;
+         background:#16233a;border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .plate span{color:var(--mut);font-family:inherit;margin-left:5px}
+  .note{font-size:11.5px;color:var(--blind);margin-top:9px;line-height:1.5}
+  .msg{font-size:12px;color:var(--mut);margin-left:8px}
+  table{width:100%;border-collapse:collapse;margin-top:4px}
+  th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--line);
+        font-size:12.5px;white-space:nowrap}
+  th{color:#aab8d0;font-weight:700;font-size:10.5px;text-transform:uppercase;
+     background:#131d30}
+  tbody tr:hover{background:#16233a}
+  td.plate{font-family:ui-monospace,Consolas,monospace}
+
+  /* Four places, each holding a promise and what happened. The pair is boxed
+     together so the eye reads across a location, not across the whole row. */
+  table.grid th.loc{text-align:center;font-size:11.5px;letter-spacing:.6px;
+        border-left:2px solid var(--line);background:#16203a}
+  table.grid th.sub2{font-size:9.5px;color:var(--mut);font-weight:600;
+        background:#101a2c}
+  table.grid th.sub2:nth-of-type(odd){border-left:2px solid var(--line)}
+  table.grid td.pl{color:var(--mut);border-left:2px solid var(--line);
+        text-align:right;width:64px}
+  table.grid td.ac{text-align:left;width:78px}
+  table.grid td.ac b{font-weight:600}
+  /* Thirty-three trucks scroll past the header long before the eye is done with
+     them, so the header travels: both rows of it, under the filter bar. */
+  table.grid thead th{position:sticky;z-index:6}
+  table.grid thead tr:first-child th{top:var(--freeze,140px);height:26px}
+  table.grid thead tr:nth-child(2) th{top:calc(var(--freeze,140px) + 26px)}
+
+  .key{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:0 0 10px;
+       font-size:11.5px;color:var(--mut)}
+  .key b{font-weight:600}
+  .key i{font-style:normal}
+  .t-ok{color:var(--ok)}
+  .t-early{color:var(--warn)}
+  .t-late{color:var(--bad)}
+  .t-est{color:#cbd5e5}
+  td.tel{white-space:nowrap}
+  td.tel a{color:var(--acc);text-decoration:none;font-size:12px}
+  td.tel a:hover{text-decoration:underline}
+  td.tel a.wa{margin-left:7px;color:#25d366;border:1px solid #25d36655;
+        border-radius:5px;padding:1px 6px;font-size:10.5px}
+  td.tel a.waw{margin-left:5px;color:var(--mut);font-size:10px}
+  td.tel .ph{margin-left:6px;font-size:9.5px;color:var(--warn);
+        text-transform:uppercase;letter-spacing:.3px}
+
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:transparent;border:0;border-radius:0;color:var(--mut);
+              padding:5px 13px;font-size:12.5px;line-height:1.25;text-align:center}
+  .seg button small{display:block;font-size:9.5px;color:var(--mut);
+              text-transform:uppercase;letter-spacing:.3px}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button:hover{color:var(--txt);background:#16233a}
+  .seg button.on{background:#16233a;color:var(--acc);font-weight:700}
+  .seg button.on small{color:var(--acc)}
+  /* Embedded in the operations shell: the shell supplies the header, so the
+     page's own one would be a second title bar saying the same thing. */
+  body.embed > header{display:none}
+  body.embed main{padding-top:12px}
+  body.embed .card.sticky{top:0}
+</style>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+
+<header>
+  <div><h1>Shift Monitor</h1>
+    <div class="sub">what this shift has to confirm &middot; answered from GPS &middot;
+      local time (UTC+7)</div></div>
+  <div class="spacer"></div>
+  <a href="/shift-board">Readiness</a>
+  <a href="/planner">Planner</a>
+  <a href="/tool">Tool</a>
+  <a href="/logout" style="color:var(--mut)">Log out</a>
+</header>
+<main>
+  <div class="card sticky">
+    <div class="row">
+      <label class="f">Date<input type="date" id="day"></label>
+      <label class="f">Shift<select id="shift"></select></label>
+      <label class="f">Company<select id="sub"></select></label>
+      <button id="run">Refresh</button>
+      <label class="f" style="flex-direction:row;gap:6px;align-items:center;
+             align-self:center">
+        <input type="checkbox" id="auto" checked>every 60 s</label>
+      <span class="msg" id="stamp"></span>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="align-items:center;margin-bottom:2px">
+      <h2 style="margin:0">Every truck &mdash; the plan against what happened</h2>
+      <div class="seg" id="legToggle" style="margin-left:auto">
+        <button data-leg="fh" class="on">FH<small>loaded, mine &rarr; port</small></button>
+        <button data-leg="bh">BH<small>empty, port &rarr; mine</small></button>
+      </div>
+    </div>
+    <p class="hint" id="trackHint"></p>
+    <div id="track"></div>
+  </div>
+
+  <div id="body"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const jget = async u => (await fetch(u)).json();
+const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
+let TIMER = null, SUBID = '';
+
+const stat = (n, l, c) =>
+  '<div class="stat"><div class="n" style="color:' + (c || 'var(--txt)') + '">' + n + '</div>'
+  + '<div class="l">' + esc(l) + '</div></div>';
+
+async function loadConfig(){
+  const c = await jget('/api/shift/config');
+  $('#shift').innerHTML = (c.shifts || []).map(s =>
+    '<option value="' + s.id + '">' + esc(s.name) + ' &middot; ' + esc(s.start)
+    + '-' + esc(s.end) + '</option>').join('');
+  // One company at a time, deliberately: monitoring follows the CONFIRMED LIST,
+  // and a list belongs to one company. An "all companies" option here would
+  // quietly fall back to the legacy list and report two trucks where there are
+  // thirty-three.
+  const j = await jget('/api/shift/subcontractors');
+  const list = j.subcontractors || [];
+  $('#sub').innerHTML = list.map(s =>
+    '<option value="' + s.id + '">' + esc(s.short) + '</option>').join('')
+    // Lists made before per-company lists existed still belong to somebody's
+    // shift. Named for what it is rather than hidden behind "all".
+    + (j.role !== 'subcontractor'
+       ? '<option value="none">(no company &mdash; legacy list)</option>' : '');
+  $('#sub').value = SUBID || (list[0] ? String(list[0].id) : 'none');
+}
+
+// -- every truck: plan against actual, by place -------------------------------
+// The same four columns whichever leg is shown, because they are places, not
+// steps: a truck passes each of them twice and the pair only makes sense if it
+// stays in the same column.
+const clock = s => s ? s.slice(11, 16) : '';
+const dayOf = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7)) : '';
+let LEG = 'fh', TRACK = null;
+
+// Inside the tolerance a truck is on plan and the time is left alone. Outside
+// it, the row has to say which way it went: yellow for early, red for late.
+let TOL = 60;
+const gap = m => (Math.abs(m) >= 60
+  ? (Math.abs(m) / 60).toFixed(1).replace(/\.0$/, '') + ' h'
+  : Math.abs(m) + ' m');
+
+function cellHtml(c, planDay){
+  if (c.actual){
+    const d = c.delay;
+    if (d === null || d === undefined || Math.abs(d) <= TOL)
+      return '<b class="t-ok">' + clock(c.actual) + '</b>';
+    const cls = d < 0 ? 't-early' : 't-late';
+    return '<b class="' + cls + '">' + clock(c.actual) + '</b>'
+      + ' <span class="' + cls + '" style="font-size:10.5px">'
+      + (d < 0 ? '&minus;' : '+') + gap(d) + '</span>';
+  }
+  if (c.estimate)
+    return '<span class="t-est" title="estimate">~' + clock(c.estimate)
+      + '</span>' + (dayOf(c.estimate) !== planDay
+        ? ' <span style="color:var(--mut);font-size:10px">' + dayOf(c.estimate) + '</span>' : '');
+  return '<span style="color:var(--mut)">&mdash;</span>';
+}
+
+// A number on the screen is only useful if it dials. tel: hands the call to
+// whatever the device uses to make calls.
+//
+// WhatsApp goes through the whatsapp:// handler rather than wa.me on purpose:
+// wa.me always lands on WhatsApp's own "Open app / Continue to Web" page,
+// because a web link cannot know whether the app is installed. The handler hands
+// straight to the desktop app. The small "web" link beside it is for a machine
+// that has no app installed, where the handler does nothing at all.
+function phoneCell(r){
+  const digits = String(r.phone || '').replace(/[^0-9]/g, '');
+  if (!digits) return '<span style="color:var(--mut)">&mdash;</span>';
+  return '<a href="tel:' + esc(r.phone) + '" title="Call this number">'
+    + esc(r.phone) + '</a>'
+    + '<a class="wa" title="Open the chat in the WhatsApp app"'
+    + ' href="whatsapp://send?phone=' + digits + '">WhatsApp</a>'
+    + '<a class="waw" target="_blank" rel="noopener"'
+    + ' title="Open the chat in WhatsApp Web, for a machine without the app"'
+    + ' href="https://web.whatsapp.com/send?phone=' + digits + '">web</a>'
+    + (r.phone_known ? '' : '<span class="ph">placeholder</span>');
+}
+
+function drawTrack(){
+  const d = TRACK;
+  if (!d) return;
+  const s = d.summary;
+  TOL = d.on_time_minutes || 60;
+  $('#trackHint').innerHTML = 'Plan from the ' + esc(d.source)
+    + '. Within <b>' + TOL + ' minutes</b> of plan counts as on time; outside it a '
+    + 'truck is <b class="t-early">early</b> or <b class="t-late">late</b>. '
+    + '<span class="t-est">A grey time is an estimate</span>, not something GPS '
+    + 'confirmed &mdash; the plan carried forward by however late the truck is, or '
+    + 'for one still on the road, the distance left over the empty-running speed. '
+    + s.trucks + ' trucks &middot; ' + s.on_the_road + ' on the road &middot; '
+    + s.late + ' running late'
+    + (s.early ? ' &middot; ' + s.early + ' early' : '')
+    + (s.worst_late ? ' (worst ' + s.worst_late + ' min)' : '') + '.'
+    + (LEG === 'bh' ? ' <b>Back-haul reads port first</b>, then QL49, border and '
+       + 'home, the way the truck runs it. The plan times only the two ends.' : '');
+
+  if (!d.rows.length){
+    $('#track').innerHTML = '<div class="banner b-none">No trucks for this day.</div>';
+    return;
+  }
+  // Going home the truck runs port, QL49, border, mine - so the columns run that
+  // way too. Reading a journey backwards is harder than moving four headings.
+  const locs = LEG === 'bh' ? d.locations.slice().reverse() : d.locations;
+  const key = '<div class="key">'
+    + '<span><b class="t-ok">14:24</b> <i>on time, within ' + TOL + ' min of plan</i></span>'
+    + '<span><b class="t-early">14:24 &minus;1.6 h</b> <i>early</i></span>'
+    + '<span><b class="t-late">14:24 +2.2 h</b> <i>late</i></span>'
+    + '<span><b class="t-est">~14:24</b> <i>estimate, not confirmed</i></span>'
+    + '<span><b style="color:var(--mut)">&mdash;</b> <i>nothing planned or seen</i></span>'
+    + '</div>';
+  $('#track').innerHTML = key +
+    '<table class="grid"><thead>'
+    + '<tr><th rowspan="2">Truck</th><th rowspan="2">Phone</th><th rowspan="2">Sub</th>'
+    + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
+    + '<th rowspan="2">Where it is</th></tr>'
+    + '<tr>' + locs.map(() => '<th class="sub2">Plan</th><th class="sub2">Actual</th>').join('')
+    + '</tr></thead><tbody>'
+    + d.rows.map(function(r){
+        const cs = LEG === 'bh' ? r[LEG].slice().reverse() : r[LEG];
+        const where = r.last_seen
+          ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
+            + clock(r.last_seen.at) + '</span>'
+          : (r.enroute
+             ? '<span style="color:var(--blind)">on the road</span> '
+               + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
+             : '<span style="color:var(--mut)">not seen</span>');
+        return '<tr><td class="plate">' + esc(r.plate) + '</td>'
+          + '<td class="tel">' + phoneCell(r) + '</td>'
+          + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
+          + cs.map(c => '<td class="pl">'
+              + (c.plan ? clock(c.plan) : '<span style="color:var(--mut)">&mdash;</span>')
+              + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>').join('')
+          + '<td>' + where + '</td></tr>';
+      }).join('')
+    + '</tbody></table>';
+  measure();
+}
+
+async function loadTrack(){
+  const sub = $('#sub').value;
+  TRACK = await jget('/api/shift/track?date=' + $('#day').value
+    + (sub && sub !== 'none' ? '&subcontractor_id=' + encodeURIComponent(sub) : ''));
+  drawTrack();
+}
+
+document.querySelectorAll('#legToggle button').forEach(b => b.onclick = () => {
+  LEG = b.dataset.leg;
+  document.querySelectorAll('#legToggle button').forEach(x =>
+    x.classList.toggle('on', x === b));
+  drawTrack();
+});
+
+// A checkpoint nobody has ever been seen at cannot fail anybody. Trucks there are
+// reported as cannot verify - the difference between "we did not see it" and
+// "it did not happen" is the whole reason this page is trusted.
+function checkCard(ch, total){
+  const pct = n => total ? (n * 100 / total).toFixed(2) + '%' : '0%';
+  const box = (title, items, cls, withTime) => {
+    if (!items || !items.length) return '';
+    return '<details><summary>' + items.length + ' ' + esc(title) + '</summary>'
+      + '<div class="plates">' + items.map(x => '<span class="plate">' + esc(x.plate)
+          + (withTime && x.at ? '<span>' + esc(x.at.slice(11)) + '</span>' : '')
+          + '</span>').join('') + '</div></details>';
+  };
+  return '<div class="chk">'
+    + '<h3>' + esc(ch.label) + '</h3>'
+    + '<div class="code">' + esc(ch.code.replace(/_/g, ' ')) + '</div>'
+    + '<div class="bar">'
+      + '<i class="b-done" style="width:' + pct(ch.done_count) + '"></i>'
+      + '<i class="b-pend" style="width:' + pct(ch.pending_count) + '"></i>'
+      + '<i class="b-miss" style="width:' + pct(ch.missed_count) + '"></i>'
+      + '<i class="b-unv"  style="width:' + pct(ch.unverified_count) + '"></i>'
+    + '</div>'
+    + '<div class="tags">'
+      + '<span class="t-done"><b>' + ch.done_count + '</b> done</span>'
+      + '<span class="t-pend"><b>' + ch.pending_count + '</b> still expected</span>'
+      + '<span class="t-miss"><b>' + ch.missed_count + '</b> missed</span>'
+      + '<span class="t-unv"><b>' + ch.unverified_count + '</b> cannot verify</span>'
+    + '</div>'
+    + (ch.blind ? '<div class="note">' + esc(ch.blind_note) + '</div>' : '')
+    + box('done', ch.done, 'done', true)
+    + box('still expected', ch.pending, 'pend', false)
+    + box('missed', ch.missed, 'miss', false)
+    + box('cannot verify', ch.unverified, 'unv', false)
+    + '</div>';
+}
+
+async function run(){
+  const sub = $('#sub').value;
+  const d = await jget('/api/shift/board?date=' + $('#day').value
+    + '&shift_id=' + $('#shift').value
+    + (sub && sub !== 'none' ? '&subcontractor_id=' + encodeURIComponent(sub) : ''));
+  $('#stamp').textContent = 'read ' + new Date().toTimeString().slice(0, 8);
+  loadTrack();
+
+  if (d.error){
+    $('#stats').innerHTML = '';
+    $('#body').innerHTML = '<div class="card"><div class="banner b-bad">'
+      + esc(d.error) + '</div></div>';
+    return;
+  }
+  if (d.dormant){
+    $('#stats').innerHTML = '';
+    $('#body').innerHTML = '<div class="card">'
+      + '<h2>' + esc(d.shift.name) + ' &middot; ' + esc(d.shift.start) + '-'
+      + esc(d.shift.end) + '</h2>'
+      + '<div class="banner b-none" style="margin-top:10px">' + esc(d.dormant_reason)
+      + '</div>'
+      + '<p class="hint">Monitoring follows the truck list. Nothing is expected of a '
+      + 'shift until a list is confirmed, so this page stays quiet rather than '
+      + 'inventing work.</p></div>';
+    return;
+  }
+
+  const tot = d.checks.reduce((a, c) => ({
+    done: a.done + c.done_count, pend: a.pend + c.pending_count,
+    miss: a.miss + c.missed_count, unv: a.unv + c.unverified_count}),
+    {done:0, pend:0, miss:0, unv:0});
+
+  $('#stats').innerHTML = stat(d.trucks, 'trucks')
+    + stat(tot.done, 'done', 'var(--ok)')
+    + stat(tot.pend, 'expected', tot.pend ? 'var(--warn)' : null)
+    + stat(tot.miss, 'missed', tot.miss ? 'var(--bad)' : null)
+    + stat(tot.unv, 'cannot verify', tot.unv ? 'var(--blind)' : null);
+
+  const over = d.shift_over;
+  $('#body').innerHTML = '<div class="card">'
+    + '<h2>' + esc(d.shift.name) + ' &middot; ' + esc(d.shift.start) + '-'
+      + esc(d.shift.end) + '</h2>'
+    + '<p class="hint">' + d.trucks + ' truck(s) on the confirmed list'
+      + (d.confirmed_by ? ', signed off by ' + esc(d.confirmed_by) : '') + '. '
+      + (over ? 'The shift closed at ' + esc(d.deadline) + ' &mdash; anything not '
+              + 'seen by then is reported as missed.'
+              : 'Runs until ' + esc(d.deadline) + '. Nothing counts as missed before '
+              + 'then; trucks not yet seen are still expected.') + '</p>'
+    + (tot.miss ? '<div class="banner b-bad">' + tot.miss + ' truck-check(s) missed '
+        + 'on this shift.</div>'
+       : over ? '<div class="banner b-ok">Nothing missed on this shift.</div>' : '')
+    + '<div class="checks">' + d.checks.map(c => checkCard(c, d.trucks)).join('')
+    + '</div></div>';
+}
+
+// The frozen header parks under the header and the filter bar, whatever height
+// those happen to be - and under nothing at all when the page is embedded.
+function measure(){
+  const bar = document.querySelector('.card.sticky');
+  const hdr = document.querySelector('header');
+  const h = (hdr ? hdr.getBoundingClientRect().height : 0)
+    + (bar ? bar.getBoundingClientRect().height : 0);
+  document.documentElement.style.setProperty('--freeze', Math.round(h) + 'px');
+}
+window.addEventListener('resize', measure);
+
+function arm(){
+  if (TIMER) clearInterval(TIMER);
+  if ($('#auto').checked) TIMER = setInterval(run, 60000);
+}
+
+$('#day').onchange = run;
+$('#shift').onchange = run;
+$('#sub').onchange = run;
+$('#run').onclick = run;
+$('#auto').onchange = arm;
+
+(async function(){
+  $('#day').value = todayStr();
+  try {
+    const l = await jget('/api/shift/latest');
+    if (l && l.date) $('#day').value = l.date;
+    if (l && l.subcontractor_id) SUBID = String(l.subcontractor_id);
+  } catch (e) { /* fall back to today */ }
+  await loadConfig();
+  await run();
+  arm();
+})();
+</script>
+</body>
+</html>

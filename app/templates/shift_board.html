@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Truck Readiness · Coal project</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#111a2b; --panel2:#16203400; --line:#233149;
+    --txt:#e7ecf5; --mut:#8b9ab4; --acc:#2dd4bf;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --info:#3b82f6; --blind:#8b5cf6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;
+         background:#0e1728;border-bottom:1px solid var(--line);flex-wrap:wrap;
+         position:sticky;top:0;z-index:40}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;
+        font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+  .pill.role{background:#1e293b;color:var(--acc);border:1px solid var(--line)}
+  main{padding:18px;max-width:1180px;margin:0 auto}
+  /* the picker bar rides just under the header */
+  .card.sticky{position:sticky;top:var(--hdr,56px);z-index:60}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:15px}
+  .card .hint{color:var(--mut);font-size:12px;margin:0 0 12px}
+  label.f{display:inline-flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut)}
+  input,select,button,textarea{font:inherit}
+  input[type=date],input[type=time],select,input[type=text]{background:#0c1523;
+        color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  /* Read-only is not the same as unreadable. Keep near-full contrast on the
+     text and signal 'locked' with the frame, not by dimming the content. */
+  input:disabled, select:disabled, textarea:disabled{
+        color:#cdd7e6; background:#0a1220; border-color:#2c3a52;
+        opacity:1; -webkit-text-fill-color:#cdd7e6; cursor:default}
+  button:disabled{opacity:.55}
+  button{background:#1e293b;color:var(--txt);border:1px solid var(--line);
+         border-radius:8px;padding:8px 14px;cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--info);border-color:var(--info);color:#fff;font-weight:600}
+  button.go{background:var(--ok);border-color:var(--ok);color:#04220f;font-weight:700}
+  button.no{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .shifts{display:flex;gap:8px;margin:14px 0 4px;flex-wrap:wrap}
+  .shifts button.on{background:var(--acc);border-color:var(--acc);color:#04231f;font-weight:700}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:#aab8d0;font-weight:700;font-size:11px;text-transform:uppercase;
+     background:#131d30}
+  /* Only the truck list freezes its header. Applying this to every table made
+     the summary table's headers detach and float over the filter card. */
+  #listBody thead th{position:sticky;top:var(--freeze,104px);z-index:20;
+     box-shadow:0 -18px 0 var(--panel)}
+  .banner{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;
+          border:1px solid}
+  .b-none{background:#1e293b55;border-color:var(--line);color:var(--mut)}
+  .b-draft{background:#f59e0b18;border-color:#f59e0b66;color:#fcd34d}
+  .b-submitted{background:#3b82f618;border-color:#3b82f666;color:#93c5fd}
+  .b-confirmed{background:#22c55e18;border-color:#22c55e66;color:#86efac}
+  .b-rejected{background:#ef444418;border-color:#ef444466;color:#fca5a5}
+  .chk{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center}
+  .grp{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
+  .grp>summary{cursor:pointer;padding:10px 14px;display:flex;align-items:center;
+               gap:10px;background:#0e1728;list-style:none}
+  .grp>summary::-webkit-details-marker{display:none}
+  .grp .body{padding:6px 14px 12px}
+  .count{font-weight:800;font-size:15px;min-width:26px;text-align:right}
+  .c-missed{color:var(--bad)} .c-blind{color:var(--blind)}
+  .c-pending{color:var(--warn)} .c-done{color:var(--ok)}
+  .plates{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .plate{background:#0c1523;border:1px solid var(--line);border-radius:6px;
+         padding:3px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
+  .msg{font-size:12px;margin-left:8px}
+  .msg.ok{color:var(--ok)} .msg.err{color:var(--bad)}
+  .empty{color:var(--mut);font-size:13px;padding:8px 0}
+  /* Embedded in the operations shell: the shell supplies the header, so the
+     page's own one would be a second title bar saying the same thing. */
+  body.embed > header{display:none}
+  body.embed main{padding-top:12px}
+  body.embed .card.sticky{top:0}
+</style>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+
+<header>
+  <div>
+    <h1>Truck Readiness</h1>
+    <div class="sub">which trucks are going, and who signed them off &middot;
+      times shown local (UTC+7)</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill role" id="rolePill">…</span>
+  <a href="/monitor" style="color:var(--acc);text-decoration:none;font-size:13px">Monitor</a>
+  <a href="/planner" style="color:var(--acc);text-decoration:none;font-size:13px">Planner</a>
+  <a href="/tool" style="color:var(--acc);text-decoration:none;font-size:13px">&larr; Back to tool</a>
+  <a href="/logout" style="color:var(--mut);text-decoration:none;font-size:13px">Log out</a>
+</header>
+
+<main>
+  <div class="card sticky">
+    <div class="row">
+      <label class="f">Readiness date &mdash; the day the sheet was sent
+        <input type="date" id="day">
+      </label>
+      <button id="today">Today</button>
+      <label class="f">Subcontractor
+        <select id="sub"><option value="">(loading…)</option></select>
+      </label>
+      <span id="dateWhy" style="color:var(--mut);font-size:12px;padding-bottom:8px"></span>
+      <div id="totals" style="margin-left:auto;display:flex;gap:18px;
+           align-items:flex-end;flex-wrap:wrap"></div>
+    </div>
+    <div class="row" id="uploadRow" style="margin-top:10px;display:none">
+      <label class="f">Readiness sheet from the subcontractor
+        <input type="file" id="file" accept=".xlsx"
+               style="background:#0c1523;border:1px solid var(--line);
+                      border-radius:8px;padding:6px 8px;max-width:340px">
+      </label>
+      <button id="btnUpload">Upload</button>
+      <span class="msg" id="upMsg"></span>
+    </div>
+    <div id="upReport"></div>
+  </div>
+
+  <!-- ── Daily list ─────────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Today's truck list</h2>
+    <p class="hint">The supervisor builds this list and submits it. The manager
+      confirms it. Monitoring starts only once it is confirmed &mdash; that is what
+      tells the board which trucks to expect.<br>
+      The date at the top is the day the subcontractor sent the sheet. The date on
+      each row is when that truck reaches the Mine &mdash; often the next day, or
+      later. They are not the same thing.</p>
+    <div id="listBanner" class="banner b-none">…</div>
+    <div class="row" id="bulkBar" style="margin:4px 0 10px;display:none;gap:8px;align-items:center">
+      <button id="bAll" title="Apply for every truck on the list">Apply all</button>
+      <button id="bNone" title="Clear every tick">Clear all</button>
+      <button id="bInvert">Invert</button>
+      <span style="color:var(--mut);font-size:12px">|</span>
+      <input type="text" id="bReason" placeholder="reason for every truck not applied" style="min-width:280px">
+      <button id="bApplyReason">Fill blank reasons</button>
+      <button id="bUndoDenied" style="display:none">Undo all denied</button>
+      <span class="msg" id="bulkMsg"></span>
+    </div>
+    <div id="listBody"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnSubmit" class="primary" title="Send the approved trucks to the manager. Unticked trucks stay pending.">Submit to manager</button>
+      <button id="btnConfirm" class="go" title="Approve the list. Monitoring starts.">Confirm</button>
+      <button id="btnReject" class="no" title="Send it back to the supervisor with a written reason.">Reject</button>
+      <span id="dirty" style="display:none;color:var(--warn);font-size:12px;font-weight:600">
+        ● unsaved changes — whatever you press next will use what is on screen</span>
+      <span class="msg" id="listMsg"></span>
+    </div>
+    <div id="nextStep" style="color:var(--mut);font-size:12.5px;margin-top:8px"></div>
+    <div id="roleNote" style="color:var(--mut);font-size:12px;margin-top:2px"></div>
+  </div>
+
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let LIST = null, ROLE = 'monitor', DIRTY = false;
+let SUBS = [], SUBID = '';
+
+// Any edit marks the form dirty so the state is visible rather than implied.
+document.addEventListener('input', e => {
+  if (e.target.closest('#listBody')) { DIRTY = true; paintDirty(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.closest('#listBody')) { DIRTY = true; paintDirty(); }
+});
+function paintDirty(){
+  const w = $('#dirty');
+  if (w) w.style.display = DIRTY ? 'inline' : 'none';
+  paintCounts();
+}
+// Counts must follow the screen, not the last saved state - otherwise they
+// contradict the ticks the user is looking at.
+function paintCounts(){
+  const el = $('#counts');
+  if (!el) return;
+  const boxes = Array.from(document.querySelectorAll('.r-ready'));
+  if (!boxes.length){ el.textContent = ''; return; }
+  const ready = boxes.filter(b => b.checked).length;
+  const not = boxes.length - ready;
+  el.innerHTML = ready + ' ready'
+    + (not ? ' · <span style="color:var(--warn)">' + not + ' not approved — each needs a '
+             + 'reason before this can be sent</span>' : '');
+}
+
+const todayStr = () => {
+  const d = new Date(Date.now() + 7*3600*1000);      // UTC+7
+  return d.toISOString().slice(0,10);
+};
+const esc = s => String(s??'').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function jget(u){ const r = await fetch(u); return r.json(); }
+async function jpost(u, body){
+  const r = await fetch(u, {method:'POST', headers:{'Content-Type':'application/json'},
+                           body: JSON.stringify(body||{})});
+  return {ok:r.ok, data: await r.json()};
+}
+
+// ── subcontractors ----------------------------------------------------
+const subQ = () => SUBID ? ('&subcontractor_id=' + encodeURIComponent(SUBID)) : '';
+
+async function loadSubs(){
+  const j = await jget('/api/shift/subcontractors');
+  ROLE = j.role || 'monitor';
+  $('#rolePill').textContent = ROLE;
+  SUBS = j.subcontractors || [];
+  const sel = $('#sub');
+  sel.innerHTML = SUBS.map(s =>
+    '<option value="'+s.id+'">'+esc(s.short)
+    + (s.committed ? ' — ' + s.committed + ' committed' : '') + '</option>').join('');
+  // A subcontractor login is pinned to its own company and cannot switch.
+  if (j.role === 'subcontractor' && j.mine){ SUBID = String(j.mine); sel.disabled = true; }
+  if (!SUBID && SUBS.length) SUBID = String(SUBS[0].id);
+  sel.value = SUBID;
+  sel.onchange = async () => { SUBID = sel.value; clearReport();
+    await loadList(); await loadSummary(); };
+}
+
+function clearReport(){ $('#upReport').innerHTML = ''; $('#upMsg').textContent = ''; }
+
+// ── upload ------------------------------------------------------------
+function renderReport(d){
+  const box = (title, items, colour, note) => {
+    if (!items || !items.length) return '';
+    return '<details class="grp" open><summary><span class="count" style="color:'+colour+'">'
+      + items.length + '</span> ' + esc(title) + '</summary><div class="body">'
+      + (note ? '<div class="empty">'+esc(note)+'</div>' : '')
+      + '<div class="plates">' + items.map(p=>'<span class="plate">'+esc(p)+'</span>').join('')
+      + '</div></div></details>';
+  };
+  let html = '<div class="banner b-confirmed" style="margin-top:12px">'
+    + 'Imported <b>' + d.imported + '</b> trucks for ' + esc(d.subcontractor)
+    + ' on ' + esc(d.date) + ' — ' + d.running + ' running, '
+    + (d.imported - d.running) + ' not running. Committed fleet: ' + d.committed + '.'
+    + '</div>';
+  html += box('Committed but NOT on this sheet', d.missing, 'var(--bad)',
+    'These trucks are committed for the project. They must be accounted for — '
+    + 'ask the subcontractor for their status.');
+  html += box('On the sheet but NOT committed', d.uncommitted, 'var(--warn)',
+    'These plates are not on the committed roster for this subcontractor.');
+  if (d.warnings && d.warnings.length)
+    html += '<div class="empty" style="color:var(--warn)">'
+      + d.warnings.map(esc).join('<br>') + '</div>';
+  $('#upReport').innerHTML = html;
+}
+
+async function doUpload(){
+  const f = $('#file').files[0];
+  const m = $('#upMsg');
+  if (!f){ m.textContent = 'Choose a file first'; m.className = 'msg err'; return; }
+  m.textContent = 'Reading…'; m.className = 'msg';
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('date', $('#day').value);
+  fd.append('subcontractor_id', SUBID);
+  const r = await fetch('/api/shift/upload', {method:'POST', body:fd});
+  const d = await r.json();
+  if (!r.ok){
+    m.textContent = d.error || 'Upload failed'; m.className = 'msg err';
+    $('#upReport').innerHTML = '';
+    return;
+  }
+  m.textContent = 'Imported ✓'; m.className = 'msg ok';
+  renderReport(d);
+  await loadList();
+}
+
+// The frozen block is the page header plus the filter card. Measure it rather
+// than guess: the filter card grows and shrinks when the upload row appears.
+function measureFreeze(){
+  const hdr = document.querySelector('header');
+  const bar = document.querySelector('.card.sticky');
+  if (!hdr || !bar) return;
+  const h = Math.round(hdr.getBoundingClientRect().height);
+  const b = Math.round(bar.getBoundingClientRect().height);
+  const root = document.documentElement.style;
+  root.setProperty('--hdr', h + 'px');
+  // No padding: any gap between the filter card and the frozen table head
+  // is a slot that scrolling rows show through.
+  root.setProperty('--freeze', (h + b) + 'px');
+}
+window.addEventListener('resize', measureFreeze);
+
+// ── all-party summary (managers) --------------------------------------
+function renderTotals(d, label){
+  const t = d.total || {};
+  const cell = (n, txt, colour) =>
+    '<div style="text-align:center">'
+    + '<div style="font-size:19px;font-weight:800;color:'+(colour||'var(--txt)')+'">'
+      + n + '</div>'
+    + '<div style="font-size:10px;color:var(--mut);text-transform:uppercase">'
+      + esc(txt) + '</div></div>';
+  const missing = (d.parties||[]).reduce((a,p)=>a+(p.missing||0), 0);
+  $('#totals').innerHTML =
+      '<div style="font-size:11px;color:var(--mut);align-self:center">'+esc(label)+'</div>'
+    + cell(t.committed||0, 'committed')
+    + cell(t.trucks||0, 'on sheet')
+    + cell((LIST&&LIST.applied_count)||0, 'applied', 'var(--warn)')
+    + cell(t.sent||0, 'approved', 'var(--ok)')
+    + cell(t.pending||0, 'held', t.pending ? 'var(--warn)' : null)
+    + cell(missing, 'not accounted', missing ? 'var(--bad)' : null);
+}
+
+async function loadSummary(){
+  const d = await jget('/api/shift/summary?date=' + $('#day').value + subQ());
+  const picked = SUBS.find(x => String(x.id) === String(SUBID));
+  renderTotals(d, picked ? picked.short : 'total');
+}
+// ── batch selection ---------------------------------------------------
+// One-by-one is fine for 30 trucks and impossible for 1000. Shift-click also
+// works: click one box, shift-click another, everything between takes the
+// second box's value.
+let LAST_BOX = null;
+const BACK_ONE = {approved:'applied', denied:'applied', applied:'pending'};
+
+async function revertPlates(plates){
+  if (!plates.length) return;
+  const r = await jpost('/api/shift/rows/revert',
+    {date: $('#day').value, subcontractor_id: SUBID, plates: plates});
+  if (r.ok){
+    say('Stepped back ' + r.data.count + ' truck' + (r.data.count === 1 ? '' : 's'));
+    if (r.data.refused && r.data.refused.length)
+      say(r.data.refused.slice(0, 3).join('; '), true);
+    await loadList(); await loadSummary();
+  } else say(r.data.error || 'Could not step back', true);
+}
+
+function boxes(){ return Array.from(document.querySelectorAll('.r-ready')); }
+function setAll(fn){
+  boxes().forEach(b => { if (!b.disabled) b.checked = fn(b); });
+  DIRTY = true; paintDirty();
+}
+function wireBulk(){
+  const editable = LIST && LIST.can && LIST.can.edit;
+  $('#bulkBar').style.display = editable ? '' : 'none';
+  if (!editable) return;
+  $('#bAll').onclick    = () => setAll(() => true);
+  $('#bNone').onclick   = () => setAll(() => false);
+  $('#bInvert').onclick = () => setAll(b => !b.checked);
+  $('#bApplyReason').onclick = () => {
+    const txt = $('#bReason').value.trim();
+    if (!txt){ $('#bulkMsg').textContent = 'Type a reason first';
+               $('#bulkMsg').className = 'msg err'; return; }
+    let n = 0;
+    boxes().forEach(b => {
+      if (b.checked) return;
+      const f = document.querySelector('.r-reason[data-i="'+b.dataset.i+'"]');
+      if (f && !f.disabled && !f.value.trim()){ f.value = txt; n++; }
+    });
+    $('#bulkMsg').textContent = 'Filled ' + n + ' empty reason' + (n === 1 ? '' : 's');
+    $('#bulkMsg').className = 'msg ok';
+    DIRTY = true; paintDirty();
+  };
+  document.querySelectorAll('.r-back').forEach(b =>
+    b.onclick = () => revertPlates([b.dataset.plate]));
+  const denied = LIST.rows.filter(r => r.state === 'denied').map(r => r.plate);
+  const undoAll = $('#bUndoDenied');
+  if (undoAll){
+    undoAll.style.display = (denied.length && (ROLE === 'manager' || ROLE === 'admin'))
+      ? '' : 'none';
+    undoAll.textContent = 'Undo all denied (' + denied.length + ')';
+    undoAll.onclick = () => revertPlates(denied);
+  }
+  boxes().forEach(b => b.addEventListener('click', e => {
+    if (e.shiftKey && LAST_BOX){
+      const all = boxes();
+      const a = all.indexOf(LAST_BOX), z = all.indexOf(b);
+      const [lo, hi] = a < z ? [a, z] : [z, a];
+      for (let i = lo; i <= hi; i++) if (!all[i].disabled) all[i].checked = b.checked;
+      DIRTY = true; paintDirty();
+    }
+    LAST_BOX = b;
+  }));
+}
+
+// ── daily list --------------------------------------------------------
+const BANNER = {
+  none:      ['b-none',      'No list yet for this date.'],
+  draft:     ['b-draft',     'Pending confirmation to manager.'],
+  submitted: ['b-submitted', 'Submitted — waiting for the manager to confirm.'],
+  confirmed: ['b-confirmed', 'Confirmed — locked. Monitoring is live.'],
+  rejected:  ['b-rejected',  'Sent back by the manager.']
+};
+
+async function loadList(){
+  LIST = await jget('/api/shift/list?date=' + $('#day').value + subQ());
+  let [cls, text] = BANNER[LIST.state] || BANNER.none;
+  let extra = '';
+  if (LIST.state === 'submitted' && LIST.submitted_by)
+    extra = ' Submitted by ' + esc(LIST.submitted_by) + ' at ' + esc(LIST.submitted_at) + '.';
+  // One line, one fact. Only one manager approves, so the name adds nothing on
+  // screen - it is still recorded against the row for audit.
+  if (LIST.state === 'confirmed' && LIST.confirmed_at){
+    text = 'Truck list confirmed at ' + esc(LIST.confirmed_at);
+    extra = '';
+  }
+  if (LIST.state === 'rejected' && LIST.reject_reason)
+    extra = ' Reason: “' + esc(LIST.reject_reason) + '”';
+  $('#listBanner').className = 'banner ' + cls;
+  $('#listBanner').textContent = text + extra;
+
+  const editable = LIST.can.edit;
+  // A supervisor ticks rows still with them; a manager ticks the ones that have
+  // arrived. Nobody re-ticks a row that is already decided.
+  // Undo one step: the manager takes back a decision, the supervisor withdraws
+  // something not yet decided.
+  const canRevert = r =>
+      (r.state === 'approved' || r.state === 'denied')
+        ? (ROLE === 'manager' || ROLE === 'admin')
+    : (r.state === 'applied')
+        ? (ROLE === 'supervisor' || ROLE === 'manager' || ROLE === 'admin')
+    : false;
+  const canTick = r => (ROLE === 'admin')
+    ? r.state !== 'approved' && r.state !== 'denied'
+    : (ROLE === 'manager') ? r.state === 'applied'
+    : r.state === 'pending';
+  // The manager reviews timing but does not set it - that is the supervisor's call.
+  const timeEditable = LIST.can.edit_time;
+  if (!LIST.rows.length){
+    $('#listBody').innerHTML = editable
+      ? '<div class="empty">No trucks yet. Paste or type plate numbers below, one per line.</div>'
+        + '<textarea id="bulk" rows="4" style="width:100%;margin-top:8px;background:#0c1523;'
+        + 'color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px" '
+        + 'placeholder="43H12350&#10;50H35366"></textarea>'
+      : '<div class="empty">No trucks on this list.</div>';
+  } else {
+    // A tick is the supervisor APPLYING for the truck to run. It only becomes an
+    // approval when the manager confirms the list - until then, saying "approved"
+    // would claim a decision nobody has made.
+    // The row's own state says where it is, so batches show side by side:
+    // some trucks still with the supervisor, some awaiting the manager, some
+    // already decided - all on the same list.
+    const pill = (bg, fg, t) =>
+      '<span class="pill" style="background:'+bg+';color:'+fg+'">'+t+'</span>';
+    const badge = s =>
+        s === 'approved' ? pill('#22c55e22', '#86efac', 'approved')
+      : s === 'denied'   ? pill('#ef444422', '#fca5a5', 'denied')
+      : s === 'applied'  ? pill('#f59e0b22', '#fcd34d', 'applied')
+      :                    pill('#1e293b',   '#8b9ab4', 'pending');
+    $('#listBody').innerHTML =
+      '<table><thead><tr><th>Truck</th><th>Sub</th><th>Approve</th>'
+      + '<th>Date arrive Mine</th><th>Time arrive Mine</th>'
+      + '<th>Stage</th>'
+      + '<th>Status</th><th>Location</th><th>Reason if not applied</th>'
+      + '</tr></thead><tbody>'
+      + LIST.rows.map((r,i) =>
+        '<tr><td class="plate">'+esc(r.plate)+'</td>'
+        + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
+        + '<td><input type="checkbox" class="r-ready" data-i="'+i+'"'
+        + (r.ready?' checked':'')
+        + ((editable && canTick(r)) ? '' : ' disabled') + '></td>'
+        + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
+        + 'style="width:150px"' + (timeEditable?'':' disabled') + '></td>'
+        + '<td><input type="time" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
+        + 'style="width:110px"' + (timeEditable?'':' disabled') + '></td>'
+        + '<td class="r-state" data-i="'+i+'">'+badge(r.state)
+          + (canRevert(r) ? ' <button class="r-back" data-plate="'+esc(r.plate)+'" '
+             + 'title="Step this truck back to '+esc(BACK_ONE[r.state])+'" '
+             + 'style="padding:1px 7px;font-size:12px;line-height:1.4">&#8630;</button>' : '')
+          + '</td>'
+        + '<td style="font-size:12px">'+esc(r.sheet_status||'')+'</td>'
+        + '<td style="color:var(--mut);font-size:12px">'+esc(r.location||'')+'</td>'
+        + '<td><input type="text" class="r-reason" data-i="'+i+'" value="'+esc(r.reason)+'" '
+        + 'style="width:100%" placeholder="required when not applied"'
+        + (editable?'':' disabled') + '></td></tr>').join('')
+      + '</tbody></table>'
+      + (editable ? '<div class="empty" style="margin-top:8px">Add more, one plate per line:</div>'
+        + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
+        + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
+  }
+  $('#listBody').insertAdjacentHTML('beforeend',
+    '<div class="empty" id="counts" style="margin-top:6px"></div>');
+  DIRTY = false; paintDirty();
+  wireBulk();
+  // Show only what this person can actually do right now. Greyed-out buttons for
+  // someone else's job are just noise - a supervisor never needs to see Confirm.
+  const c = LIST.can;
+  const show = (id, on) => { $(id).style.display = on ? '' : 'none'; };
+  // A manager reviews and confirms; uploading is the subcontractor's job and
+  // correcting is the supervisor's. Showing them an Upload box invites the one
+  // action that would overwrite what they are being asked to approve.
+  const mayUpload = (ROLE === 'subcontractor' || ROLE === 'supervisor' || ROLE === 'admin');
+  $('#uploadRow').style.display = (mayUpload && c.edit) ? '' : 'none';
+  show('#btnSubmit',  c.submit);
+  show('#btnConfirm', c.confirm);
+  show('#btnReject',  c.reject);
+
+  // Say what the next step is, so nobody has to infer it from the buttons.
+  const NEXT = {
+    none:      'Add the trucks going tomorrow, then Submit to manager.',
+    draft:     ROLE === 'supervisor' || ROLE === 'admin'
+                 ? 'Not sent yet. Submit to manager when the list is right.'
+                 : 'The supervisor has not submitted this yet.',
+    submitted: ROLE === 'manager' || ROLE === 'admin'
+                 ? 'Waiting on you: Confirm to start monitoring, or Reject to send it back.'
+                 : 'Sent to the manager. Waiting for confirmation.',
+    confirmed: 'Confirmed and locked. Monitoring is live. Only a manager can change it now.',
+    rejected:  ROLE === 'supervisor' || ROLE === 'admin'
+                 ? 'Sent back by the manager. Fix the list and submit it again.'
+                 : 'Sent back to the supervisor.'
+  };
+  $('#nextStep').textContent = NEXT[LIST.state] || '';
+  measureFreeze();
+  const none = !(c.edit || c.submit || c.confirm || c.reject || c.reopen);
+  $('#roleNote').textContent = none
+    ? 'You are signed in as ' + ROLE + ' — this list is read-only for you.' : '';
+}
+
+function collectRows(){
+  const rows = [];
+  document.querySelectorAll('.r-ready').forEach(cb => {
+    const i = +cb.dataset.i;
+    const prev = LIST.rows[i];
+    // Ticked = send it. Unticked = hold as pending; a row already rejected stays
+    // rejected until someone ticks it again.
+    let st = cb.checked ? 'approved' : (prev.state === 'denied' ? 'denied' : 'pending');
+    rows.push({plate: prev.plate, ready: cb.checked, state: st,
+               location: prev.location || '', sheet_status: prev.sheet_status || '',
+               arrive_date: document.querySelector('.r-adate[data-i="'+i+'"]').value.trim(),
+               arrive: document.querySelector('.r-arrive[data-i="'+i+'"]').value.trim(),
+               reason: document.querySelector('.r-reason[data-i="'+i+'"]').value.trim()});
+  });
+  const bulk = $('#bulk');
+  if (bulk) bulk.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean)
+    .forEach(p => { if (!rows.some(r => r.plate.toUpperCase() === p.toUpperCase()))
+                      rows.push({plate:p, ready:true, reason:''}); });
+  return rows;
+}
+
+function say(m, bad){ const e=$('#listMsg'); e.textContent=m; e.className='msg '+(bad?'err':'ok'); }
+
+async function save(quiet){
+  const r = await jpost('/api/shift/list', {date:$('#day').value, subcontractor_id:SUBID, rows:collectRows()});
+  if (!r.ok){ say(r.data.error || 'Save failed', true); return false; }
+  DIRTY = false;
+  if (!quiet) say('Saved ✓');
+  return true;
+}
+async function act(a, body){
+  const r = await jpost('/api/shift/list/'+a, Object.assign({date:$('#day').value, subcontractor_id:SUBID}, body||{}));
+  if (r.ok){ say(a[0].toUpperCase()+a.slice(1)+'ed ✓'); await loadList(); }
+  else say(r.data.error || (a+' failed'), true);
+}
+// Submit sends what is ON SCREEN. Saving first means the manager can never
+// confirm a list that differs from what the supervisor was looking at.
+$('#btnSubmit').onclick  = async () => {
+  if (!await save(true)) return;          // validation error -> do not submit
+  await act('submit');
+};
+// Confirm must send what the manager is looking at. Without this the ticks they
+// just made are discarded and the list is confirmed against the last saved
+// state - which silently approves trucks they had deliberately unticked.
+$('#btnConfirm').onclick = async () => {
+  if (!await save(true)) return;      // validation error -> do not confirm
+  await act('confirm');
+};
+$('#btnReject').onclick  = async () => {
+  const reason = prompt('Why are you sending this list back?');
+  if (!reason || !reason.trim()) return;
+  // Save first as well, so any trucks the manager unticked go back with the
+  // list and the supervisor can see which ones were objected to.
+  if (!await save(true)) return;
+  await act('reject', {reason: reason.trim()});
+};
+
+// ── boot ---------------------------------------------------------------
+$('#day').onchange = async () => { clearReport(); await loadList(); await loadSummary(); };
+$('#today').onclick = async () => { $('#day').value = todayStr();
+  $('#dateWhy').textContent = '';
+  await loadList(); };
+
+(async () => {
+  // Open on the day being worked, not on today - today is normally empty
+  // because a list is built the day before it runs.
+  let start = todayStr(), why = '';
+  try {
+    const l = await jget('/api/shift/latest');
+    if (l && l.date) {
+      start = l.date;
+      if (l.date !== l.today) why = 'showing ' + l.why;
+      if (l.subcontractor_id) SUBID = String(l.subcontractor_id);
+    }
+  } catch (e) { /* fall back to today */ }
+  $('#day').value = start;
+  $('#dateWhy').textContent = why;
+  await loadSubs();
+  await loadList(); await loadSummary();
+  $('#btnUpload').onclick = doUpload;
+})();
+</script>
+</body>
+</html>
