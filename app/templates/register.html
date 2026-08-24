@@ -2,9 +2,12 @@
 {% block body %}
 <div class="authbox">
   <h1>Create account</h1>
-  <form method="post" action="{{ url_for('auth.register') }}">
-    <input name="username" placeholder="Username" autofocus>
-    <input name="password" type="password" placeholder="Password">
+  <form method="post" action="{{ url_for('auth.register') }}" autocomplete="off">
+    <input name="username" placeholder="Username" autofocus
+           autocomplete="off" autocapitalize="none" autocorrect="off"
+           spellcheck="false">
+    <input name="password" type="password" placeholder="Password"
+           autocomplete="new-password">
     <button type="submit">Register</button>
   </form>
   <p class="muted"><a href="{{ url_for('auth.login') }}">Back to login</a></p>

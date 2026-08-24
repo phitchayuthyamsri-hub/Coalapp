@@ -10,9 +10,17 @@ if (window.top !== window.self) {
 </script>
 <div class="authbox">
   <h1>Please login</h1>
-  <form method="post" action="{{ url_for('auth.login') }}">
-    <input name="username" placeholder="Username" autofocus>
-    <input name="password" type="password" placeholder="Password">
+  <!-- No autofill on this form. The control room shares machines, and the
+       screens get photographed for training material — a dropdown of previously
+       typed usernames puts colleagues' accounts on someone else's screen and
+       into screenshots. "new-password" on the password field is what stops the
+       browser pairing a saved credential with the username box. -->
+  <form method="post" action="{{ url_for('auth.login') }}" autocomplete="off">
+    <input name="username" placeholder="Username" autofocus
+           autocomplete="off" autocapitalize="none" autocorrect="off"
+           spellcheck="false">
+    <input name="password" type="password" placeholder="Password"
+           autocomplete="new-password">
     <button type="submit">Log in</button>
   </form>
 </div>
