@@ -196,9 +196,12 @@ def _all_payload(day):
         p = _list_payload(dl, day)
         rows.extend(p["rows"])
         applied += p["applied_count"]
+        # Trucks ON the sheet: the absent ones ride along as rows so they can be
+        # seen, but counting them here would say a company sent more than it did.
         parties.append({"id": dl.subcontractor_id,
                         "short": subs.get(dl.subcontractor_id, "(no company)"),
-                        "state": dl.state, "trucks": len(p["rows"])})
+                        "state": dl.state,
+                        "trucks": sum(1 for r in p["rows"] if not r.get("absent"))})
     # Merged rows sort the way a single list does: by when the truck is due at
     # the mine, with the untimed ones - the trucks not going - at the bottom.
     rows.sort(key=lambda r: (0 if r["arrive_date"] else 1, r["arrive_date"],
@@ -294,6 +297,10 @@ def _list_payload(dl, day):
         s = db.session.get(Subcontractor, dl.subcontractor_id) \
             if dl.subcontractor_id else None
         short = (s.short or s.name) if s else ""
+        roster = {}
+        if dl.subcontractor_id:
+            roster = {c.key: c.plate for c in FleetCommitment.query.filter_by(
+                subcontractor_id=dl.subcontractor_id, released_on="").all()}
         for r in recs:
             rows.append({
                 "plate": r.plate, "sub": short,
@@ -305,7 +312,28 @@ def _list_payload(dl, day):
                 "arrive": r.arrive_hhmm or "",
                 "location": r.location or "",
                 "sheet_status": r.sheet_status or "",
+                # A plate nobody committed. Shown on its row rather than only in
+                # the import report, which is gone the moment the page reloads.
+                "uncommitted": bool(roster) and r.key not in roster,
             })
+        # The trucks the counter calls "not accounted": committed for the
+        # project and absent from the sheet entirely. They have no row of their
+        # own, so without this they are a number with no way to reach the
+        # plates - and chasing each one is the job the WI gives the supervisor.
+        # Carried as rows so they appear on the board, flagged so that saving
+        # the list cannot mistake them for trucks somebody put on it.
+        if roster and recs:
+            on_sheet = {r.key for r in recs}
+            for key, plate in sorted(roster.items()):
+                if key in on_sheet:
+                    continue
+                rows.append({
+                    "plate": plate, "sub": short, "ready": False,
+                    "state": "absent", "reason": "", "note": "",
+                    "arrive_date": "", "arrive": "", "location": "",
+                    "sheet_status": "", "uncommitted": False,
+                    "absent": True,
+                })
     out = {
         "date": day,
         "state": state,

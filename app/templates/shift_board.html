@@ -473,6 +473,7 @@ async function loadList(){
         s === 'approved' ? pill('#22c55e22', '#86efac', 'approved')
       : s === 'denied'   ? pill('#ef444422', '#fca5a5', 'denied')
       : s === 'applied'  ? pill('#f59e0b22', '#fcd34d', 'applied')
+      : s === 'absent'   ? pill('#ef444422', '#fca5a5', 'no show')
       :                    pill('#1e293b',   '#8b9ab4', 'pending');
     $('#listBody').innerHTML =
       '<table><thead><tr><th>Truck</th><th>Sub</th><th>Approve</th>'
@@ -481,7 +482,22 @@ async function loadList(){
       + '<th>Status</th><th>Location</th><th>Reason if not applied</th>'
       + '</tr></thead><tbody>'
       + LIST.rows.map((r,i) =>
-        '<tr><td class="plate">'+esc(r.plate)+'</td>'
+        // A committed truck that never reached the sheet. It has no row in the
+        // list, so it carries no tick, no timing and no reason box - there is
+        // nothing to save against it. It is here to be seen and chased.
+        (r.absent
+          ? '<tr style="opacity:.72"><td class="plate">'+esc(r.plate)+'</td>'
+            + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
+            + '<td></td><td></td><td></td>'
+            + '<td>'+badge('absent')+'</td>'
+            + '<td colspan="3" style="color:var(--bad);font-size:12px">'
+            + 'Committed for the project and not on this sheet — ask the '
+            + 'subcontractor for its status.</td></tr>'
+          :
+        '<tr><td class="plate">'+esc(r.plate)
+        + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
+            + 'color:#fcd34d" title="This plate is not on the committed roster '
+            + 'for this company">not committed</span>' : '') + '</td>'
         + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
         + '<td><input type="checkbox" class="r-ready" data-i="'+i+'"'
         + (r.ready?' checked':'')
@@ -499,7 +515,7 @@ async function loadList(){
         + '<td style="color:var(--mut);font-size:12px">'+esc(r.location||'')+'</td>'
         + '<td><input type="text" class="r-reason" data-i="'+i+'" value="'+esc(r.reason)+'" '
         + 'style="width:100%" placeholder="required when not applied"'
-        + (editable?'':' disabled') + '></td></tr>').join('')
+        + (editable?'':' disabled') + '></td></tr>')).join('')
       + '</tbody></table>'
       + (editable ? '<div class="empty" style="margin-top:8px">Add more, one plate per line:</div>'
         + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
