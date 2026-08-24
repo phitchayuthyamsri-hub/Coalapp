@@ -602,6 +602,25 @@ TAB_KEYS = ["perf","daily","timeline","pva","subfleet","anchors","data","gps","p
             "truckstatus","weigh","fleet","guide"]
 
 
+def _sub_scope(role, raw):
+    """Which company a login is confined to.
+
+    Only a subcontractor login carries one, and it must name a real company: an
+    unscoped subcontractor account falls through to the legacy list instead of
+    being held to its own trucks, which is the opposite of the point. Every
+    other role carries none, so an id left behind on a demoted account cannot
+    masquerade as a restriction.
+    """
+    if role != "subcontractor":
+        return None
+    try:
+        sid = int(raw)
+    except (TypeError, ValueError):
+        return None
+    from .models import Subcontractor
+    return sid if db.session.get(Subcontractor, sid) else None
+
+
 def _tabs_of(u):
     if not u.allowed_tabs:
         return None  # None = all tabs allowed
@@ -643,7 +662,8 @@ def admin_users():
                     "is_admin": bool(u.is_admin), "tabs": _tabs_of(u),
                     "lang": (u.lang or "en"), "default_page": (u.default_page or ""),
                     "can_edit": bool(u.can_edit), "apps": _apps_of(u),
-                    "role": (u.role or "monitor")})
+                    "role": (u.role or "monitor"),
+                    "subcontractor_id": u.subcontractor_id})
     return jsonify(out)
 
 
@@ -673,6 +693,15 @@ def admin_update(uid):
         r = str(d["role"] or "").lower()
         if r in ROLE_KEYS:
             u.role = r
+    # The company follows the role: set for a subcontractor login, cleared for
+    # every other one, so demoting an account cannot leave a stale scope behind.
+    if "role" in d or "subcontractor_id" in d:
+        raw = d.get("subcontractor_id", u.subcontractor_id)
+        sid = _sub_scope(u.role or "monitor", raw)
+        if (u.role or "") == "subcontractor" and sid is None:
+            return jsonify(ok=False, error="Choose which company this "
+                                           "subcontractor login belongs to."), 400
+        u.subcontractor_id = sid
     if "apps" in d:
         a = d["apps"]
         u.allowed_apps = None if a is None else json.dumps([str(x) for x in a if str(x) in APP_KEYS])
@@ -703,6 +732,10 @@ def admin_create():
     u.can_edit = bool(d.get("can_edit", True))
     r = str(d.get("role") or "monitor").lower()
     u.role = r if r in ROLE_KEYS else "monitor"
+    u.subcontractor_id = _sub_scope(u.role, d.get("subcontractor_id"))
+    if u.role == "subcontractor" and u.subcontractor_id is None:
+        return jsonify(ok=False, error="Choose which company this subcontractor "
+                                       "login belongs to."), 400
     u.lang = "vi" if str(d.get("lang", "en")).lower() == "vi" else "en"
     dp = str(d.get("default_page") or "")
     u.default_page = dp if dp in TAB_KEYS else None

@@ -1,33 +1,89 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import (Blueprint, render_template, request, redirect, url_for,
+                   flash, session, abort)
 from flask_login import login_user, logout_user, login_required, current_user
 
-from .models import db, User
+from .models import db, User, Subcontractor
 from . import activity
 
 bp = Blueprint("auth", __name__)
 
 
+def _sub_id_for(role, raw):
+    """Which company a login is scoped to.
+
+    Only a subcontractor login carries one, and it must name a real company:
+    an unscoped subcontractor account would fall through to the legacy list
+    instead of being confined to its own trucks, which is the opposite of the
+    point. Every other role carries none - an id left on a monitor is dead data
+    that reads like a restriction.
+    """
+    if role != "subcontractor":
+        return None
+    try:
+        sid = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return sid if db.session.get(Subcontractor, sid) else None
+
+
 @bp.route("/register", methods=["GET", "POST"])
 def register():
+    """Create an account. Admins only.
+
+    Accounts used to be open to anyone who could reach the server, which on a
+    public address means anyone at all - and a new account defaults to seeing
+    every company's trucks, drivers and GPS trails. The one exception is an
+    empty system: somebody has to be able to make the first account, and there
+    is no admin yet to authorise it.
+    """
+    from .api import ROLE_KEYS
+    bootstrap = (User.query.count() == 0)
+    if not bootstrap:
+        if not current_user.is_authenticated:
+            return redirect(url_for("auth.login", next=request.path))
+        if not getattr(current_user, "is_admin", False):
+            abort(403)
+
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
         if not username or not password:
             flash("Username and password required.")
             return redirect(url_for("auth.register"))
-        if User.query.filter_by(username=username).first():
+        if User.query.filter(db.func.lower(User.username) == username.lower()).first():
             flash("That username is taken.")
             return redirect(url_for("auth.register"))
+
+        role = (request.form.get("role") or "monitor").strip().lower()
+        if role not in ROLE_KEYS:
+            role = "monitor"
+        sub_id = _sub_id_for(role, request.form.get("subcontractor_id"))
+        if role == "subcontractor" and sub_id is None:
+            flash("Choose which company this subcontractor login belongs to.")
+            return redirect(url_for("auth.register"))
+
         u = User(username=username)
         u.set_password(password)
-        if User.query.count() == 0:
+        u.role = "admin" if bootstrap else role
+        u.subcontractor_id = sub_id
+        if bootstrap:
             u.is_admin = True
         db.session.add(u)
         db.session.commit()
-        login_user(u)
-        session.permanent = True
-        return redirect(url_for("views.dashboard"))
-    return render_template("register.html")
+
+        # An admin creating an account stays signed in as themselves. Logging in
+        # as the new user would silently swap the session out from under them.
+        if bootstrap:
+            login_user(u)
+            session.permanent = True
+            return redirect(url_for("views.dashboard"))
+        flash("Created %s (%s)." % (u.username, u.role))
+        return redirect(url_for("views.admin"))
+
+    subs = Subcontractor.query.filter_by(active=True).order_by(
+        Subcontractor.name).all() if not bootstrap else []
+    return render_template("register.html", bootstrap=bootstrap,
+                           roles=ROLE_KEYS, subs=subs)
 
 
 def _safe_next(target):

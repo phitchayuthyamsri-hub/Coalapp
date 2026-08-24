@@ -150,8 +150,70 @@ def _req_sub_id(d=None):
     return int(v) if str(v or "").strip().isdigit() else None
 
 
+def _asked_all(d=None):
+    """True when the caller asked for every company at once.
+
+    Never for a subcontractor login: that account is pinned to its own company
+    and must not be handed the whole corridor's day. Kept separate from
+    _req_sub_id because a missing id already means the legacy pre-per-company
+    list - if "all" fell through to that, a write would edit the wrong list
+    instead of being refused.
+    """
+    if _role() == "subcontractor":
+        return False
+    if d is not None and "subcontractor_id" in d:
+        v = d.get("subcontractor_id")
+    else:
+        v = request.args.get("subcontractor_id")
+    return str(v or "").strip().lower() == "all"
+
+
+def _one_company_only():
+    return jsonify(error="Pick one company. A list is uploaded, submitted and "
+                         "confirmed for a single company, so there is no list "
+                         "for “all” to act on."), 400
+
+
 def _find_list(day, sub_id):
     return DailyList.query.filter_by(list_date=day, subcontractor_id=sub_id).first()
+
+
+def _all_payload(day):
+    """Every company's list for one day, merged into one read-only view.
+
+    The day is worked one company at a time, but it is READ whole: who is going
+    tomorrow is a question about the corridor, not about Bao Binh. So this
+    merges the rows and reports each company's own state alongside them.
+
+    `can` is false throughout on purpose. Upload, Submit and Confirm each act on
+    one company's list, and a button here would have to invent which list it
+    meant - so the view carries none of them and says so instead.
+    """
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
+    lists = DailyList.query.filter_by(list_date=day).all()
+    rows, parties, applied = [], [], 0
+    for dl in sorted(lists, key=lambda d: subs.get(d.subcontractor_id, "")):
+        p = _list_payload(dl, day)
+        rows.extend(p["rows"])
+        applied += p["applied_count"]
+        parties.append({"id": dl.subcontractor_id,
+                        "short": subs.get(dl.subcontractor_id, "(no company)"),
+                        "state": dl.state, "trucks": len(p["rows"])})
+    # Merged rows sort the way a single list does: by when the truck is due at
+    # the mine, with the untimed ones - the trucks not going - at the bottom.
+    rows.sort(key=lambda r: (0 if r["arrive_date"] else 1, r["arrive_date"],
+                             0 if r["arrive"] else 1, r["arrive"], r["plate"]))
+    states = {p["state"] for p in parties}
+    state = "none" if not states else (states.pop() if len(states) == 1 else "mixed")
+    return {
+        "date": day, "all": True, "state": state, "rows": rows,
+        "parties": parties, "applied_count": applied,
+        "submitted_by": None, "submitted_at": None,
+        "confirmed_by": None, "confirmed_at": None, "reject_reason": "",
+        "role": _role(),
+        "can": {a: False for a in ("edit", "submit", "confirm", "reject",
+                                   "edit_time", "reopen")},
+    }
 
 
 def _restate(dl):
@@ -380,6 +442,8 @@ def upload():
 
     day = (request.form.get("date") or "").strip() \
         or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    if _asked_all(request.form):
+        return _one_company_only()
     sub_id = _req_sub_id(request.form)
     dl = _find_list(day, sub_id)
 
@@ -474,6 +538,8 @@ def rows_revert():
     """
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    if _asked_all(d):
+        return _one_company_only()
     sub_id = _req_sub_id(d)
     dl = _find_list(day, sub_id)
     if not dl:
@@ -1401,6 +1467,8 @@ def latest():
 @login_required
 def get_list():
     day = request.args.get("date") or datetime.utcnow().strftime("%Y-%m-%d")
+    if _asked_all():
+        return jsonify(_all_payload(day))
     sub_id = _req_sub_id()
     dl = _find_list(day, sub_id)
     out = _list_payload(dl, day)
@@ -1418,6 +1486,8 @@ def save_list():
     a manager or admin may change it."""
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or datetime.utcnow().strftime("%Y-%m-%d")
+    if _asked_all(d):
+        return _one_company_only()
     sub_id = _req_sub_id(d)
     dl = _find_list(day, sub_id)
     state = dl.state if dl else "none"
@@ -1463,6 +1533,8 @@ def act_list(action):
         return jsonify(error="unknown action"), 404
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or datetime.utcnow().strftime("%Y-%m-%d")
+    if _asked_all(d):
+        return _one_company_only()
     sub_id = _req_sub_id(d)
     dl = _find_list(day, sub_id)
     state = dl.state if dl else "none"

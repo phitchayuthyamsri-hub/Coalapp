@@ -1,15 +1,57 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="authbox">
-  <h1>Create account</h1>
+  <h1>{% if bootstrap %}Create the first account{% else %}Create account{% endif %}</h1>
+  {% if bootstrap %}
+    <p class="muted">There are no accounts yet, so this one is made an admin and
+      signs in straight away. Afterwards, only an admin can create accounts.</p>
+  {% endif %}
   <form method="post" action="{{ url_for('auth.register') }}" autocomplete="off">
     <input name="username" placeholder="Username" autofocus
            autocomplete="off" autocapitalize="none" autocorrect="off"
            spellcheck="false">
     <input name="password" type="password" placeholder="Password"
            autocomplete="new-password">
-    <button type="submit">Register</button>
+    {% if not bootstrap %}
+      <select name="role" id="role">
+        {% for r in roles %}
+          <option value="{{ r }}"{% if r == 'monitor' %} selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+      <!-- A subcontractor login is confined to one company's trucks, so the
+           company is not optional: without it the account has nothing to be
+           confined to. Hidden for every other role, which is scoped to none. -->
+      <div id="subWrap" style="display:none">
+        <select name="subcontractor_id" id="subSel">
+          <option value="">— choose the company —</option>
+          {% for s in subs %}
+            <option value="{{ s.id }}">{{ s.short or s.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="muted" style="font-size:12px;margin:4px 0 0">
+          This login will see only this company's trucks.</p>
+      </div>
+    {% endif %}
+    <button type="submit">Create</button>
   </form>
   <p class="muted"><a href="{{ url_for('auth.login') }}">Back to login</a></p>
 </div>
+{% if not bootstrap %}
+<script>
+(function(){
+  var role = document.getElementById('role');
+  var wrap = document.getElementById('subWrap');
+  var sel  = document.getElementById('subSel');
+  function sync(){
+    var on = role.value === 'subcontractor';
+    wrap.style.display = on ? '' : 'none';
+    // Required only while it is on screen, so the form can still be submitted
+    // for every other role.
+    if (sel) sel.required = on;
+  }
+  role.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endif %}
 {% endblock %}

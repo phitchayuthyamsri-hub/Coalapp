@@ -100,6 +100,34 @@ function roleSelect(v){
     +(cur===r[0]?' selected':'')+'>'+r[1]+'</option>').join('')+'</select>';
 }
 
+// Which company a subcontractor login is confined to. Only that role has one,
+// so the field appears only for it - an empty company box on a monitor invites
+// someone to fill it in and expect it to mean something.
+let SUBS = [];
+function subSelect(v){
+  const cur = v == null ? '' : String(v);
+  return '<div class="field f-subwrap" style="display:none">'
+    + '<select class="f-sub"><option value="">— choose company —</option>'
+    + SUBS.map(s=>'<option value="'+s.id+'"'+(cur===String(s.id)?' selected':'')
+        +'>'+esc(s.short||s.name)+'</option>').join('')
+    + '</select><small>company (sees only these trucks)</small></div>';
+}
+function wireRoleScope(el){
+  const role = el.querySelector('.f-role');
+  const wrap = el.querySelector('.f-subwrap');
+  if (!role || !wrap) return;
+  const sync = () => { wrap.style.display = role.value === 'subcontractor' ? '' : 'none'; };
+  role.addEventListener('change', sync);
+  sync();
+}
+// Sent only when it applies, so a monitor is never given a company by accident.
+function scopeOf(el){
+  const role = el.querySelector('.f-role').value;
+  if (role !== 'subcontractor') return null;
+  const v = el.querySelector('.f-sub').value;
+  return v ? Number(v) : null;
+}
+
 function collectTabs(el){
   const boxes = Array.from(el.querySelectorAll('.tabchk'));
   const checked = boxes.filter(b=>b.checked).map(b=>b.value);
@@ -120,6 +148,7 @@ function renderCreate(){
     + '<div class="field">'+langSelect('en')+'<small>language</small></div>'
     + '<div class="field">'+pageSelect('')+'<small>default page</small></div>'
     + '<div class="field">'+roleSelect('monitor')+'<small>role</small></div>'
+    + subSelect(null)
     + '<label class="chk"><input type="checkbox" class="f-edit" checked> can edit</label>'
     + '<label class="chk"><input type="checkbox" class="f-admin"> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
@@ -130,6 +159,7 @@ function renderCreate(){
     + tabCheckboxes(ALL)
     + '<div class="actions"><button class="save create">Create user</button><span class="msg"></span></div>';
   wireAllNone(el);
+  wireRoleScope(el);
   el.querySelector('.save').onclick = () => {
     const msg = el.querySelector('.msg'); msg.textContent='Creating…'; msg.className='msg';
     const body = {
@@ -140,6 +170,7 @@ function renderCreate(){
       can_edit: el.querySelector('.f-edit').checked,
       is_admin: el.querySelector('.f-admin').checked,
       role: el.querySelector('.f-role').value,
+      subcontractor_id: scopeOf(el),
       apps: collectApps(el),
       tabs: collectTabs(el)
     };
@@ -163,6 +194,7 @@ function userCard(u){
     + '<div class="field">'+langSelect(u.lang)+'<small>language</small></div>'
     + '<div class="field">'+pageSelect(u.default_page)+'<small>default page</small></div>'
     + '<div class="field">'+roleSelect(u.role)+'<small>role</small></div>'
+    + subSelect(u.subcontractor_id)
     + '<label class="chk"><input type="checkbox" class="f-edit"'+(u.can_edit?' checked':'')+'> can edit</label>'
     + '<label class="chk"><input type="checkbox" class="f-admin"'+(u.is_admin?' checked':'')+'> admin</label>'
     + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
@@ -173,6 +205,7 @@ function userCard(u){
     + tabCheckboxes(allowed)
     + '<div class="actions"><button class="save">Save</button><button class="del">Delete</button><span class="msg"></span></div>';
   wireAllNone(el);
+  wireRoleScope(el);
   el.querySelector('.save').onclick = () => {
     const msg = el.querySelector('.msg'); msg.textContent='Saving…'; msg.className='msg';
     const body = {
@@ -182,6 +215,7 @@ function userCard(u){
       can_edit: el.querySelector('.f-edit').checked,
       is_admin: el.querySelector('.f-admin').checked,
       role: el.querySelector('.f-role').value,
+      subcontractor_id: scopeOf(el),
       apps: collectApps(el)
     };
     const pw = el.querySelector('.f-pass').value; if(pw) body.password = pw;
@@ -211,8 +245,13 @@ function load(){
     users.forEach(u => list.appendChild(userCard(u)));
   }).catch(()=>{ document.getElementById('list').innerHTML='<p class="err">Could not load users.</p>'; });
 }
-renderCreate();
-load();
+// The companies have to be in hand before any card is drawn, or the picker
+// renders empty and silently offers nothing to choose.
+fetch('/api/shift/subcontractors')
+  .then(r => r.ok ? r.json() : {subcontractors: []})
+  .then(j => { SUBS = j.subcontractors || []; })
+  .catch(() => { SUBS = []; })
+  .finally(() => { renderCreate(); load(); });
 </script>
 </body>
 </html>

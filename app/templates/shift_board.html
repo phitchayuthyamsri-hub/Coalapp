@@ -192,9 +192,13 @@ function paintCounts(){
   if (!boxes.length){ el.textContent = ''; return; }
   const ready = boxes.filter(b => b.checked).length;
   const not = boxes.length - ready;
+  // Reading every company at once, nothing is being sent from here, so the
+  // instruction to write a reason would be aimed at a button that is not shown.
+  const tail = (LIST && LIST.all)
+    ? ' not approved'
+    : ' not approved — each needs a reason before this can be sent';
   el.innerHTML = ready + ' ready'
-    + (not ? ' · <span style="color:var(--warn)">' + not + ' not approved — each needs a '
-             + 'reason before this can be sent</span>' : '');
+    + (not ? ' · <span style="color:var(--warn)">' + not + tail + '</span>' : '');
 }
 
 const todayStr = () => {
@@ -220,7 +224,14 @@ async function loadSubs(){
   $('#rolePill').textContent = ROLE;
   SUBS = j.subcontractors || [];
   const sel = $('#sub');
-  sel.innerHTML = SUBS.map(s =>
+  // "All companies" reads the day whole - who is going tomorrow is a question
+  // about the corridor, not about one company. It is deliberately read-only:
+  // uploading, submitting and confirming each act on a single company's list.
+  // A subcontractor login never sees it; that account is pinned to its own
+  // company and has no business reading anyone else's trucks.
+  const canSeeAll = (j.role !== 'subcontractor');
+  sel.innerHTML = (canSeeAll ? '<option value="all">All companies</option>' : '')
+    + SUBS.map(s =>
     '<option value="'+s.id+'">'+esc(s.short)
     + (s.committed ? ' — ' + s.committed + ' committed' : '') + '</option>').join('');
   // A subcontractor login is pinned to its own company and cannot switch.
@@ -394,7 +405,8 @@ const BANNER = {
   draft:     ['b-draft',     'Pending confirmation to manager.'],
   submitted: ['b-submitted', 'Submitted — waiting for the manager to confirm.'],
   confirmed: ['b-confirmed', 'Confirmed — locked. Monitoring is live.'],
-  rejected:  ['b-rejected',  'Sent back by the manager.']
+  rejected:  ['b-rejected',  'Sent back by the manager.'],
+  mixed:     ['b-none',      'Every company for this date.']
 };
 
 async function loadList(){
@@ -411,6 +423,14 @@ async function loadList(){
   }
   if (LIST.state === 'rejected' && LIST.reject_reason)
     extra = ' Reason: “' + esc(LIST.reject_reason) + '”';
+  // Reading every company at once: the banner carries each company's own state,
+  // because "mixed" on its own tells nobody which list still needs working.
+  if (LIST.all){
+    const bits = (LIST.parties || []).map(p => p.short + ' ' + p.state).join(' · ');
+    text = bits ? 'All companies — ' + bits : 'No lists for this date.';
+    extra = '';
+    cls = 'b-none';
+  }
   $('#listBanner').className = 'banner ' + cls;
   $('#listBanner').textContent = text + extra;
 
@@ -419,7 +439,9 @@ async function loadList(){
   // arrived. Nobody re-ticks a row that is already decided.
   // Undo one step: the manager takes back a decision, the supervisor withdraws
   // something not yet decided.
-  const canRevert = r =>
+  // Stepping a truck back changes one company's list, so it is not offered
+  // while reading them all - the button would have no list to act on.
+  const canRevert = r => LIST.all ? false :
       (r.state === 'approved' || r.state === 'denied')
         ? (ROLE === 'manager' || ROLE === 'admin')
     : (r.state === 'applied')
@@ -519,6 +541,12 @@ async function loadList(){
   const none = !(c.edit || c.submit || c.confirm || c.reject || c.reopen);
   $('#roleNote').textContent = none
     ? 'You are signed in as ' + ROLE + ' — this list is read-only for you.' : '';
+  // Nothing is editable here for anyone, so say why rather than blame the role.
+  if (LIST.all){
+    $('#nextStep').textContent = 'Pick one company to upload, submit or confirm '
+      + '— each of those acts on a single company’s list.';
+    $('#roleNote').textContent = '';
+  }
 }
 
 function collectRows(){
