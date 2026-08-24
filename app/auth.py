@@ -102,7 +102,12 @@ def _safe_next(target):
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
+    # Someone already signed in has no use for the form, so a GET goes straight
+    # on. A POST is different: it carries credentials somebody just typed, and
+    # bouncing it discarded them silently - sign in as a manager, come back and
+    # sign in as a supervisor, and the app kept you as the manager with no error
+    # to say why. Credentials submitted are a request to BE that account.
+    if current_user.is_authenticated and request.method == "GET":
         return redirect(url_for("views.dashboard"))
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
@@ -113,10 +118,15 @@ def login():
         # original casing here locked people out of their own usernames.
         u = User.query.filter(db.func.lower(User.username) == username.lower()).first()
         if u and u.check_password(password):
+            # Read the destination before dropping the old session, and drop it
+            # only once the new credentials have proved good - a typo must not
+            # log out the person who is already signed in.
+            target = _safe_next(session.pop("_login_next", None))
+            if current_user.is_authenticated:
+                logout_user()
             login_user(u)
             session.permanent = True
             activity.record_login(u, request)
-            target = _safe_next(session.pop("_login_next", None))
             return redirect(target or url_for("views.dashboard"))
         flash("Invalid username or password.")
         return redirect(url_for("auth.login"))
