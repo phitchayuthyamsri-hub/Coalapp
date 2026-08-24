@@ -36,6 +36,10 @@ class Config:
     MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB uploads
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
     SESSION_REFRESH_EACH_REQUEST = True  # sliding window: 30 min of inactivity
+    # The logistics app shares this droplet's IP, browser cookies ignore ports,
+    # and both apps default to a cookie named "session" — so each app kept
+    # overwriting the other's login. A distinct name ends the fight.
+    SESSION_COOKIE_NAME = "coalapp_session"
 
 
 def _truthy(v):

@@ -14,6 +14,18 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
+@login_manager.unauthorized_handler
+def _unauthorized():
+    """API calls are made by scripts, not people: answer 401 instead of
+    redirecting them into the login flow, where their URL would be remembered
+    as the after-login destination and served to a browser as a GET."""
+    from flask import request, redirect, jsonify
+    from flask_login import login_url
+    if request.path == "/api" or request.path.startswith("/api/"):
+        return jsonify(error="login required"), 401
+    return redirect(login_url(login_manager.login_view, request.url))
+
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)

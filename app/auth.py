@@ -32,10 +32,14 @@ def register():
 
 def _safe_next(target):
     """Only allow same-site relative paths (e.g. "/gps-capture"); reject absolute
-    URLs and protocol-relative "//host" to avoid open-redirects."""
+    URLs and protocol-relative "//host" to avoid open-redirects. API paths are
+    rejected too: they are fetch targets, not pages — a background tracker
+    bounced through login must never become the after-login destination."""
     if not target:
         return None
     if target.startswith("/") and not target.startswith("//") and "\\" not in target:
+        if target == "/api" or target.startswith("/api/"):
+            return None
         return target
     return None
 
@@ -61,7 +65,11 @@ def login():
         flash("Invalid username or password.")
         return redirect(url_for("auth.login"))
     # GET: remember where @login_required was sending the user, for after login.
-    session["_login_next"] = _safe_next(request.args.get("next"))
+    # Only overwrite when this request actually carries a destination — a
+    # background fetch redirected here must not clobber where the user was going.
+    target = _safe_next(request.args.get("next"))
+    if target:
+        session["_login_next"] = target
     return render_template("login.html")
 
 
