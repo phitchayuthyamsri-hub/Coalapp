@@ -126,6 +126,10 @@ def _ensure_user_schema():
 
 
 SUBCONTRACTORS = [
+    # Bac Nam Transport carries the project fleet - the 50 trucks the corridor
+    # is planned around. Listed first because it is the company the day is built
+    # on, not one of the occasional hauliers below it.
+    ("Bac Nam", "Bac Nam"),
     ("PTS", "PTS"), ("Hoanh Son", "Hoanh Son"), ("Bao Binh", "BBC"),
     ("Alpha", "Alpha"), ("Nam Tien (Dong Bac)", "Nam Tien"), ("DTT", "DTT"),
     ("An Viet", "An Viet"), ("Vinh Phu", "Vinh Phu"), ("Duy Linh", "Duy Linh"),
@@ -157,9 +161,16 @@ def _ensure_subcontractors():
     except Exception as e:  # pragma: no cover
         db.session.rollback()
 
-    if Subcontractor.query.first() is None:
-        for name, short in SUBCONTRACTORS:
-            db.session.add(Subcontractor(name=name, short=short))
+    # Top up per company rather than all-or-nothing: a database seeded before a
+    # haulier joined the project would otherwise never receive it, and the
+    # company would be missing from every picker with no way to add it.
+    added = 0
+    for name, short in SUBCONTRACTORS:
+        if Subcontractor.query.filter_by(name=name).first():
+            continue
+        db.session.add(Subcontractor(name=name, short=short))
+        added += 1
+    if added:
         db.session.commit()
 
 
