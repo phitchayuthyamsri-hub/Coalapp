@@ -53,6 +53,17 @@ _BRIDGE = """<script>
 # Apply per-user settings to the tool: username top-right, default language,
 # allowed tabs, default landing page, and read-only (no uploads / no saving).
 _GUARD = """<script>
+// The page the address bar arrived with, read here in <head> and kept.
+// It has to be captured now: the restore below reads it only after an async
+// /api/me, and the recorder further down fires on DOMContentLoaded - which is
+// sooner. The recorder saw the markup's own default still active, decided the
+// hash was out of date and rewrote it, so by the time the restore looked, the
+// page it was meant to return to had been replaced by the default.
+window.__bootPage='';
+try{ window.__bootPage=decodeURIComponent((window.location.hash||'').slice(1)); }catch(e){}
+// Nothing may write to the address bar until the restore has had its turn.
+window.__pageReady=false;
+
 (function(){
   var IDLE_MS=30*60*1000, timer;
   function reset(){ clearTimeout(timer); timer=setTimeout(function(){ try{location.href='/logout';}catch(e){} }, IDLE_MS); }
@@ -122,9 +133,7 @@ _GUARD = """<script>
             function(b){ if(b.style.display==='none') return false;
               return keyOf(b)===k || (b.getAttribute('data-perm')||b.getAttribute('data-page'))===k;
             }) || null; };
-        var back=null;
-        try { back=decodeURIComponent((window.location.hash||'').slice(1)); } catch(e){}
-        var target=find(back);
+        var target=find(window.__bootPage);
         if(!target && me.default_page && ok(me.default_page)) target=find(me.default_page);
         var active=nav.querySelector('button[data-page].active');
         if(!target && active && active.style.display==='none'){
@@ -132,7 +141,8 @@ _GUARD = """<script>
         }
         if(target) target.click();
       }
-    }).catch(function(){});
+      window.__pageReady=true;      // the recorder may write from here on
+    }).catch(function(){ window.__pageReady=true; });
   });
 })();
 
@@ -144,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function(){
   var nav=document.getElementById('pageNav');
   if(!nav) return;
   function remember(){
+    if(!window.__pageReady) return;   // the restore has not run yet
     var b=nav.querySelector('button[data-page].active'); if(!b) return;
     var pg=b.getAttribute('data-page'), sb=b.getAttribute('data-subtab');
     var k=sb? pg+':'+sb : pg;
@@ -155,7 +166,6 @@ document.addEventListener('DOMContentLoaded', function(){
   });
   // Sub-tabs inside a page move the active button too, without a nav click.
   setInterval(remember, 1500);
-  remember();          // whatever the tool opened on
 });
 
 (function(){
