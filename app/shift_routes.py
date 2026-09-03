@@ -12,9 +12,9 @@ from flask import Blueprint, jsonify, request, Response
 from flask_login import login_required, current_user
 
 from . import engine
-from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck,
+from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
-                     PlanSetting, RouteLeg, PlanSnapshot)
+                     PlanSetting, RouteLeg, PlanSnapshot, Notice)
 from . import readiness_import
 from . import planner
 
@@ -1494,6 +1494,197 @@ def latest():
     return jsonify(date=today, subcontractor_id=None, why="no lists yet", today=today)
 
 
+def _day_start(day):
+    return datetime.strptime(day, "%Y-%m-%d")
+
+
+def _standing(day, only):
+    """What the day looks like before it is committed to.
+
+    Three questions the plan itself does not answer, because a plan describes
+    what should happen rather than what is still outstanding:
+
+      loading   how many of the day's trucks actually load ON the day. The mine
+                has two bays at an hour each, so more than 48 trucks cannot all
+                load in one day however many arrive - the rest slide into the
+                next, and that spill is the first thing a headline count hides.
+      carrying  how many trucks are still out on an earlier dispatch when this
+                day opens. At a 56 h cycle a truck sent yesterday is still on
+                the road today, so a plate promised again today may not be free
+                to keep that promise.
+      promise   of the last day that actually ran, how many trucks reached the
+                mine as promised. Rule 3 applies: a truck the GPS never saw is
+                NOT counted as a failure, only as unverified.
+    """
+    today = _revision_data(day, only)
+    start = _day_start(day)
+
+    # -- loading -------------------------------------------------------------
+    on_day, spill = 0, {}
+    for r in today["rows"]:
+        ls = (r.get("t") or {}).get("load_start")
+        if not ls:
+            continue
+        if ls[:10] == day:
+            on_day += 1
+        else:
+            spill[ls[:10]] = spill.get(ls[:10], 0) + 1
+
+    # -- carrying ------------------------------------------------------------
+    # Three days back covers a 56 h cycle with room to spare; further back a
+    # truck is either home or is a problem no arithmetic here is going to find.
+    carrying, clash = [], []
+    promised_today = set(r["plate"] for r in today["rows"])
+    for back in (1, 2, 3):
+        prev = (start - timedelta(days=back)).strftime("%Y-%m-%d")
+        try:
+            pdata = _revision_data(prev, only)
+        except Exception:
+            continue
+        for r in pdata["rows"]:
+            closes = (r.get("t") or {}).get("back")
+            if not closes:
+                continue
+            try:
+                when = datetime.strptime(closes, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                continue
+            if when <= start:
+                continue                      # home before the day began
+            item = {"plate": r["plate"], "sub": r.get("sub"),
+                    "from_day": prev, "closes": closes}
+            carrying.append(item)
+            if r["plate"] in promised_today:
+                clash.append(item)            # promised again while still out
+
+    # -- promise -------------------------------------------------------------
+    promise = None
+    owner = dict((dl.id, dl.subcontractor_id) for dl in DailyList.query.all())
+    approved = DailyListRow.query.filter(DailyListRow.state == "approved").all()
+    ran = sorted(set(r.arrive_date for r in approved
+                     if r.arrive_date and r.arrive_date < day), reverse=True)
+    if ran:
+        past = ran[0]
+        expected = {}
+        for r in approved:
+            if r.arrive_date != past or not r.arrive_hhmm:
+                continue
+            if only is not None and owner.get(r.list_id) != only:
+                continue
+            expected[engine.norm_plate(r.plate)] = (r.plate, r.arrive_hhmm)
+        visits, roles = _visits_and_roles()
+        mine_id = roles.get("xppl")
+        seen = {}
+        for v in visits:
+            if v.get("anchor_id") != mine_id:
+                continue
+            e = v.get("enter")
+            if not e or e.strftime("%Y-%m-%d") != past:
+                continue
+            k = engine.norm_plate(v.get("plate"))
+            if k not in seen or e < seen[k]:
+                seen[k] = e
+        on_time, late, unseen = [], [], []
+        for k in sorted(expected):
+            plate, hhmm = expected[k]
+            got = seen.get(k)
+            if not got:
+                unseen.append(plate)
+                continue
+            try:
+                h, m = hhmm.split(":")
+                due = datetime.strptime(past, "%Y-%m-%d") + timedelta(
+                    hours=int(h), minutes=int(m))
+            except ValueError:
+                continue
+            mins = int(round((got - due).total_seconds() / 60))
+            row = {"plate": plate, "late_min": mins}
+            if mins > 60:
+                late.append(row)
+            else:
+                on_time.append(row)
+        promise = {"day": past, "promised": len(expected),
+                   "on_time": len(on_time), "late": len(late),
+                   "late_rows": sorted(late, key=lambda x: -x["late_min"])[:10],
+                   # Deliberately not "failed": the GPS pulls every few hours,
+                   # so silence is missing evidence, not a missing truck.
+                   "unverified": len(unseen), "unverified_rows": unseen[:20]}
+
+    return {
+        "date": day, "subcontractor_id": only,
+        "loading": {"on_day": on_day, "total": len(today["rows"]),
+                    "spill": [{"date": d, "trucks": n}
+                              for d, n in sorted(spill.items())]},
+        "carrying": {"count": len(carrying), "rows": carrying[:20],
+                     "clash": len(clash), "clash_rows": clash[:20]},
+        "promise": promise,
+    }
+
+
+@bp.get("/revision/standing")
+@login_required
+def revision_standing():
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    return jsonify(**_standing(day, _req_sub_id()))
+
+
+@bp.get("/revision/audience")
+@login_required
+def revision_audience():
+    """Who a revision would reach, so the button can say so before it is used."""
+    aud = [a.strip() for a in
+           (request.args.get("audience") or "monitor,mine").split(",") if a.strip()]
+    users = User.query.filter(User.role.in_(aud)).all()
+    return jsonify(audience=aud,
+                   users=[{"username": u.username, "role": u.role} for u in users],
+                   count=len(users),
+                   may_issue=_role() in ("manager", "admin"))
+
+
+@bp.post("/revision/issue")
+@login_required
+def revision_issue():
+    """Issue the revised day, and tell the people who have to act on it.
+
+    Same bar as issuing a week: a decision, not a save. From here the monitoring
+    team watches against these times and the mine expects these trucks, so it
+    leaves a record of what was issued and who was told.
+    """
+    if _role() not in ("manager", "admin"):
+        return jsonify(error="Only a manager or an admin may issue a revision"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = _req_sub_id(d)
+    data = _revision_data(day, only)
+    if not data["rows"]:
+        return jsonify(error="There is no revised plan for this day to issue."), 400
+
+    st = _standing(day, only)
+    subs = dict((x.id, (x.short or x.name)) for x in Subcontractor.query.all())
+    who = subs.get(only, "all companies")
+    audience = d.get("audience") or "monitor,mine"
+
+    n = Notice(kind="revision", day=day, subcontractor_id=only,
+               title="Revised plan issued for %s (%s)" % (day, who),
+               audience=audience, created_by=current_user.username,
+               created_at=datetime.utcnow(),
+               detail={"trucks": len(data["rows"]),
+                       "loading_on_day": st["loading"]["on_day"],
+                       "loading_spill": st["loading"]["spill"],
+                       "carrying": st["carrying"]["count"],
+                       "clash": st["carrying"]["clash"],
+                       "mean_cycle": data["summary"]["mean_cycle"],
+                       "note": (d.get("note") or "").strip()[:300]})
+    db.session.add(n)
+    db.session.commit()
+
+    aud = [a.strip() for a in audience.split(",") if a.strip()]
+    told = [u.username for u in User.query.filter(User.role.in_(aud)).all()]
+    return jsonify(ok=True, id=n.id, day=day, audience=audience,
+                   notified=told, notified_count=len(told), detail=n.detail)
+
+
 @bp.get("/alerts")
 @login_required
 def alerts():
@@ -1543,6 +1734,35 @@ def alerts():
             "due": [{"date": d, "trucks": n} for d, n in sorted(due.items())],
             "no_time": sum(1 for r in rows if not (r.arrive_date and r.arrive_hhmm)),
         })
+    # Notices are addressed rather than derived: a revision leaves no state
+    # change of its own, so without the record there would be nothing to show.
+    role = _role()
+    for n in (Notice.query.filter(Notice.created_at > since)
+              .order_by(Notice.created_at.desc()).limit(50).all()):
+        aud = [a.strip() for a in (n.audience or "").split(",") if a.strip()]
+        # An admin sees everything; otherwise it has to have been sent to you.
+        if role != "admin" and role not in aud:
+            continue
+        if mine is not None and n.subcontractor_id not in (None, mine):
+            continue
+        if (n.created_by or "") == current_user.username:
+            continue
+        d = n.detail or {}
+        out.append({
+            "kind": n.kind or "revision",
+            "sheet_date": n.day,
+            "company": subs.get(n.subcontractor_id, "all companies"),
+            "subcontractor_id": n.subcontractor_id,
+            "by": n.created_by, "at": _fmt(n.created_at),
+            "title": n.title,
+            "approved": d.get("trucks") or 0,
+            "due": [{"date": n.day, "trucks": d.get("loading_on_day") or 0}],
+            "no_time": 0,
+            "note": d.get("note") or "",
+            "carrying": d.get("carrying") or 0,
+            "clash": d.get("clash") or 0,
+        })
+    out.sort(key=lambda a: a.get("at") or "", reverse=True)
     return jsonify(alerts=out, count=len(out))
 
 

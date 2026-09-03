@@ -203,6 +203,22 @@
   .alert button{background:none;border:1px solid #2f5d34;color:#8fe39a;
                 border-radius:7px;padding:5px 12px;cursor:pointer;font:inherit;white-space:nowrap}
   .alert button:hover{background:#17331c}
+  .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+         gap:12px;margin:0 0 14px}
+  .sbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .sbox .n{font-size:26px;font-weight:700;line-height:1.1}
+  .sbox .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+           margin-bottom:5px}
+  .sbox .d{color:var(--mut);font-size:12.5px;margin-top:5px;line-height:1.45}
+  .sbox.warn{border-color:#7a4a1e}
+  .sbox.warn .n{color:#ffb020}
+  .sbox.bad{border-color:#7a2b2b}
+  .sbox.bad .n{color:#ff6b60}
+  .issueBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
+  .issueBar button{background:var(--acc);color:#04201c;border:0;border-radius:9px;
+                   padding:9px 18px;font-weight:700;cursor:pointer;font:inherit}
+  .issueBar button[disabled]{opacity:.45;cursor:not-allowed}
+  .issueBar .who{color:var(--mut);font-size:12.5px}
   .dayLabel{font-size:15px;font-weight:600;padding:6px 0 5px;white-space:nowrap}
   .dayLabel .when{font-weight:400;color:var(--mut);font-size:12.5px;margin-left:7px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
   /* Embedded in the operations shell: the shell supplies the header, so the
@@ -261,6 +277,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   </div>
 
   <div class="card">
+    <div id="standing"></div>
+    <div class="issueBar" id="issueBar"></div>
     <h2>Revised plan &mdash; one day, one cycle</h2>
     <p class="hint">This is where the readiness sheet takes effect again. The week
       was issued in advance and the subcontractor works to it; by the day itself
@@ -1261,6 +1279,100 @@ function dayName(d){
   } catch (e) { return d; }
 }
 
+// The three questions a planner asks before committing to a day: how many
+// actually load on it, how many trucks are still out on an earlier run, and
+// whether the last day that ran was kept to.
+let STANDING = null;
+async function loadStanding(){
+  const box = $('#standing');
+  if (!box) return;
+  let d;
+  try { d = await jget('/api/shift/revision/standing?date=' + $('#day').value + subQ()); }
+  catch (e) { box.innerHTML = ''; return; }
+  STANDING = d;
+  const L = d.loading || {}, C = d.carrying || {}, P = d.promise;
+
+  const spill = (L.spill || []).map(x => x.trucks + ' on ' + dayName(x.date)).join(', ');
+  let html = '<div class="sgrid">';
+  html += '<div class="sbox' + (spill ? ' warn' : '') + '">'
+        + '<div class="k">Loading on this day</div><div class="n">' + (L.on_day || 0)
+        + '<span style="font-size:14px;color:var(--mut);font-weight:400"> of '
+        + (L.total || 0) + '</span></div>'
+        + '<div class="d">' + (spill
+            ? 'The mine cannot load them all in a day &mdash; ' + esc(spill) + '.'
+            : 'Every truck due loads on the day.') + '</div></div>';
+
+  html += '<div class="sbox' + (C.clash ? ' bad' : (C.count ? ' warn' : '')) + '">'
+        + '<div class="k">Still on an earlier order</div><div class="n">' + (C.count || 0) + '</div>'
+        + '<div class="d">' + (C.count
+            ? 'Out on the road when this day opens.'
+              + (C.clash ? ' <b style="color:#ff6b60">' + C.clash + ' of them are promised again today'
+                           + ' and cannot be in two places.</b>' : '')
+            : 'Nothing outstanding from earlier days.') + '</div></div>';
+
+  if (P){
+    const kept = (P.promised || 0) - (P.late || 0) - (P.unverified || 0);
+    html += '<div class="sbox' + (P.late ? ' warn' : '') + '">'
+          + '<div class="k">Promise kept on ' + esc(dayName(P.day)) + '</div>'
+          + '<div class="n">' + kept + '<span style="font-size:14px;color:var(--mut);font-weight:400">'
+          + ' of ' + (P.promised || 0) + '</span></div>'
+          + '<div class="d">' + (P.late || 0) + ' arrived more than an hour late'
+          + (P.unverified ? ' &middot; ' + P.unverified + ' not verified (the GPS never saw them, '
+                            + 'which is missing evidence rather than a missing truck)' : '')
+          + '.</div></div>';
+  } else {
+    html += '<div class="sbox"><div class="k">Promise kept</div>'
+          + '<div class="n" style="color:var(--mut)">&mdash;</div>'
+          + '<div class="d">No earlier day has run yet, so there is nothing to measure against.</div></div>';
+  }
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+// Issuing the revision is a decision: from here the monitoring team watches
+// against these times and the mine expects these trucks.
+async function paintIssue(){
+  const bar = $('#issueBar');
+  if (!bar) return;
+  let a;
+  try { a = await jget('/api/shift/revision/audience'); } catch (e) { return; }
+  const names = (a.users || []).map(u => u.username + ' (' + u.role + ')');
+  bar.innerHTML = '<button id="btnIssue"' + (a.may_issue ? '' : ' disabled')
+    + '>Issue revision &amp; notify</button>'
+    + '<span class="who">' + (a.may_issue
+        ? (a.count ? 'Tells ' + a.count + ' ' + (a.count === 1 ? 'person' : 'people')
+                     + ': ' + esc(names.join(', '))
+                   : 'No monitoring or mine account exists yet, so this would tell nobody.')
+        : 'Only a manager or an admin may issue a revision.')
+    + '</span><span class="msg" id="issueMsg"></span>';
+  const b = $('#btnIssue');
+  if (b) b.onclick = doIssue;
+}
+
+async function doIssue(){
+  const m = $('#issueMsg'), b = $('#btnIssue');
+  const day = $('#day').value;
+  if (!confirm('Issue the revised plan for ' + day + '?\n\n'
+      + 'The monitoring team and the mine team will be told, and the figures as '
+      + 'they stand now are recorded with it.')) return;
+  b.disabled = true;
+  m.textContent = 'Issuing...'; m.className = 'msg';
+  let j = {};
+  try {
+    const r = await fetch('/api/shift/revision/issue', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: day, subcontractor_id: SUBID || null})});
+    j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Could not issue');
+  } catch (e) {
+    m.textContent = e.message || 'Could not issue';
+    m.className = 'msg err'; b.disabled = false; return;
+  }
+  m.innerHTML = 'Issued &middot; ' + j.notified_count + ' notified';
+  m.className = 'msg ok';
+  b.disabled = false;
+}
+
 $('#day').onchange = run;
 $('#run').onclick = run;
 
@@ -1279,6 +1391,8 @@ $('#run').onclick = run;
   await run();
   loadAlerts();
   setInterval(loadAlerts, 60000);
+  loadStanding();
+  paintIssue();
   try { BASE = localStorage.getItem('plannerBase') || 'dark'; } catch (e) {}
   buildBaseButtons();
   setBase(BASE);              // marks the button; the map itself opens with the tab

@@ -92,6 +92,28 @@ class RouteLeg(db.Model):
     speed = db.Column(db.Float, default=40.0)
 
 
+class Notice(db.Model):
+    """Something the operation has been told, and who it was told to.
+
+    The confirmed-list alert is derived from DailyList timestamps, which works
+    because confirming is a state change with a time on it. Issuing a revision
+    is not: it is a decision that leaves no other trace, so it needs a record of
+    its own or there is nothing to alert anyone about afterwards.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(20), default="revision")
+    day = db.Column(db.String(10), index=True)      # the day at the mine
+    subcontractor_id = db.Column(db.Integer, index=True)   # None = all companies
+    title = db.Column(db.String(200), default="")
+    detail = db.Column(db.JSON)                     # the figures as they stood
+    # Which roles this was addressed to, comma separated. Stored rather than
+    # inferred so a later change to who counts as "monitoring" cannot silently
+    # rewrite who was told at the time.
+    audience = db.Column(db.String(120), default="monitor,mine")
+    created_by = db.Column(db.String(80), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class DispatchPlanRow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plate = db.Column(db.String(40))
