@@ -81,6 +81,7 @@ def create_app(config_class=Config):
         _ensure_truck_schema()
         _ensure_subcontractors()
         _ensure_plan_settings()
+        _ensure_routeleg_schema()
         _ensure_shifts()
         from .seed import seed_if_empty
         seed_if_empty()
@@ -216,6 +217,19 @@ def _ensure_plan_settings():
         added += 1
     if added:
         db.session.commit()
+
+def _ensure_routeleg_schema():
+    """Add RouteLeg.road_km to a database created before the column existed."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("route_leg")]
+    except Exception:
+        return
+    if "road_km" not in cols:
+        db.session.execute(text("ALTER TABLE route_leg ADD COLUMN road_km FLOAT"))
+        db.session.commit()
+
 
 def _ensure_truck_schema():
     """Add Truck.driver to a database created before the column existed."""

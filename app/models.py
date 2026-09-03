@@ -84,6 +84,11 @@ class RouteLeg(db.Model):
     leg_key = db.Column(db.String(40), unique=True, nullable=False)
     label = db.Column(db.String(120), default="")
     points = db.Column(db.JSON)  # None until drawn
+    # The leg's real road distance. Authoritative when set, because the drawn
+    # line is thinned for the map and re-summing it loses about a percent -
+    # and because summing thousands of points on every plan run is wasteful
+    # when the number is already known.
+    road_km = db.Column(db.Float)
     speed = db.Column(db.Float, default=40.0)
 
 

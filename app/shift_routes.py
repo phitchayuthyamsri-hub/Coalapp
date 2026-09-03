@@ -369,8 +369,11 @@ def get_settings():
         out.append({"key": p.key, "value": p.value, "label": p.label,
                     "unit": p.unit, "group": p.group, "kind": "setting"})
     for r in RouteLeg.query.order_by(RouteLeg.id).all():
-        km = 0.0
-        if r.points:
+        # Same rule as the planner: a snapshot that measured the leg
+        # differently from the plan it freezes would make every variance wrong
+        # by exactly that gap.
+        km = float(r.road_km or 0.0)
+        if not km and r.points:
             km = sum(engine.haversine_km(r.points[i][0], r.points[i][1],
                                          r.points[i + 1][0], r.points[i + 1][1])
                      for i in range(len(r.points) - 1))

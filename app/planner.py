@@ -45,8 +45,11 @@ def load_config():
 
     legs = {}
     for r in RouteLeg.query.all():
-        km = 0.0
-        if r.points:
+        # The stored road distance wins. Falling back to the drawn line keeps
+        # a hand-drawn leg working, but that line is thinned for the map, so
+        # measuring it back is both slower and slightly short.
+        km = float(r.road_km or 0.0)
+        if not km and r.points:
             km = sum(engine.haversine_km(r.points[i][0], r.points[i][1],
                                          r.points[i + 1][0], r.points[i + 1][1])
                      for i in range(len(r.points) - 1))
