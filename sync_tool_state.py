@@ -66,6 +66,28 @@ def build_fleet():
     return out
 
 
+def _tool_anchor_ids():
+    """The tool colours a bar by its anchorId, and its anchors carry ids of its
+    own ("anc_default_0"), not the database's integers. Writing the database id
+    left every bar on the fallback colour, so the names are matched across.
+    Returns {lowercased name: tool id}."""
+    row = db.session.get(KVStore, "actualGpsAnchors_v1")
+    if not row or not row.value:
+        return {}
+    try:
+        d = json.loads(row.value)
+    except Exception:
+        return {}
+    items = d if isinstance(d, list) else d.get("anchors", d)
+    if isinstance(items, dict):
+        items = list(items.values())
+    out = {}
+    for a in items or []:
+        if isinstance(a, dict) and a.get("name") and a.get("id"):
+            out[str(a["name"]).strip().lower()] = a["id"]
+    return out
+
+
 def build_timing():
     """Visits and cycles, computed from the pings the providers delivered."""
     anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
@@ -82,12 +104,18 @@ def build_timing():
 
     # The engine speaks snake_case, the tool camelCase. Nothing is recomputed
     # here - only renamed - so the Gantt and the Monitor agree on what happened.
-    v_out = []
+    tool_ids = _tool_anchor_ids()
+    v_out, unmapped = [], set()
     for v in visits:
         enter, exit_ = _ms(v.get("enter")), _ms(v.get("exit"))
+        name = str(v.get("anchor_name") or "").strip().lower()
+        anchor_id = tool_ids.get(name)
+        if anchor_id is None:
+            anchor_id = v.get("anchor_id")      # nothing to match; keep the db id
+            unmapped.add(v.get("anchor_name"))
         v_out.append({
             "plate": v.get("plate"),
-            "anchorId": v.get("anchor_id"),
+            "anchorId": anchor_id,
             "anchorName": v.get("anchor_name"),
             "visitNum": v.get("visit_num"),
             "enter": enter,
@@ -122,6 +150,9 @@ def build_timing():
         last[p["plate"]] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms(p["dt"]),
                             "speed": p["speed"], "status": p["status"]}
 
+    if unmapped:
+        print("  ! no tool anchor matched by name: %s (bars use the fallback colour)"
+              % ", ".join(sorted(str(u) for u in unmapped)))
     return {
         "visits": v_out,
         "sequences": s_out,
