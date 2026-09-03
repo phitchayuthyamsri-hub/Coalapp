@@ -27,6 +27,11 @@ class User(UserMixin, db.Model):
     # Set only for role='subcontractor': which company this login belongs to.
     # It scopes everything they can see to their own trucks.
     subcontractor_id = db.Column(db.Integer, index=True)
+    # When this person last cleared their alerts. A confirmed list newer than
+    # this is still waiting to be looked at. Held per user rather than per list
+    # because the same list is news to the planner and old to the manager who
+    # confirmed it.
+    alerts_seen_at = db.Column(db.DateTime)
 
     def set_password(self, pw):
         self.pw_hash = generate_password_hash(pw)

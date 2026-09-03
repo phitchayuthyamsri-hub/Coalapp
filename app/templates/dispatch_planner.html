@@ -195,6 +195,14 @@
   #tip b{color:var(--acc)}
   #tip i{font-style:normal;color:var(--mut)}
   .msg{font-size:12px;margin-left:8px}
+  .alert{border:1px solid #2f5d34;background:#132a17;border-radius:10px;
+         padding:11px 14px;margin:0 0 12px;display:flex;align-items:flex-start;gap:12px}
+  .alert .txt{flex:1;line-height:1.5}
+  .alert b{color:#8fe39a}
+  .alert .sub2{color:var(--mut);font-size:12.5px;margin-top:3px}
+  .alert button{background:none;border:1px solid #2f5d34;color:#8fe39a;
+                border-radius:7px;padding:5px 12px;cursor:pointer;font:inherit;white-space:nowrap}
+  .alert button:hover{background:#17331c}
   .dayLabel{font-size:15px;font-weight:600;padding:6px 0 5px;white-space:nowrap}
   .dayLabel .when{font-weight:400;color:var(--mut);font-size:12.5px;margin-left:7px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
   /* Embedded in the operations shell: the shell supplies the header, so the
@@ -234,6 +242,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 <main>
 
 <section id="tab-revision">
+  <div id="alertBox"></div>
   <div class="card sticky">
     <div class="row">
       <!-- The plan is made day to day, so there is nothing here to choose: the
@@ -1208,6 +1217,40 @@ function paintDay(){
                + '</span>';
 }
 
+// A confirmed list is the planner's cue: it is the moment trucks become
+// approved, and approved is what a day is built from. Polled rather than pushed
+// - the page already polls, and one more small read is cheaper than a socket.
+async function loadAlerts(){
+  let j;
+  try { j = await jget('/api/shift/alerts'); } catch (e) { return; }
+  const box = $('#alertBox');
+  if (!box) return;
+  const list = (j && j.alerts) || [];
+  if (!list.length){ box.innerHTML = ''; return; }
+  box.innerHTML = list.map(function(a){
+    const due = (a.due || []).map(d => d.trucks + ' due ' + dayName(d.date)).join(', ');
+    return '<div class="alert"><div class="txt"><b>Readiness confirmed</b> by '
+      + esc(a.by || '?') + ' at ' + esc(a.at || '') + ' — ' + esc(a.company)
+      + ', ' + a.approved + ' truck' + (a.approved === 1 ? '' : 's') + ' approved.'
+      + '<div class="sub2">' + (due ? esc(due) : 'no arrival times on the sheet')
+      + (a.no_time ? ' · ' + a.no_time + ' without an arrival time, which cannot be planned' : '')
+      + '</div></div><button data-seen="1">Got it</button></div>';
+  }).join('');
+  box.querySelectorAll('[data-seen]').forEach(function(b){
+    b.onclick = async function(){
+      await fetch('/api/shift/alerts/seen', {method: 'POST'});
+      box.innerHTML = '';
+      try { parent.postMessage({coalapp: 'alerts-cleared'}, '*'); } catch (e) {}
+    };
+  });
+}
+function dayName(d){
+  try {
+    return new Date(d + 'T00:00').toLocaleDateString('en-GB',
+      {weekday: 'short', day: '2-digit', month: 'short'});
+  } catch (e) { return d; }
+}
+
 $('#day').onchange = run;
 $('#run').onclick = run;
 
@@ -1224,6 +1267,8 @@ $('#run').onclick = run;
   await loadSubs();
   await loadSettings();
   await run();
+  loadAlerts();
+  setInterval(loadAlerts, 60000);
   try { BASE = localStorage.getItem('plannerBase') || 'dark'; } catch (e) {}
   buildBaseButtons();
   setBase(BASE);              // marks the button; the map itself opens with the tab

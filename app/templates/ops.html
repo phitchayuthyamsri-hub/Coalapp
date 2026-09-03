@@ -38,6 +38,10 @@
   iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none;
          background:var(--bg)}
   iframe.on{display:block}
+  /* A confirmed list is news the planner will not see while they are sitting on
+     Readiness or Monitor, so the tab itself has to say so. */
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#34c759;
+       margin-left:6px;vertical-align:2px;box-shadow:0 0 0 3px rgba(52,199,89,.18)}
   .boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
         color:var(--mut);font-size:13px}
 
@@ -60,7 +64,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     <button class="tab on" data-tab="readiness" data-src="/shift-board?embed=1">
       Readiness<small>who is going</small></button>
     <button class="tab" data-tab="planner" data-src="/planner?embed=1">
-      Planner<small>what the plan says</small></button>
+      Planner<span class="dot" id="planDot" hidden></span><small>what the plan says</small></button>
     <button class="tab" data-tab="monitor" data-src="/monitor?embed=1">
       Monitor<small>what happened</small></button>
   </nav>
@@ -104,6 +108,27 @@ function show(name){
   try { localStorage.setItem('opsTab', name); } catch (e) { /* private mode */ }
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
 }
+
+// The planner tab carries a dot when a readiness list has been confirmed that
+// this person has not looked at. Cleared by the banner inside the planner,
+// which tells us through postMessage rather than being polled for.
+async function pollAlerts(){
+  try {
+    const r = await fetch('/api/shift/alerts', {headers: {'Accept': 'application/json'}});
+    if (!r.ok) return;
+    const j = await r.json();
+    const d = $('#planDot');
+    if (d) d.hidden = !(j && j.count);
+  } catch (e) { /* offline; try again next tick */ }
+}
+window.addEventListener('message', e => {
+  if (e.data && e.data.coalapp === 'alerts-cleared'){
+    const d = $('#planDot');
+    if (d) d.hidden = true;
+  }
+});
+pollAlerts();
+setInterval(pollAlerts, 60000);
 
 document.querySelectorAll('.tab').forEach(b =>
   b.onclick = () => show(b.dataset.tab));

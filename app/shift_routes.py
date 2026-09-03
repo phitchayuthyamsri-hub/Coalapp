@@ -1491,6 +1491,67 @@ def latest():
     return jsonify(date=today, subcontractor_id=None, why="no lists yet", today=today)
 
 
+@bp.get("/alerts")
+@login_required
+def alerts():
+    """What has happened that this person has not seen yet.
+
+    Only confirming raises one. A submit moves the list from the supervisor to
+    the manager and leaves every row `applied`, which is not yet plannable;
+    confirming is what turns rows `approved`, and approved is what the planner
+    can actually build a day from. Alerting on submit would be telling the
+    planner about work that is not theirs to do yet.
+
+    Never raised for whoever did it - they were there - and a subcontractor
+    login only ever hears about its own company.
+    """
+    seen = getattr(current_user, "alerts_seen_at", None)
+    # A week back at most. A login left unused for a month should open on a
+    # clean board, not on a month of history it can do nothing about.
+    floor = datetime.utcnow() - timedelta(days=7)
+    since = max(seen, floor) if seen else floor
+
+    subs = {x.id: (x.short or x.name) for x in Subcontractor.query.all()}
+    mine = getattr(current_user, "subcontractor_id", None) if _role() == "subcontractor" else None
+
+    out = []
+    q = DailyList.query.filter(DailyList.confirmed_at.isnot(None))
+    for dl in q.order_by(DailyList.confirmed_at.desc()).limit(50).all():
+        if dl.confirmed_at is None or dl.confirmed_at <= since:
+            continue
+        if mine is not None and dl.subcontractor_id != mine:
+            continue
+        if (dl.confirmed_by or "") == current_user.username:
+            continue
+        rows = DailyListRow.query.filter_by(list_id=dl.id, state="approved").all()
+        due = {}
+        for r in rows:
+            if r.arrive_date and r.arrive_hhmm:
+                due[r.arrive_date] = due.get(r.arrive_date, 0) + 1
+        out.append({
+            "kind": "confirmed",
+            "sheet_date": dl.list_date,
+            "company": subs.get(dl.subcontractor_id, "(no company)"),
+            "subcontractor_id": dl.subcontractor_id,
+            "by": dl.confirmed_by,
+            "at": _fmt(dl.confirmed_at),
+            "approved": len(rows),
+            # The day the planner cares about, which is not the sheet's date.
+            "due": [{"date": d, "trucks": n} for d, n in sorted(due.items())],
+            "no_time": sum(1 for r in rows if not (r.arrive_date and r.arrive_hhmm)),
+        })
+    return jsonify(alerts=out, count=len(out))
+
+
+@bp.post("/alerts/seen")
+@login_required
+def alerts_seen():
+    """Clear this person's alerts. Their own mark only."""
+    current_user.alerts_seen_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True, at=_fmt(current_user.alerts_seen_at))
+
+
 @bp.get("/plan-day")
 @login_required
 def plan_day():
