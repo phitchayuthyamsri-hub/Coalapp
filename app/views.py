@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Blueprint, render_template, redirect, url_for, Response, abort
+from flask import Blueprint, render_template, redirect, url_for, Response, abort, request
 from flask_login import login_required, current_user
 
 bp = Blueprint("views", __name__)
@@ -140,7 +140,7 @@ _GUARD = """<script>
 // link someone pastes to a colleague - comes back to it rather than to the
 // default. Deliberately replaceState: the back button has never stepped
 // between tool pages, and making it start would be its own surprise.
-(function(){
+document.addEventListener('DOMContentLoaded', function(){
   var nav=document.getElementById('pageNav');
   if(!nav) return;
   function remember(){
@@ -155,7 +155,8 @@ _GUARD = """<script>
   });
   // Sub-tabs inside a page move the active button too, without a nav click.
   setInterval(remember, 1500);
-})();
+  remember();          // whatever the tool opened on
+});
 
 (function(){
   var area=null, since=Date.now();
@@ -166,8 +167,12 @@ _GUARD = """<script>
   function flush(){ var now=Date.now(), sec=Math.round((now-since)/1000); if(area) send(area,sec); since=now; }
   function setArea(){ flush(); area=cur(); }
   setTimeout(function(){ area=cur(); since=Date.now(); }, 1200);
-  var nav=document.getElementById('pageNav');
-  if(nav) nav.addEventListener('click', function(e){ if(e.target.closest('button[data-page]')) setTimeout(setArea,60); });
+  // In <head>, so the nav does not exist yet - wait for it, or this listener is
+  // attached to nothing and every minute is credited to the first page opened.
+  document.addEventListener('DOMContentLoaded', function(){
+    var nav=document.getElementById('pageNav');
+    if(nav) nav.addEventListener('click', function(e){ if(e.target.closest('button[data-page]')) setTimeout(setArea,60); });
+  });
   setInterval(flush, 60000);
   document.addEventListener('visibilitychange', function(){ if(document.hidden) flush(); });
   window.addEventListener('beforeunload', flush);
@@ -274,7 +279,15 @@ def index():
 def tool():
     if not _app_allowed("tms"):
         return redirect(url_for("views.index"))
-    return Response(_tool_html(), mimetype="text/html")
+    # No cache headers at all meant browsers applied their own guess, and kept
+    # serving a stale copy of a 2 MB page - so a fix to the injected scripts
+    # reached nobody until they cleared the cache. Revalidate every time; the
+    # body is held in memory and unchanged between restarts, so the usual
+    # answer is a 304 and nothing is re-sent.
+    resp = Response(_tool_html(), mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    resp.add_etag()
+    return resp.make_conditional(request)
 
 
 @bp.route("/report")
