@@ -600,7 +600,10 @@ APP_KEYS = ["tms", "report"]
 ROLE_KEYS = ["spectator", "subcontractor", "monitor", "supervisor",
              "manager", "admin"]
 
-TAB_KEYS = ["perf","daily","timeline","pva","subfleet","anchors","data","gps","plan",
+# "ops" first: it is the page the operation lives in every day. It was missing
+# here, so Operations could not be chosen as a landing page - and any user given
+# an explicit tab list silently lost the tab that matters most.
+TAB_KEYS = ["ops","perf","daily","timeline","pva","subfleet","anchors","data","gps","plan",
             "truckstatus","weigh","fleet","guide"]
 
 
