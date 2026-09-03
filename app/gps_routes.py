@@ -15,6 +15,18 @@ from . import gps_ingest
 
 bp = Blueprint("gps", __name__)
 
+
+@bp.after_request
+def _no_store(resp):
+    """Provider status and positions change every few minutes, and a cached
+    answer is indistinguishable from a broken integration: the page showed all
+    three providers OFF while the server had them enabled and pulling. Every
+    other blueprint already says no-store; this one was the exception."""
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
 _PROVIDERS = ("tct", "viettel", "adsun")
 
 
