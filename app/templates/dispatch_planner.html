@@ -21,7 +21,7 @@
   main{padding:18px;max-width:1500px;margin:0 auto}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
         padding:16px;margin-bottom:16px}
-  .card.sticky{position:sticky;top:56px;z-index:40}
+  .card.sticky{position:sticky;top:var(--hdr,56px);z-index:40}
   h2{margin:0 0 4px;font-size:15px}
   h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
      color:#aab8d0}
@@ -211,13 +211,15 @@
      surrounding page already carries them. The TAB BAR is not: hiding the whole
      header took Week and Planning figures with it, leaving no way to issue a
      week except by opening the planner in its own tab. */
-  body.embed > header{padding:4px 0 10px;background:transparent;border-bottom:0}
+  /* Opaque: this header is position:sticky, so anything see-through here means
+     the table scrolls visibly through it. */
+  body.embed > header{padding:4px 0 10px;background:var(--bg);border-bottom:0}
   body.embed > header > div:first-child,
   body.embed > header > a,
   body.embed > header > .spacer{display:none}
   body.embed > header .tabs{margin:0}
   body.embed main{padding-top:12px}
-  body.embed .card.sticky{top:0}
+
 </style>
 </head>
 <body class="">
@@ -399,6 +401,9 @@ function measure(){
   const b = document.querySelector('.card.sticky');
   if (!b) return;
   const h = document.querySelector('header').getBoundingClientRect().height;
+  // Embedded, the header is a bare tab bar and much shorter than it is on its
+  // own page, so neither offset can be a fixed number.
+  document.documentElement.style.setProperty('--hdr', Math.round(h) + 'px');
   document.documentElement.style.setProperty('--freeze',
     Math.round(h + b.getBoundingClientRect().height) + 'px');
 }
@@ -455,10 +460,15 @@ const NODES = [
 // route without competing with it. Lines only drops the basemap entirely, which
 // is the clearest view of the loop itself.
 const BASEMAPS = {
+  // CARTO began requiring an API key and now answers every tile request with
+  // the same "API KEY REQUIRED" image - byte for byte identical whatever the
+  // coordinates, which is why the corridor was papered over with it. Esri's
+  // dark canvas serves real tiles without a key. Note {y}/{x}, not {x}/{y}.
   dark: {label:'Dark',
-    url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    opts:{maxZoom:19, subdomains:'abcd', crossOrigin:'anonymous',
-          attribution:'&copy; OpenStreetMap, &copy; CARTO'}},
+    url:'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/'
+        + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    opts:{maxZoom:16, crossOrigin:'anonymous',
+          attribution:'&copy; Esri, &copy; OpenStreetMap contributors'}},
   standard: {label:'Standard', dim:true,
     url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     opts:{maxZoom:17, crossOrigin:'anonymous',
