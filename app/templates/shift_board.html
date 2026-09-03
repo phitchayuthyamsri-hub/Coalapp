@@ -77,6 +77,9 @@
   .plate{background:#0c1523;border:1px solid var(--line);border-radius:6px;
          padding:3px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
   .msg{font-size:12px;margin-left:8px}
+  .whose{font-size:11px;color:var(--mut);text-transform:uppercase;
+         letter-spacing:.4px;text-align:center;display:none}
+  #capSubmit{width:150px} #capConfirm{width:86px} #capReject{width:78px}
   .msg.ok{color:var(--ok)} .msg.err{color:var(--bad)}
   .empty{color:var(--mut);font-size:13px;padding:8px 0}
   /* Embedded in the operations shell: the shell supplies the header, so the
@@ -159,6 +162,15 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <span id="dirty" style="display:none;color:var(--warn);font-size:12px;font-weight:600">
         ● unsaved changes — whatever you press next will use what is on screen</span>
       <span class="msg" id="listMsg"></span>
+    </div>
+    <!-- Admins are stood in for every role, so they see every button. This row
+         says whose job each one is, rather than leaving three buttons of equal
+         weight with nothing to tell them apart. Hidden for everyone else, who
+         only ever sees their own. -->
+    <div class="row" id="whoseRow" style="display:none;margin-top:2px;gap:0">
+      <span id="capSubmit"  class="whose">supervisor</span>
+      <span id="capConfirm" class="whose">manager</span>
+      <span id="capReject"  class="whose">manager</span>
     </div>
     <div id="nextStep" style="color:var(--mut);font-size:12.5px;margin-top:8px"></div>
     <div id="roleNote" style="color:var(--mut);font-size:12px;margin-top:2px"></div>
@@ -537,6 +549,12 @@ async function loadList(){
   show('#btnSubmit',  c.submit);
   show('#btnConfirm', c.confirm);
   show('#btnReject',  c.reject);
+  // Only an admin ever sees more than one of these, so only an admin needs
+  // telling which is which.
+  const many = (ROLE === 'admin');
+  $('#whoseRow').style.display = many ? '' : 'none';
+  [['#capSubmit', c.submit], ['#capConfirm', c.confirm], ['#capReject', c.reject]]
+    .forEach(function(p){ $(p[0]).style.display = (many && p[1]) ? 'inline-block' : 'none'; });
 
   // Say what the next step is, so nobody has to infer it from the buttons.
   const NEXT = {
