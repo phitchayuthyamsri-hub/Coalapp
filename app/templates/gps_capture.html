@@ -45,6 +45,7 @@
   /* TCT = red */
   .gps-blip.tct{background:#ff3b30;box-shadow:0 0 0 0 rgba(255,59,48,.6);animation:gpsPulseRed 1.3s ease-out infinite}
   /* Adsun = purple */
+  .gps-blip.viettel{background:#22c55e;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:gpsPulse 1.3s ease-out infinite}
   .gps-blip.adsun{background:#a855f7;box-shadow:0 0 0 0 rgba(168,85,247,.6);animation:gpsPulse 1.3s ease-out infinite}
   @keyframes gpsPulse{
     0%  {box-shadow:0 0 0 0 rgba(168,85,247,.6); opacity:1}
@@ -98,7 +99,7 @@
 </div>
 
 <script>
-const PROV_LABEL = { tct: "TCT", adsun: "Adsun" };
+const PROV_LABEL = { tct: "TCT", viettel: "Viettel", adsun: "Adsun" };
 
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e; }
 
@@ -174,7 +175,8 @@ function loadMap(){
     _layer.clearLayers(); const ll=[];
     (pts||[]).forEach(p=>{
       if(p.lat==null || p.lng==null) return;
-      const prov = (p.source||'').indexOf('adsun')>=0 ? 'adsun' : ((p.source||'').indexOf('tct')>=0 ? 'tct' : '');
+      const _s = p.source||'';
+      const prov = _s.indexOf('adsun')>=0 ? 'adsun' : (_s.indexOf('viettel')>=0 ? 'viettel' : (_s.indexOf('tct')>=0 ? 'tct' : ''));
       const m = L.marker([p.lat, p.lng], {icon: L.divIcon({className:'gps-divicon', html:'<span class="gps-blip '+prov+'"></span>', iconSize:[14,14], iconAnchor:[7,7]})});
       m.bindPopup('<b>'+p.plate+'</b><br>'+(p.dt||'')+'<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):''));
       m.addTo(_layer); ll.push([p.lat, p.lng]);
@@ -188,7 +190,7 @@ function _localInput(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_p
 function populateTrailTrucks(trucks){
   const sel=document.getElementById('trailTruck'); if(!sel) return;
   const cur=sel.value;
-  sel.innerHTML=(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const prov=(t.source||'').indexOf('adsun')>=0?'Adsun':'TCT'; return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
+  sel.innerHTML=(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
   if(cur) sel.value=cur;
 }
 function drawTrail(pts, plate){

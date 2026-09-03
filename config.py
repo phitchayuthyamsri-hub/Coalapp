@@ -65,6 +65,17 @@ def gps_providers_config():
             "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),          # LocalTime (UTC+7) | UTCTime
             "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                          # blank = all authorised vehicles
         },
+        # Viettel vTracking 2.0 Open API. Header auth (APIKey), one POST returns
+        # the current position of every plate asked for. Served from a bare IP
+        # with a self-signed certificate, so TLS verification cannot succeed and
+        # is off for this host only; turn it on if Viettel publish a real one.
+        "viettel": {
+            "enabled": _truthy(os.environ.get("GPS_VIETTEL_ENABLED")),
+            "base_url": os.environ.get("GPS_VIETTEL_BASE_URL", "https://171.229.16.202:8443").rstrip("/"),
+            "api_key": os.environ.get("GPS_VIETTEL_KEY", ""),
+            "verify_tls": _truthy(os.environ.get("GPS_VIETTEL_VERIFY_TLS")),
+            "plates": _plates(os.environ.get("GPS_VIETTEL_PLATES")),   # blank = every vehicle on the account
+        },
         "adsun": {
             "enabled": _truthy(os.environ.get("GPS_ADSUN_ENABLED")),
             "base_url": os.environ.get("GPS_ADSUN_BASE_URL", "https://shareapi.adsun.vn").rstrip("/"),

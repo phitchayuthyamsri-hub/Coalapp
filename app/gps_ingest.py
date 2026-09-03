@@ -18,6 +18,7 @@ docs left unclear are read from config so they can be corrected without a code
 change (see GPS_TCT_AUTH_MODE etc.).
 """
 import json
+import ssl
 import time
 import base64
 import urllib.request
@@ -64,13 +65,25 @@ def _num(v):
         return None
 
 
-def _http_post_json(url, payload, headers=None, timeout=45):
+def _ssl_ctx(verify):
+    """Viettel serve from a bare IP under a self-signed certificate, so the
+    handshake cannot be verified. Scoped to the call that asks for it rather
+    than disabled globally."""
+    if verify:
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def _http_post_json(url, payload, headers=None, timeout=45, insecure=False):
     data = json.dumps(payload or {}).encode("utf-8")
     h = {"Content-Type": "application/json", "Accept": "application/json"}
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, data=data, headers=h, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(not insecure)) as resp:
         raw = resp.read().decode("utf-8", "replace")
     try:
         return json.loads(raw)
@@ -78,12 +91,12 @@ def _http_post_json(url, payload, headers=None, timeout=45):
         return {"_raw": raw[:2000]}
 
 
-def _http_get_json(url, headers=None, timeout=45):
+def _http_get_json(url, headers=None, timeout=45, insecure=False):
     h = {"Accept": "application/json"}
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, headers=h, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(not insecure)) as resp:
         raw = resp.read().decode("utf-8", "replace")
     try:
         return json.loads(raw)
@@ -204,6 +217,82 @@ def _fetch_adsun(cfg):
     return out
 
 
+def _viettel_search(cfg, plates=None, attributes=("datas",)):
+    """One POST to vTracking's vehicle/search. Returns the raw vehicles list.
+
+    The plate filter is applied by Viettel, not here: the account can see the
+    whole Phonesack Vietnam fleet, and the project has no business pulling
+    vehicles that are not on it.
+    """
+    url = cfg["base_url"] + "/api/v1/vtracking/vehicle/search?limit=500"
+    body = {"attributes": list(attributes)}
+    want = list(plates if plates is not None else (cfg.get("plates") or []))
+    if want:
+        body["plates"] = want
+    headers = {"APIKey": cfg.get("api_key", "")}
+    data = _http_post_json(url, body, headers,
+                           insecure=not cfg.get("verify_tls"))
+    if not isinstance(data, dict):
+        raise RuntimeError("Viettel: unexpected response (not a JSON object)")
+    vehicles = data.get("vehicles")
+    if not isinstance(vehicles, list):
+        raise RuntimeError("Viettel returned no vehicles array (keys=%s)"
+                           % sorted(data.keys())[:6])
+    return vehicles
+
+
+def _viettel_datas(vehicle):
+    """The 'datas' attribute of one vehicle: position, speed and status."""
+    for a in vehicle.get("attributes") or []:
+        if a.get("attribute_key") == "datas" and isinstance(a.get("value"), dict):
+            return a["value"], a.get("last_update_ts")
+    return None, None
+
+
+def _viettel_dt(value, last_update_ts):
+    """Epoch milliseconds -> the naive UTC+7 datetime the other providers store.
+
+    TCT is read from its LocalTime field and Adsun from TimeUpdate, both already
+    Indochina time, and the capture page shows ping times unshifted. Viettel
+    sends epoch ms, which is UTC, so it is moved to the same footing here -
+    otherwise its trucks would sit seven hours behind the rest of the board.
+    """
+    ms = value.get("timestamp") or last_update_ts
+    if not ms:
+        return None
+    try:
+        return datetime.utcfromtimestamp(float(ms) / 1000.0) + _TZ_OFFSET
+    except Exception:
+        return None
+
+
+def _fetch_viettel(cfg):
+    """Viettel vTracking: current position of each vehicle on the plate list."""
+    out = []
+    for v in _viettel_search(cfg):
+        plate = v.get("license_plate")
+        value, last_ts = _viettel_datas(v)
+        if not plate or not isinstance(value, dict):
+            continue
+        # badgps means the fix itself is unreliable - the same reason Adsun
+        # positions are dropped when its Gps flag is false.
+        raw_status = str(value.get("status") or "").lower()
+        if raw_status == "badgps":
+            continue
+        dt = _viettel_dt(value, last_ts)
+        lat = _num(value.get("latitude"))
+        lng = _num(value.get("longitude"))
+        if dt is None or lat is None or lng is None:
+            continue
+        out.append({
+            "plate": str(plate).strip(),
+            "dt": dt, "lat": lat, "lng": lng,
+            "speed": _num(value.get("speed")) or 0.0,
+            "status": "moving" if raw_status == "run" else (raw_status or "stopped"),
+        })
+    return out
+
+
 def _tct_vehicles(data):
     """Locate the vehicle list across TCT envelopes. Their doc shows
     {MessageResult, Vehicles:[...]}, but the live API returns
@@ -223,7 +312,7 @@ def _tct_vehicles(data):
     return None
 
 
-_CONNECTORS = {"tct": _fetch_tct, "adsun": _fetch_adsun}
+_CONNECTORS = {"tct": _fetch_tct, "viettel": _fetch_viettel, "adsun": _fetch_adsun}
 
 
 # ── runner / storage ─────────────────────────────────────────────────────────
@@ -235,6 +324,8 @@ def provider_ready(cfg, key):
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key == "adsun":
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
+    if key == "viettel":
+        return bool(cfg.get("base_url") and cfg.get("api_key"))
     return False
 
 
@@ -383,7 +474,7 @@ def _basic_headers(user, pw):
 # Per-provider range caps. TCT pages 24h windows back-to-back without complaint.
 # Adsun caps a history query at ~3 days AND rate-limits successive calls (the
 # guide says 10s; measured ~30s), so an Adsun trail is a single call per click.
-TRAIL_MAX_DAYS = {"tct": 14, "adsun": 3}
+TRAIL_MAX_DAYS = {"tct": 14, "viettel": 7, "adsun": 3}
 _TRAIL_DEADLINE_S = 25     # stop paging after this many seconds, return partial
 _TRAIL_CALL_TIMEOUT = 12   # per provider call
 
@@ -473,10 +564,61 @@ def _trail_adsun(pcfg, plate, begin, end):
     return _trail_paged(begin, end, timedelta(days=3), fetch_window)
 
 
+def _trail_viettel(pcfg, plate, begin, end):
+    """Viettel journey history. The endpoint is keyed on the vehicle's id, not
+    its plate, so the plate is resolved through vehicle/search first. Results
+    are paged with the 'after' cursor the response hands back."""
+    vehicles = _viettel_search(pcfg, plates=[plate], attributes=())
+    vid = None
+    for v in vehicles:
+        if _norm_plate(v.get("license_plate")) == _norm_plate(plate):
+            vid = v.get("id")
+            break
+    if not vid:
+        return [], ["plate not found on the Viettel account"], False
+
+    headers = {"APIKey": pcfg.get("api_key", "")}
+    insecure = not pcfg.get("verify_tls")
+    # The API takes epoch ms in UTC; the caller works in Indochina time.
+    start_ms = int((begin - _TZ_OFFSET).timestamp() * 1000)
+    end_ms = int((end - _TZ_OFFSET).timestamp() * 1000)
+
+    pts, errors, after, deadline = [], [], None, time.time() + _TRAIL_DEADLINE_S
+    while True:
+        q = ("/api/v1/vtracking/vehicle/journey/" + urllib.parse.quote(str(vid))
+             + "?limit=500&startTime=%d&endTime=%d" % (start_ms, end_ms))
+        if after:
+            q += "&after=" + urllib.parse.quote(after)
+        try:
+            data = _http_get_json(pcfg["base_url"] + q, headers,
+                                  timeout=_TRAIL_CALL_TIMEOUT, insecure=insecure)
+        except Exception as e:  # noqa: BLE001
+            errors.append(_err_str(e))
+            break
+        logs = data.get("logs") if isinstance(data, dict) else None
+        for r in (logs or []):
+            val = r.get("value")
+            if not isinstance(val, dict):
+                continue
+            dt = _viettel_dt({"timestamp": r.get("ts")}, r.get("ts"))
+            lat, lng = _num(val.get("latitude")), _num(val.get("longitude"))
+            if dt and lat is not None and lng is not None:
+                pts.append({"dt": dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": lat,
+                            "lng": lng, "speed": _num(val.get("speed")) or 0.0})
+        after = (data or {}).get("after")
+        if not after or not logs:
+            return pts, errors, False
+        if time.time() > deadline:
+            return pts, errors, True
+
+
 def fetch_trail(app, source, plate, begin, end):
     """On-demand breadcrumb trail for one truck over a time range (not stored)."""
     cfg = (app.config.get("_GPS_CFG") or {})
-    key = "adsun" if "adsun" in (source or "") else ("tct" if "tct" in (source or "") else None)
+    src = source or ""
+    key = ("adsun" if "adsun" in src else
+           "viettel" if "viettel" in src else
+           "tct" if "tct" in src else None)
     if not key:
         return {"ok": False, "error": "unknown source"}
     pcfg = cfg.get(key) or {}
@@ -487,7 +629,8 @@ def fetch_trail(app, source, plate, begin, end):
         return {"ok": False,
                 "error": "range too long for %s — choose %d days or fewer per trail" % (key.upper(), max_days)}
     try:
-        fn = _trail_tct if key == "tct" else _trail_adsun
+        fn = {"tct": _trail_tct, "adsun": _trail_adsun,
+              "viettel": _trail_viettel}[key]
         pts, errors, truncated = fn(pcfg, plate, begin, end)
         note_bits = []
         if errors:

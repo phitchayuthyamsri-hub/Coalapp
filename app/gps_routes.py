@@ -15,7 +15,7 @@ from . import gps_ingest
 
 bp = Blueprint("gps", __name__)
 
-_PROVIDERS = ("tct", "adsun")
+_PROVIDERS = ("tct", "viettel", "adsun")
 
 
 def _parse_arg_dt(v):
