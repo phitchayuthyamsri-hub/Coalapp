@@ -7,6 +7,12 @@ bp = Blueprint("views", __name__)
 
 # Mirror the tool's localStorage to the shared server store. Pull on load,
 # push on write (unless the user is view-only).
+#
+# The pull REPLACES rather than merges. Overwriting only the keys the server
+# happens to hold left anything deleted server-side alive in the browser, and
+# the next write pushed it straight back - so a dataset cleared on the server
+# reappeared from whichever tab still had it. The server is the record; a key
+# missing there is missing everywhere.
 _BRIDGE = """<script>
 (function(){
   var BASE='/api/kv';
@@ -14,6 +20,19 @@ _BRIDGE = """<script>
     var x=new XMLHttpRequest(); x.open('GET',BASE+'?_='+Date.now(),false); try{x.setRequestHeader('Cache-Control','no-store');}catch(e){} x.send();
     if(x.status===200){
       var d=JSON.parse(x.responseText||'{}');
+      // Drop local keys in the tool's namespace that the server does not have.
+      // Done BEFORE the prototype is patched below, so these removals are local
+      // only and do not fire DELETEs back at a server that never had them.
+      // Only runs on a successful pull: a failed request must never wipe data.
+      try{
+        var kill=[], i, k;
+        for(i=0;i<window.localStorage.length;i++){
+          k=window.localStorage.key(i);
+          if(k && k.indexOf('actualGps')===0 && !Object.prototype.hasOwnProperty.call(d,k)) kill.push(k);
+        }
+        for(i=0;i<kill.length;i++) window.localStorage.removeItem(kill[i]);
+        if(kill.length) console.info('shared-store: cleared '+kill.length+' key(s) no longer on the server');
+      }catch(e){}
       Object.keys(d).forEach(function(k){ if(k.indexOf('coalRpt')===0) return; try{ window.localStorage.setItem(k,d[k]); }catch(e){} });
     }
   }catch(e){ console.warn('shared-store pull failed', e); }
