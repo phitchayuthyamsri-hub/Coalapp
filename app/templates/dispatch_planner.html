@@ -194,10 +194,20 @@
        box-shadow:0 8px 20px #0009;white-space:nowrap}
   #tip b{color:var(--acc)}
   #tip i{font-style:normal;color:var(--mut)}
-  .msg{font-size:12px;margin-left:8px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
+  .msg{font-size:12px;margin-left:8px}
+  .dayLabel{font-size:15px;font-weight:600;padding:6px 0 5px;white-space:nowrap}
+  .dayLabel .when{font-weight:400;color:var(--mut);font-size:12.5px;margin-left:7px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
   /* Embedded in the operations shell: the shell supplies the header, so the
      page's own one would be a second title bar saying the same thing. */
-  body.embed > header{display:none}
+  /* Embedded in Operations the page title and the cross-links are noise - the
+     surrounding page already carries them. The TAB BAR is not: hiding the whole
+     header took Week and Planning figures with it, leaving no way to issue a
+     week except by opening the planner in its own tab. */
+  body.embed > header{padding:4px 0 10px;background:transparent;border-bottom:0}
+  body.embed > header > div:first-child,
+  body.embed > header > a,
+  body.embed > header > .spacer{display:none}
+  body.embed > header .tabs{margin:0}
   body.embed main{padding-top:12px}
   body.embed .card.sticky{top:0}
 </style>
@@ -226,7 +236,13 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 <section id="tab-revision">
   <div class="card sticky">
     <div class="row">
-      <label class="f">Day at the mine<input type="date" id="day"></label>
+      <!-- The plan is made day to day, so there is nothing here to choose: the
+           day is resolved from the arrivals and simply stated. #day is kept as
+           the field the rest of the page reads and writes, now hidden - the
+           "trucks are due on other days" chips still move the view, which is
+           navigation rather than a date to be picked. -->
+      <input type="date" id="day" hidden>
+      <div class="f">Day at the mine<div id="dayLabel" class="dayLabel">&mdash;</div></div>
       <label class="f">Company<select id="sub"></select></label>
       <button id="run">Recalculate</button>
       <div class="stats" id="stats"></div>
@@ -672,7 +688,7 @@ async function run(){
           + '</div>' : '')
       + '</div>';
     document.querySelectorAll('#body .jump').forEach(b => b.onclick = () => {
-      $('#day').value = b.dataset.d; run();
+      setDay(b.dataset.d, 'chosen'); run();
     });
     measure();
     return;
@@ -1162,17 +1178,47 @@ $('#saveSet').onclick = async function(){
   }
 };
 
+// One place that writes the day, so the caption can never drift from the plan
+// on screen. `why` is what the server called this day; it is shown only when it
+// is not simply today, so the normal case stays quiet.
+let DAY_WHY = '';
+function setDay(d, why){
+  $('#day').value = d;
+  if (why !== undefined) DAY_WHY = why || '';
+  paintDay();
+}
+function paintDay(){
+  const d = $('#day').value;
+  const el = $('#dayLabel');
+  if (!el) return;
+  if (!d){ el.textContent = '—'; return; }
+  const dt = new Date(d + 'T00:00');
+  const txt = dt.toLocaleDateString('en-GB',
+      {weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+  const t = todayStr();
+  // Stepped in UTC on purpose: a local-midnight Date pushed through
+  // toISOString() lands on the wrong side of the day for anyone east of
+  // Greenwich, which is everyone here.
+  const tomorrow = new Date(Date.parse(t + 'T00:00:00Z') + 86400000)
+                     .toISOString().slice(0, 10);
+  const rel = d === t ? 'today' : d === tomorrow ? 'tomorrow'
+            : (d > t ? 'ahead' : 'past');
+  el.innerHTML = esc(txt) + '<span class="when">' + esc(rel)
+               + (DAY_WHY && DAY_WHY !== 'due today' ? ' · ' + esc(DAY_WHY) : '')
+               + '</span>';
+}
+
 $('#day').onchange = run;
 $('#run').onclick = run;
 
 (async function(){
-  $('#day').value = todayStr();
+  // Not /api/shift/latest: that answers "which readiness sheet is being worked",
+  // which is today's, while the trucks on it reach the mine tomorrow. Opening
+  // there showed an empty plan next to a full sheet.
+  setDay(todayStr(), '');
   try {
-    const l = await jget('/api/shift/latest');
-    if (l && l.date){
-      $('#day').value = l.date;
-      if (l.subcontractor_id) SUBID = String(l.subcontractor_id);
-    }
+    const l = await jget('/api/shift/plan-day');
+    if (l && l.date) setDay(l.date, l.why);
   } catch (e) { /* fall back to today */ }
   $('#wStart').value = $('#day').value;   // the week the readiness date sits in
   await loadSubs();

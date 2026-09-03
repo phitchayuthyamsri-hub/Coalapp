@@ -1491,6 +1491,52 @@ def latest():
     return jsonify(date=today, subcontractor_id=None, why="no lists yet", today=today)
 
 
+@bp.get("/plan-day")
+@login_required
+def plan_day():
+    """The day at the mine the planner should show.
+
+    The planner asks a different question from the readiness board, and the two
+    answers are normally a day apart. The board works on the sheet being built,
+    which is today's; the planner works on the day those trucks actually reach
+    the mine, which is tomorrow. Opening the planner on the board's date drew an
+    empty plan while a full sheet sat one day ahead - which reads, fairly, as
+    "the manager submitted the list and the planner cannot see it".
+
+    So the day comes from the arrivals themselves: today if trucks are due
+    today, else the next day that has any, else the most recent day that did -
+    a quiet morning still opens on the run just finished rather than on nothing.
+    """
+    today = (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = _req_sub_id()
+
+    # Only approved rows carry a promise; a pending truck is not due anywhere.
+    owner = {dl.id: dl.subcontractor_id for dl in DailyList.query.all()}
+    days = {}
+    for r in (DailyListRow.query
+              .filter(DailyListRow.state == "approved").all()):
+        if not r.arrive_date or not r.arrive_hhmm:
+            continue
+        if only is not None and owner.get(r.list_id) != only:
+            continue
+        days[r.arrive_date] = days.get(r.arrive_date, 0) + 1
+
+    if not days:
+        return jsonify(date=today, trucks=0, why="nothing due", today=today,
+                       days=[])
+    if today in days:
+        day, why = today, "due today"
+    else:
+        ahead = sorted(d for d in days if d > today)
+        if ahead:
+            day, why = ahead[0], "next day with trucks due"
+        else:
+            day, why = max(days), "most recent day with trucks"
+    return jsonify(date=day, trucks=days[day], why=why, today=today,
+                   days=[{"date": d, "trucks": n}
+                         for d, n in sorted(days.items())])
+
+
 @bp.get("/list")
 @login_required
 def get_list():
