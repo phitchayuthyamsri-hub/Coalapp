@@ -90,6 +90,10 @@
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff3b30;margin:0 4px 0 12px;vertical-align:middle"></span>TCT
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin:0 4px 0 12px;vertical-align:middle"></span>Viettel
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;margin:0 4px 0 12px;vertical-align:middle"></span>Adsun
+      <label style="margin-left:16px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="fenceToggle" checked style="vertical-align:middle;margin-right:4px">
+        <span style="display:inline-block;width:10px;height:10px;border:2px solid #2dd4bf;background:rgba(45,212,191,.18);margin:0 4px 0 0;vertical-align:middle"></span>Geofences
+      </label>
     </span>
   </h2>
   <div id="trailBar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:12.5px;color:var(--muted)">
@@ -205,9 +209,53 @@ function _dot(colour, scale){
 }
 
 function _clear(arr){ arr.forEach(function(o){ o.setMap(null); }); arr.length = 0; }
+// ── geofences ───────────────────────────────────────────────────────────────
+// The same polygons the engine tests positions against, so what the map shows
+// and what the board counts as an arrival are the one thing.
+const ROLE_COLOUR = { xppl:'#f59e0b', loading:'#fbbf24', border:'#ef4444',
+                      ql49:'#3b82f6', port:'#22d3ee', detour:'#94a3b8' };
+let _fences=[], _fencesLoaded=false;
+
+function loadFences(){
+  _ensureMap();
+  if(!_map || _fencesLoaded) return;
+  _fencesLoaded = true;                       // one fetch; they do not move
+  fetch('/api/anchors').then(r=>r.json()).then(list=>{
+    (list||[]).forEach(a=>{
+      const pts = (a.polygon||[]).filter(function(q){ return q && q.length>=2; })
+                                 .map(function(q){ return {lat:+q[0], lng:+q[1]}; });
+      if(pts.length < 3) return;              // a fence needs an area
+      const col = a.color || ROLE_COLOUR[a.role] || '#2dd4bf';
+      const g = new google.maps.Polygon({
+        paths: pts, map: _map, strokeColor: col, strokeWeight: 2,
+        strokeOpacity: .9, fillColor: col, fillOpacity: .12, zIndex: 1
+      });
+      g.addListener('click', function(ev){
+        _info.setContent('<div style="color:#111"><b>'+(a.name||'geofence')+'</b>'
+          + (a.role ? '<br>role: '+a.role : '')
+          + (a.min_dwell_min ? '<br>min dwell: '+a.min_dwell_min+' min' : '')+'</div>');
+        _info.setPosition(ev.latLng); _info.open(_map);
+      });
+      _fences.push(g);
+    });
+    const t = document.getElementById('fenceToggle');
+    if(t) _fences.forEach(function(g){ g.setMap(t.checked ? _map : null); });
+  }).catch(()=>{ _fencesLoaded = false; });   // let a later refresh retry
+}
+
+function wireFenceToggle(){
+  const t = document.getElementById('fenceToggle');
+  if(!t || t.dataset.wired) return;
+  t.dataset.wired = '1';
+  t.addEventListener('change', function(){
+    _fences.forEach(function(g){ g.setMap(t.checked ? _map : null); });
+  });
+}
+
 function loadMap(){
   _ensureMap();
   if(!_map) return;            // Maps still loading; the next refresh retries
+  loadFences(); wireFenceToggle();
   fetch('/api/gps/points').then(r=>r.json()).then(pts=>{
     _clear(_markers);
     const bounds = new google.maps.LatLngBounds();
@@ -297,6 +345,7 @@ function load(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);
+window.__afterMaps = function(){ loadMap(); };   // Maps arrived after first paint
 load();
 setInterval(load, 30000);
 </script>
