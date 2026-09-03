@@ -106,11 +106,26 @@ _GUARD = """<script>
         if(!sub.some(function(k){return allow[k];})){ var di=document.getElementById('navDataInput'); if(di) di.style.display='none'; }
       }
 
-      // default landing page, then fall back to first visible
+      // Where to land. The default page is where you ARRIVE, not somewhere you
+      // are sent back to: this used to re-click it on every load, so refreshing
+      // threw away whatever you were working on. The hash carries the current
+      // page, so a reload returns to it; arriving from login carries no hash
+      // and still lands on the default.
       if(nav){
         var ok=function(k){ return !me.tabs || me.tabs.indexOf(k)>=0; };
-        var target=null;
-        if(me.default_page && ok(me.default_page)) target=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return (b.getAttribute('data-perm')||b.getAttribute('data-page'))===me.default_page; });
+        var keyOf=function(b){ var pg=b.getAttribute('data-page'), sb=b.getAttribute('data-subtab');
+                               return sb ? pg+':'+sb : pg; };
+        // A hidden tab is never restored - the tab list may have been narrowed
+        // since the link was last used.
+        var find=function(k){ if(!k) return null;
+          return Array.prototype.find.call(nav.querySelectorAll('button[data-page]'),
+            function(b){ if(b.style.display==='none') return false;
+              return keyOf(b)===k || (b.getAttribute('data-perm')||b.getAttribute('data-page'))===k;
+            }) || null; };
+        var back=null;
+        try { back=decodeURIComponent((window.location.hash||'').slice(1)); } catch(e){}
+        var target=find(back);
+        if(!target && me.default_page && ok(me.default_page)) target=find(me.default_page);
         var active=nav.querySelector('button[data-page].active');
         if(!target && active && active.style.display==='none'){
           target=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return b.style.display!=='none'; });
@@ -119,6 +134,27 @@ _GUARD = """<script>
       }
     }).catch(function(){});
   });
+})();
+
+// Keep the address bar pointing at the page on screen, so a refresh - or a
+// link someone pastes to a colleague - comes back to it rather than to the
+// default. Deliberately replaceState: the back button has never stepped
+// between tool pages, and making it start would be its own surprise.
+(function(){
+  var nav=document.getElementById('pageNav');
+  if(!nav) return;
+  function remember(){
+    var b=nav.querySelector('button[data-page].active'); if(!b) return;
+    var pg=b.getAttribute('data-page'), sb=b.getAttribute('data-subtab');
+    var k=sb? pg+':'+sb : pg;
+    if(!k || ('#'+k)===window.location.hash) return;
+    try { history.replaceState(null,'','#'+k); } catch(e){}
+  }
+  nav.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('button[data-page]')) setTimeout(remember,60);
+  });
+  // Sub-tabs inside a page move the active button too, without a nav click.
+  setInterval(remember, 1500);
 })();
 
 (function(){
