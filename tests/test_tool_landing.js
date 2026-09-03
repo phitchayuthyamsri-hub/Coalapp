@@ -50,9 +50,19 @@ function scenario({hash, default_page, tabs, guardJs}){
     querySelectorAll: () => buttons
   };
   const domReady = [];
+  const root = { _cls: new Set(), className: '',
+    classList: { remove: c => root._cls.delete(c), add: c => root._cls.add(c),
+                 contains: c => root._cls.has(c) } };
+  Object.defineProperty(root, 'className', {
+    get(){ return Array.from(root._cls).join(' '); },
+    set(v){ String(v).split(/\s+/).filter(Boolean).forEach(c => root._cls.add(c)); }
+  });
+  const head = { appendChild: () => {} };
   const doc = {
     addEventListener: (ev, fn) => { if (ev === 'DOMContentLoaded') domReady.push(fn); },
     getElementById: id => (id === 'pageNav' ? nav : null),
+    createElement: () => ({ textContent: '' }),
+    head, documentElement: root,
     querySelector: () => null, querySelectorAll: () => []
   };
 
@@ -70,7 +80,8 @@ function scenario({hash, default_page, tabs, guardJs}){
     window: win, document: doc, history: win.history, location: win.location,
     setTimeout, clearTimeout, console,
     setInterval: (fn, ms) => { const id = setInterval(fn, ms); timers.push(id); return id; },
-    fetch: () => Promise.resolve({json: () => Promise.resolve(me), ok: true}),
+    fetch: () => new Promise(r => setTimeout(() =>
+      r({json: () => Promise.resolve(me), ok: true}), 40)),
     XMLHttpRequest: function(){ this.open = () => {}; this.send = () => {};
                                 this.setRequestHeader = () => {}; },
     Array, Object, JSON, Date, Math, decodeURIComponent, encodeURIComponent
@@ -79,11 +90,16 @@ function scenario({hash, default_page, tabs, guardJs}){
   vm.createContext(sandbox);
   vm.runInContext(guardJs, sandbox, {filename: 'guard.js'});   // <head>
   domReady.forEach(f => f());                                   // DOM ready
+  // What the user would see right now - before /api/me has answered. Anything
+  // other than the destination here is a visible flash of the wrong page.
+  const atDomReady = (buttons.find(b => b.classList.contains('active')) || {}).key || null;
+  const hiddenAtDomReady = root._cls.has('__booting');
   // 200ms: the recorder deliberately waits 60ms after a click before writing.
   return new Promise(res => setTimeout(() => {
     timers.forEach(clearInterval);
     const active = buttons.find(b => b.classList.contains('active'));
-    res({active: active ? active.key : null, hash: win.location.hash});
+    res({active: active ? active.key : null, hash: win.location.hash,
+         atDomReady, hiddenAtDomReady, stillHidden: root._cls.has('__booting')});
   }, 200));
 }
 
@@ -108,11 +124,16 @@ function scenario({hash, default_page, tabs, guardJs}){
   let bad = 0;
   for (const [name, opts, want] of cases){
     const r = await scenario({...opts, guardJs});
-    const ok = r.active === want && r.hash === '#' + want;
+    // No flash means: by the time anything could be painted we are either
+    // already on the destination, or still held back waiting to find out.
+    const noFlash = (r.atDomReady === want) || r.hiddenAtDomReady;
+    const ok = r.active === want && r.hash === '#' + want && noFlash && !r.stillHidden;
     if (!ok) bad++;
     console.log((ok ? '  PASS  ' : '  FAIL  ') + name.padEnd(36)
-      + ' active=' + String(r.active).padEnd(14) + ' url=' + r.hash
-      + (ok ? '' : '   expected ' + want));
+      + ' active=' + String(r.active).padEnd(14) + ' url=' + String(r.hash).padEnd(15)
+      + (noFlash ? 'no flash' : 'FLASH of ' + r.atDomReady)
+      + (r.stillHidden ? '  STILL HIDDEN' : '')
+      + (r.active === want ? '' : '   expected ' + want));
   }
   console.log(bad ? '\n  ' + bad + ' FAILING' : '\n  all pass');
   process.exit(bad ? 1 : 0);

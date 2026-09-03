@@ -63,6 +63,25 @@ window.__bootPage='';
 try{ window.__bootPage=decodeURIComponent((window.location.hash||'').slice(1)); }catch(e){}
 // Nothing may write to the address bar until the restore has had its turn.
 window.__pageReady=false;
+window.__landedKey=null;
+
+// The markup opens on Performance, so until the right page is chosen that is
+// what would be painted. Hold the panels back rather than show the wrong one
+// and correct it a moment later. Always lifted - by the restore, or by the
+// failsafe below if anything goes wrong - so this can never strand a blank page.
+(function(){
+  try{
+    var st=document.createElement('style');
+    st.textContent='html.__booting [data-page-panel]{visibility:hidden!important}';
+    (document.head||document.documentElement).appendChild(st);
+    document.documentElement.className+=' __booting';
+  }catch(e){}
+})();
+window.__reveal=function(){
+  try{ document.documentElement.classList.remove('__booting'); }catch(e){}
+};
+// If /api/me hangs or a script throws, the page still appears.
+setTimeout(function(){ window.__reveal(); }, 1500);
 
 (function(){
   var IDLE_MS=30*60*1000, timer;
@@ -133,16 +152,25 @@ window.__pageReady=false;
             function(b){ if(b.style.display==='none') return false;
               return keyOf(b)===k || (b.getAttribute('data-perm')||b.getAttribute('data-page'))===k;
             }) || null; };
-        var target=find(window.__bootPage);
-        if(!target && me.default_page && ok(me.default_page)) target=find(me.default_page);
+        // Already landed above, and allowed to be there: leave it alone.
+        var landed=window.__landedKey;
+        var target=null;
+        if(landed && ok(String(landed).split(':')[0])){
+          target=null;
+        } else {
+          if(landed) window.__landedKey=null;   // restored a tab this user cannot open
+          target=find(window.__bootPage);
+          if(!target && me.default_page && ok(me.default_page)) target=find(me.default_page);
+        }
         var active=nav.querySelector('button[data-page].active');
-        if(!target && active && active.style.display==='none'){
+        if(!target && !window.__landedKey && active && active.style.display==='none'){
           target=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'), function(b){ return b.style.display!=='none'; });
         }
         if(target) target.click();
       }
+      window.__reveal();
       window.__pageReady=true;      // the recorder may write from here on
-    }).catch(function(){ window.__pageReady=true; });
+    }).catch(function(){ window.__reveal(); window.__pageReady=true; });
   });
 })();
 
@@ -153,6 +181,22 @@ window.__pageReady=false;
 document.addEventListener('DOMContentLoaded', function(){
   var nav=document.getElementById('pageNav');
   if(!nav) return;
+
+  // The remembered page needs nothing from the server, so it should not wait
+  // for it. /api/me still runs, and still has the last word if this tab turns
+  // out not to be allowed - it just no longer decides what is painted first.
+  (function(){
+    var want=window.__bootPage;
+    if(!want) return;                       // fresh arrival; the default decides
+    var b=Array.prototype.find.call(nav.querySelectorAll('button[data-page]'),
+      function(x){ var pg=x.getAttribute('data-page'), sb=x.getAttribute('data-subtab');
+                   return (sb? pg+':'+sb : pg)===want || pg===want; });
+    if(!b) return;                          // unknown page; let the default win
+    b.click();
+    window.__landedKey=want;
+    window.__reveal();
+  })();
+
   function remember(){
     if(!window.__pageReady) return;   // the restore has not run yet
     var b=nav.querySelector('button[data-page].active'); if(!b) return;
