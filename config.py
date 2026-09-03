@@ -33,10 +33,6 @@ class Config:
         "DATABASE_URL", "sqlite:///coalapp.db"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # Google Maps JavaScript API. Shared with the logistics platform, so the
-    # key's referrer restriction has to allow this host too. Blank means the
-    # capture map falls back to saying so rather than rendering a broken frame.
-    GOOGLE_MAPS_KEY = os.environ.get("GOOGLE_MAPS_KEY", "")
     MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB uploads
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
     SESSION_REFRESH_EACH_REQUEST = True  # sliding window: 30 min of inactivity

@@ -51,8 +51,7 @@ def _require_admin():
 @login_required
 def capture_page():
     _require_admin()
-    return render_template("gps_capture.html",
-                           maps_key=current_app.config.get("GOOGLE_MAPS_KEY", ""))
+    return render_template("gps_capture.html")
 
 
 @bp.get("/api/gps/status")

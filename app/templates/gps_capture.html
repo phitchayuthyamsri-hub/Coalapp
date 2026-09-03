@@ -4,17 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GPS Capture — TMS</title>
-{% if maps_key %}
-<script>
-  // Google loads asynchronously; anything touching the map waits for this.
-  window.__gmapsReady = false;
-  function initGMaps(){ window.__gmapsReady = true; if (window.__afterMaps) window.__afterMaps(); }
-</script>
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key={{ maps_key }}&callback=initGMaps"></script>
-{% else %}
-<script>window.__gmapsReady = false;</script>
-{% endif %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{--bg:#0e1418;--panel:#161e25;--panel2:#1d272f;--ink:#e6edf3;--muted:#8b98a5;--line:#2a343d;--accent:#25D366;--blue:#0071e3;--red:#ff6b6b;--amber:#ffd479}
   *{box-sizing:border-box}
@@ -174,105 +165,70 @@ function truckTable(trucks){
   t.appendChild(tb); wrap.appendChild(t); return wrap;
 }
 
-// Colours match the legend and the provider cards.
-const PROV_COLOUR = { tct:'#ff3b30', viettel:'#22c55e', adsun:'#a855f7', '':'#8a8f98' };
-// Dark styling, so the map sits inside the page rather than glaring out of it.
-const MAP_STYLE = [
-  {elementType:'geometry', stylers:[{color:'#1d2c4d'}]},
-  {elementType:'labels.text.fill', stylers:[{color:'#8ec3b9'}]},
-  {elementType:'labels.text.stroke', stylers:[{color:'#1a3646'}]},
-  {featureType:'administrative.country', elementType:'geometry.stroke', stylers:[{color:'#4b6878'}]},
-  {featureType:'poi', stylers:[{visibility:'off'}]},
-  {featureType:'road', elementType:'geometry', stylers:[{color:'#304a7d'}]},
-  {featureType:'road', elementType:'labels.text.fill', stylers:[{color:'#98a5be'}]},
-  {featureType:'road.highway', elementType:'geometry', stylers:[{color:'#2c6675'}]},
-  {featureType:'transit', stylers:[{visibility:'off'}]},
-  {featureType:'water', elementType:'geometry', stylers:[{color:'#0e1626'}]}
-];
-
-let _map=null, _info=null, _markers=[], _trail=[], _fitted=false, _trailWired=false;
-
-function _mapsReady(){ return window.__gmapsReady && window.google && window.google.maps; }
-
+let _map=null, _layer=null, _trailLayer=null, _fenceLayer=null,
+    _fencesLoaded=false, _fitted=false, _trailWired=false;
 function _ensureMap(){
-  if(_map || !_mapsReady()) return;
-  _map = new google.maps.Map(document.getElementById('gpsMap'), {
-    center: {lat:16.3, lng:106.9}, zoom: 6, styles: MAP_STYLE,
-    mapTypeControl: true, streetViewControl: false, fullscreenControl: true
-  });
-  _info = new google.maps.InfoWindow();
+  if(_map || !window.L) return;
+  _map = L.map('gpsMap').setView([16.3, 106.9], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(_map);
+  _fenceLayer = L.layerGroup().addTo(_map);   // under the trucks
+  _layer = L.layerGroup().addTo(_map);
+  _trailLayer = L.layerGroup().addTo(_map);
 }
 
-function _dot(colour, scale){
-  return {path: google.maps.SymbolPath.CIRCLE, scale: scale || 6,
-          fillColor: colour, fillOpacity: 1, strokeColor: '#0b1220', strokeWeight: 2};
-}
-
-function _clear(arr){ arr.forEach(function(o){ o.setMap(null); }); arr.length = 0; }
 // ── geofences ───────────────────────────────────────────────────────────────
-// The same polygons the engine tests positions against, so what the map shows
-// and what the board counts as an arrival are the one thing.
+// The same polygons the visit engine tests positions against, so what the map
+// shows and what the board counts as an arrival are the one thing.
 const ROLE_COLOUR = { xppl:'#f59e0b', loading:'#fbbf24', border:'#ef4444',
                       ql49:'#3b82f6', port:'#22d3ee', detour:'#94a3b8' };
-let _fences=[], _fencesLoaded=false;
 
 function loadFences(){
-  _ensureMap();
-  if(!_map || _fencesLoaded) return;
+  if(!_fenceLayer || _fencesLoaded) return;
   _fencesLoaded = true;                       // one fetch; they do not move
-  fetch('/api/anchors').then(r=>r.json()).then(list=>{
-    (list||[]).forEach(a=>{
+  fetch('/api/anchors').then(function(r){ return r.json(); }).then(function(list){
+    (list||[]).forEach(function(a){
       const pts = (a.polygon||[]).filter(function(q){ return q && q.length>=2; })
-                                 .map(function(q){ return {lat:+q[0], lng:+q[1]}; });
+                                 .map(function(q){ return [+q[0], +q[1]]; });
       if(pts.length < 3) return;              // a fence needs an area
       const col = a.color || ROLE_COLOUR[a.role] || '#2dd4bf';
-      const g = new google.maps.Polygon({
-        paths: pts, map: _map, strokeColor: col, strokeWeight: 2,
-        strokeOpacity: .9, fillColor: col, fillOpacity: .12, zIndex: 1
-      });
-      g.addListener('click', function(ev){
-        _info.setContent('<div style="color:#111"><b>'+(a.name||'geofence')+'</b>'
-          + (a.role ? '<br>role: '+a.role : '')
-          + (a.min_dwell_min ? '<br>min dwell: '+a.min_dwell_min+' min' : '')+'</div>');
-        _info.setPosition(ev.latLng); _info.open(_map);
-      });
-      _fences.push(g);
+      L.polygon(pts, {color:col, weight:2, opacity:.9,
+                      fillColor:col, fillOpacity:.12})
+       .bindPopup('<b>'+(a.name||'geofence')+'</b>'
+         + (a.role ? '<br>role: '+a.role : '')
+         + (a.min_dwell_min ? '<br>min dwell: '+a.min_dwell_min+' min' : ''))
+       .addTo(_fenceLayer);
     });
-    const t = document.getElementById('fenceToggle');
-    if(t) _fences.forEach(function(g){ g.setMap(t.checked ? _map : null); });
-  }).catch(()=>{ _fencesLoaded = false; });   // let a later refresh retry
+    applyFenceToggle();
+  }).catch(function(){ _fencesLoaded = false; });   // let a later refresh retry
+}
+
+function applyFenceToggle(){
+  const t = document.getElementById('fenceToggle');
+  if(!_map || !_fenceLayer) return;
+  if(!t || t.checked) _fenceLayer.addTo(_map); else _map.removeLayer(_fenceLayer);
 }
 
 function wireFenceToggle(){
   const t = document.getElementById('fenceToggle');
   if(!t || t.dataset.wired) return;
   t.dataset.wired = '1';
-  t.addEventListener('change', function(){
-    _fences.forEach(function(g){ g.setMap(t.checked ? _map : null); });
-  });
+  t.addEventListener('change', applyFenceToggle);
 }
-
 function loadMap(){
+  if(!window.L) return;   // Leaflet failed to load (offline) — skip the map
   _ensureMap();
-  if(!_map) return;            // Maps still loading; the next refresh retries
   loadFences(); wireFenceToggle();
   fetch('/api/gps/points').then(r=>r.json()).then(pts=>{
-    _clear(_markers);
-    const bounds = new google.maps.LatLngBounds();
-    let n = 0;
+    _layer.clearLayers(); const ll=[];
     (pts||[]).forEach(p=>{
       if(p.lat==null || p.lng==null) return;
       const _s = p.source||'';
       const prov = _s.indexOf('adsun')>=0 ? 'adsun' : (_s.indexOf('viettel')>=0 ? 'viettel' : (_s.indexOf('tct')>=0 ? 'tct' : ''));
-      const pos = {lat:+p.lat, lng:+p.lng};
-      const m = new google.maps.Marker({position:pos, map:_map,
-                                        icon:_dot(PROV_COLOUR[prov]), title:p.plate});
-      const html = '<div style="color:#111"><b>'+p.plate+'</b><br>'+(p.dt||'')
-                 + '<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):'')+'</div>';
-      m.addListener('click', function(){ _info.setContent(html); _info.open(_map, m); });
-      _markers.push(m); bounds.extend(pos); n++;
+      const m = L.marker([p.lat, p.lng], {icon: L.divIcon({className:'gps-divicon', html:'<span class="gps-blip '+prov+'"></span>', iconSize:[14,14], iconAnchor:[7,7]})});
+      m.bindPopup('<b>'+p.plate+'</b><br>'+(p.dt||'')+'<br>speed '+(p.speed||0)+' km/h'+(p.source?('<br>'+p.source):''));
+      m.addTo(_layer); ll.push([p.lat, p.lng]);
     });
-    if(n && !_fitted){ _map.fitBounds(bounds, 30); _fitted = true; }
+    if(ll.length && !_fitted){ try{ _map.fitBounds(ll, {padding:[30,30], maxZoom:12}); _fitted=true; }catch(e){} }
   }).catch(()=>{});
 }
 
@@ -285,27 +241,15 @@ function populateTrailTrucks(trucks){
   if(cur) sel.value=cur;
 }
 function drawTrail(pts, plate){
-  _ensureMap(); if(!_map) return;
-  _clear(_trail);
-  const path=(pts||[]).filter(function(p){return p.lat!=null&&p.lng!=null;})
-                      .map(function(p){return {lat:+p.lat, lng:+p.lng};});
-  if(!path.length) return;
-  _trail.push(new google.maps.Polyline({path:path, map:_map, strokeColor:'#0071e3',
-                                        strokeWeight:3, strokeOpacity:.85}));
+  _ensureMap(); if(!_trailLayer) return;
+  _trailLayer.clearLayers();
+  const ll=(pts||[]).filter(function(p){return p.lat!=null&&p.lng!=null;}).map(function(p){return [p.lat,p.lng];});
+  if(!ll.length) return;
+  L.polyline(ll, {color:'#0071e3', weight:3, opacity:.85}).addTo(_trailLayer);
   const s=pts[0], e=pts[pts.length-1];
-  const ends=[[path[0], '#1f7a4d', 'Start '+(s.dt||'')],
-              [path[path.length-1], '#c4231f', 'End '+(e.dt||'')]];
-  ends.forEach(function(t){
-    const m=new google.maps.Marker({position:t[0], map:_map, icon:_dot(t[1], 6)});
-    m.addListener('click', function(){
-      _info.setContent('<div style="color:#111"><b>'+plate+'</b><br>'+t[2]+'</div>');
-      _info.open(_map, m);
-    });
-    _trail.push(m);
-  });
-  const b=new google.maps.LatLngBounds();
-  path.forEach(function(pt){ b.extend(pt); });
-  _map.fitBounds(b, 30);
+  L.circleMarker(ll[0], {radius:6,color:'#1f7a4d',fillColor:'#1f7a4d',fillOpacity:1,weight:2}).bindPopup('<b>'+plate+'</b><br>Start '+(s.dt||'')).addTo(_trailLayer);
+  L.circleMarker(ll[ll.length-1], {radius:6,color:'#c4231f',fillColor:'#c4231f',fillOpacity:1,weight:2}).bindPopup('<b>'+plate+'</b><br>End '+(e.dt||'')).addTo(_trailLayer);
+  try{ _map.fitBounds(ll, {padding:[30,30]}); }catch(err){}
 }
 function wireTrail(){
   if(_trailWired) return; _trailWired=true;
@@ -345,7 +289,6 @@ function load(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);
-window.__afterMaps = function(){ loadMap(); };   // Maps arrived after first paint
 load();
 setInterval(load, 30000);
 </script>
