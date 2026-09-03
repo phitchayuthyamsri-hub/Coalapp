@@ -349,6 +349,10 @@ class PlanSnapshot(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     week_start = db.Column(db.String(10), index=True, nullable=False)  # Monday
+    # Set when this freezes ONE day - a revision issued for that day. NULL means
+    # the snapshot is the week, issued in advance. Both are the same act: a plan
+    # stops moving at the moment somebody commits to it.
+    day = db.Column(db.String(10), index=True)
     # NULL means the snapshot covers every company, planned together.
     subcontractor_id = db.Column(db.Integer, index=True)
     issued_by = db.Column(db.String(80), default="")

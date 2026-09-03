@@ -82,6 +82,7 @@ def create_app(config_class=Config):
         _ensure_subcontractors()
         _ensure_plan_settings()
         _ensure_routeleg_schema()
+        _ensure_snapshot_schema()
         _ensure_shifts()
         from .seed import seed_if_empty
         seed_if_empty()
@@ -228,6 +229,19 @@ def _ensure_routeleg_schema():
         return
     if "road_km" not in cols:
         db.session.execute(text("ALTER TABLE route_leg ADD COLUMN road_km FLOAT"))
+        db.session.commit()
+
+
+def _ensure_snapshot_schema():
+    """Add PlanSnapshot.day to a database created before day revisions existed."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("plan_snapshot")]
+    except Exception:
+        return
+    if "day" not in cols:
+        db.session.execute(text("ALTER TABLE plan_snapshot ADD COLUMN day VARCHAR(10)"))
         db.session.commit()
 
 

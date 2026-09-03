@@ -929,8 +929,17 @@ def _issued_for(day, only):
     there is no promise to compare against, and this says so rather than
     inventing a baseline.
     """
+    # A revision issued for this day is the newer promise and replaces the week
+    # for it: that is what revising means. Company first, then all-companies.
+    dq = PlanSnapshot.query.filter_by(day=day)
+    for scope in ((only,) if only is not None else ()) + (None,):
+        got = dq.filter_by(subcontractor_id=scope).order_by(
+            PlanSnapshot.issued_at.desc()).first()
+        if got:
+            return got
+
     week = _week_start(day).strftime("%Y-%m-%d")
-    q = PlanSnapshot.query.filter_by(week_start=week)
+    q = PlanSnapshot.query.filter_by(week_start=week, day=None)
     mine = q.filter_by(subcontractor_id=only).order_by(
         PlanSnapshot.issued_at.desc()).first() if only is not None else None
     return mine or q.filter_by(subcontractor_id=None).order_by(
@@ -1113,10 +1122,17 @@ def track():
     if snap:
         plan_rows = [r for r in (snap.rows or [])
                      if only is None or r.get("sub_id") == only]
-        source = "issued %s" % _fmt(snap.issued_at)
+        source = "issued %s by %s" % (_fmt(snap.issued_at), snap.issued_by or "?")
+        issued = True
     else:
-        plan_rows = _revision_data(day, only)["rows"]
-        source = "today's revision - no plan has been issued for this week"
+        # It used to fall back to a live revision here, which broke rule 2: the
+        # monitor was scoring trucks against a plan nobody had committed to, and
+        # one that moves with the day, so it reported trucks "missed" that were
+        # never promised for it. Nothing is issued, so there is nothing to
+        # measure against, and this says so.
+        plan_rows = []
+        source = None
+        issued = False
 
     # A sheet is filed the day BEFORE the trucks run, so the board's date and the
     # loop's date are rarely the same. Match a truck to the first loop it starts
@@ -1269,7 +1285,7 @@ def track():
     running_late = [r for r in rows if (r["drift"] or 0) > ON_TIME_MINUTES]
     running_early = [r for r in rows if (r["drift"] or 0) < -ON_TIME_MINUTES]
     return jsonify(
-        date=day, subcontractor_id=only, source=source,
+        date=day, subcontractor_id=only, source=source, issued=issued,
         locations=[{"key": k, "label": l} for k, l, _f, _r, _e in LOC_FH],
         blind=sorted(blind), rows=rows, on_time_minutes=ON_TIME_MINUTES,
         summary={
@@ -1660,6 +1676,17 @@ def revision_issue():
     if not data["rows"]:
         return jsonify(error="There is no revised plan for this day to issue."), 400
 
+    # Freeze it. Without this the monitor has nothing to compare against, and
+    # the figures are stored with the rows for the same reason the week does it:
+    # a difference can only be attributed if the assumptions are known.
+    snap = PlanSnapshot(week_start=_week_start(day).strftime("%Y-%m-%d"),
+                        day=day, subcontractor_id=only,
+                        issued_by=current_user.username,
+                        issued_at=datetime.utcnow(),
+                        note=(d.get("note") or "").strip()[:300],
+                        rows=data["rows"], figures=_figures_now())
+    db.session.add(snap)
+
     st = _standing(day, only)
     subs = dict((x.id, (x.short or x.name)) for x in Subcontractor.query.all())
     who = subs.get(only, "all companies")
@@ -1681,8 +1708,9 @@ def revision_issue():
 
     aud = [a.strip() for a in audience.split(",") if a.strip()]
     told = [u.username for u in User.query.filter(User.role.in_(aud)).all()]
-    return jsonify(ok=True, id=n.id, day=day, audience=audience,
-                   notified=told, notified_count=len(told), detail=n.detail)
+    return jsonify(ok=True, id=n.id, snapshot_id=snap.id, day=day,
+                   audience=audience, notified=told, notified_count=len(told),
+                   detail=n.detail)
 
 
 @bp.get("/alerts")

@@ -258,6 +258,19 @@ function drawTrack(){
   if (!d) return;
   const s = d.summary;
   TOL = d.on_time_minutes || 60;
+  // Nothing is issued: there is no promise for the day, so there is nothing
+  // here to be right or wrong about. Saying so beats scoring trucks against a
+  // plan the planner has not committed to.
+  if (d.issued === false){
+    $('#trackHint').innerHTML = 'No plan has been issued for this day yet. '
+      + 'The planner issues it from <b>Planner &rarr; Revision</b>, and it appears '
+      + 'here the moment they do.';
+    $('#track').innerHTML = '<div class="banner b-none">'
+      + '<b>Waiting for the planner.</b><br>'
+      + 'Until a plan is issued there is nothing to measure against, so no truck '
+      + 'is shown as on time, late or missed here.</div>';
+    return;
+  }
   $('#trackHint').innerHTML = 'Plan from the ' + esc(d.source)
     + '. Within <b>' + TOL + ' minutes</b> of plan counts as on time; outside it a '
     + 'truck is <b class="t-early">early</b> or <b class="t-late">late</b>. '
