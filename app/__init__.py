@@ -78,6 +78,7 @@ def create_app(config_class=Config):
         _ensure_user_schema()
         _ensure_admin()
         _ensure_listrow_schema()
+        _ensure_truck_schema()
         _ensure_subcontractors()
         _ensure_plan_settings()
         _ensure_shifts()
@@ -213,6 +214,19 @@ def _ensure_plan_settings():
         added += 1
     if added:
         db.session.commit()
+
+def _ensure_truck_schema():
+    """Add Truck.driver to a database created before the column existed."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("truck")]
+    except Exception:
+        return
+    if "driver" not in cols:
+        db.session.execute(text("ALTER TABLE truck ADD COLUMN driver VARCHAR(120) DEFAULT ''"))
+        db.session.commit()
+
 
 def _ensure_listrow_schema():
     """Add the per-row state / arrival columns to an existing daily_list_row."""

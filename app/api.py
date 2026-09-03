@@ -118,7 +118,8 @@ def upload_subfleet():
 @login_required
 def fleet():
     trucks = Truck.query.order_by(Truck.plate).all()
-    return jsonify([{"plate": t.plate, "status": t.status, "phone": t.phone,
+    return jsonify([{"plate": t.plate, "status": t.status,
+                     "driver": t.driver or "", "phone": t.phone,
                      "gps_provider": t.gps_provider, "eff_from": t.eff_from,
                      "eff_to": t.eff_to} for t in trucks])
 
@@ -132,6 +133,7 @@ def fleet_upsert():
         return jsonify(error="plate required"), 400
     t = Truck.query.filter_by(plate=plate).first() or Truck(plate=plate)
     t.status = d.get("status", t.status or "online")
+    t.driver = d.get("driver", t.driver or "")
     t.phone = d.get("phone", t.phone or "")
     t.gps_provider = d.get("gps_provider", t.gps_provider or "")
     t.eff_from = d.get("eff_from", t.eff_from or "")

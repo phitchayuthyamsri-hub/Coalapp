@@ -19,6 +19,7 @@ async function loadFleet() {
     tr.innerHTML = `
       <td>${t.plate}</td>
       <td><span class="badge ${STATUS_CLASS[t.status] || ''}">${t.status}</span></td>
+      <td>${t.driver || ''}</td>
       <td>${t.phone || ''}</td><td>${t.gps_provider || ''}</td>
       <td>${t.eff_from || ''}</td><td>${t.eff_to || ''}</td>
       <td class="rowbtns">
@@ -34,6 +35,7 @@ async function loadFleet() {
 function fillForm(t) {
   $('#f_plate').value = t.plate;
   $('#f_status').value = t.status || 'online';
+  $('#f_driver').value = t.driver || '';
   $('#f_phone').value = t.phone || '';
   $('#f_gps').value = t.gps_provider || '';
   $('#f_from').value = t.eff_from || '';
@@ -42,7 +44,7 @@ function fillForm(t) {
 }
 
 function clearForm() {
-  ['f_plate', 'f_phone', 'f_gps', 'f_from', 'f_to'].forEach((id) => ($('#' + id).value = ''));
+  ['f_plate', 'f_driver', 'f_phone', 'f_gps', 'f_from', 'f_to'].forEach((id) => ($('#' + id).value = ''));
   $('#f_status').value = 'online';
 }
 
@@ -53,7 +55,9 @@ async function save() {
     await api('/api/fleet', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        plate, status: $('#f_status').value, phone: $('#f_phone').value.trim(),
+        plate, status: $('#f_status').value,
+        driver: $('#f_driver').value.trim(),
+        phone: $('#f_phone').value.trim(),
         gps_provider: $('#f_gps').value.trim(),
         eff_from: $('#f_from').value, eff_to: $('#f_to').value,
       }),

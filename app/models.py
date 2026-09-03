@@ -40,6 +40,10 @@ class Truck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plate = db.Column(db.String(40), unique=True, nullable=False)
     status = db.Column(db.String(20), default="online")  # online/maintenance/breakdown/deactivated
+    # The person driving it. Held here rather than on the daily list because a
+    # truck keeps its driver across days, and the monitor needs the name beside
+    # the plate when a truck is late.
+    driver = db.Column(db.String(120), default="")
     phone = db.Column(db.String(40), default="")
     gps_provider = db.Column(db.String(40), default="")
     eff_from = db.Column(db.String(10), default="")  # YYYY-MM-DD
