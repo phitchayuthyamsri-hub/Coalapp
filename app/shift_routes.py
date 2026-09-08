@@ -389,6 +389,43 @@ def _visits_and_roles():
     return engine.build_visits(pings, anchors, deactivated), roles
 
 
+def _content_hash(list_id):
+    """What this list SAYS, independent of when it was filed or who touched it.
+
+    Plate and the answers about it, sorted, so row order and the day it was sent
+    make no difference. Two lists agreeing on this are the same declaration.
+    """
+    import hashlib
+    import json as _json
+    rows = []
+    for r in DailyListRow.query.filter_by(list_id=list_id).all():
+        rows.append([r.key or "", (r.note or "").strip(), (r.sheet_status or "").strip(),
+                     (r.location or "").strip(), (r.arrive_date or "").strip(),
+                     (r.arrive_hhmm or "").strip(), (r.back_in_service or "").strip(),
+                     (r.remark or "").strip()])
+    rows.sort()
+    if not rows:
+        return ""
+    blob = _json.dumps(rows, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+
+
+def _duplicate_of(dl):
+    """Another list by the same company saying exactly the same thing.
+
+    Only a DIFFERENT day counts: re-saving the day you are working on is
+    ordinary. The same sheet on two days is not - it is yesterday's file sent
+    again, and the second one would quietly replace a real day's plan.
+    """
+    h = _content_hash(dl.id)
+    if not h:
+        return None
+    q = DailyList.query.filter(DailyList.content_hash == h,
+                               DailyList.id != dl.id,
+                               DailyList.subcontractor_id == dl.subcontractor_id)
+    return q.order_by(DailyList.list_date.desc()).first()
+
+
 def _declared_row(r, list_id, prior_state):
     """A declaration - however it arrived - as one row.
 
@@ -679,6 +716,16 @@ def upload():
         if runs:
             running += 1
         db.session.add(row)
+
+    db.session.flush()
+    dl.content_hash = _content_hash(dl.id)
+    twin = None if (request.form.get("force") or "").strip() else _duplicate_of(dl)
+    if twin is not None:
+        db.session.rollback()
+        return jsonify(error="This file is word for word the sheet already sent for "
+                             "%s. Nothing in it has changed, so it has not been "
+                             "imported." % twin.list_date,
+                       duplicate_of=twin.list_date, code="duplicate"), 409
 
     _restate(dl)
     db.session.commit()
@@ -2397,6 +2444,16 @@ def save_list():
         if "ready" in r:
             row.ready = bool(r.get("ready"))
         db.session.add(row)
+    db.session.flush()
+    dl.content_hash = _content_hash(dl.id)
+    twin = None if d.get("force") else _duplicate_of(dl)
+    if twin is not None:
+        db.session.rollback()
+        return jsonify(error="This is word for word the sheet already sent for %s. "
+                             "Nothing on it has changed, so it has not been saved. "
+                             "Change what is different, or send it again on purpose."
+                             % twin.list_date,
+                       duplicate_of=twin.list_date, code="duplicate"), 409
     db.session.commit()
     return jsonify(_list_payload(dl, day))
 

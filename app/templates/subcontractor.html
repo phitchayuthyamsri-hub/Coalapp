@@ -528,9 +528,20 @@ $('#save').onclick = async function(){
     }))
   };
   try {
-    const res = await fetch('/api/shift/list', {method:'POST',
+    let res = await fetch('/api/shift/list', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    const j = await res.json();
+    let j = await res.json();
+    // The same sheet twice is nearly always yesterday's file with the date
+    // changed. Say so, and let them insist if they really mean it.
+    if (res.status === 409 && j.code === 'duplicate'){
+      m.textContent = '';
+      if (!confirm(j.error + String.fromCharCode(10,10)
+          + 'Send it anyway?')) { m.textContent = 'Not saved.'; m.className = 'msg'; return; }
+      payload.force = true;
+      res = await fetch('/api/shift/list', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+      j = await res.json();
+    }
     if (!res.ok) throw new Error(j.error || 'Save failed');
     m.textContent = 'Saved. The supervisor sees it on their page.';
     if (PICKER) PICKER.load($('#day').value);
@@ -577,8 +588,17 @@ async function send(f){
   fd.append('date', $('#day').value);
   if (SUBID) fd.append('subcontractor_id', SUBID);
   try {
-    const r = await fetch('/api/shift/upload', {method:'POST', body: fd});
-    const j = await r.json();
+    let r = await fetch('/api/shift/upload', {method:'POST', body: fd});
+    let j = await r.json();
+    if (r.status === 409 && j.code === 'duplicate'){
+      m.textContent = '';
+      if (!confirm(j.error + String.fromCharCode(10,10) + 'Import it anyway?')){
+        m.textContent = 'Not imported.'; m.className = 'msg'; return;
+      }
+      fd.append('force', '1');
+      r = await fetch('/api/shift/upload', {method:'POST', body: fd});
+      j = await r.json();
+    }
     if (!r.ok) throw new Error(j.error || 'Upload failed');
     m.textContent = 'Read ' + (j.rows != null ? j.rows : '') + ' truck(s) from ' + f.name + '.';
     m.className = 'msg ok';

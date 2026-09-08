@@ -251,6 +251,10 @@ class DailyList(db.Model):
     amend_decided_by = db.Column(db.String(80), default="")
     amend_decided_at = db.Column(db.DateTime)
     amend_reason = db.Column(db.String(300), default="")
+    # A fingerprint of what the list actually says. Two lists with the same one
+    # are the same declaration filed twice - usually yesterday's sheet sent
+    # again with the date changed and nothing else looked at.
+    content_hash = db.Column(db.String(40), index=True)
 
     __table_args__ = (db.UniqueConstraint("list_date", "subcontractor_id",
                                           name="uq_daily_list"),)

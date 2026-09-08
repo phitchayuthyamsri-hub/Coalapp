@@ -357,8 +357,20 @@ async function doUpload(){
   fd.append('file', f);
   fd.append('date', $('#day').value);
   fd.append('subcontractor_id', SUBID);
-  const r = await fetch('/api/shift/upload', {method:'POST', body:fd});
-  const d = await r.json();
+  let r = await fetch('/api/shift/upload', {method:'POST', body:fd});
+  let d = await r.json();
+  // Word for word the sheet already sent: almost always yesterday's file with
+  // the date changed and nothing else looked at.
+  if (r.status === 409 && d.code === 'duplicate'){
+    m.textContent = '';
+    if (!confirm(d.error + String.fromCharCode(10,10) + 'Import it anyway?')){
+      m.textContent = 'Not imported.'; m.className = 'msg';
+      $('#upReport').innerHTML = ''; return;
+    }
+    fd.append('force', '1');
+    r = await fetch('/api/shift/upload', {method:'POST', body:fd});
+    d = await r.json();
+  }
   if (!r.ok){
     m.textContent = d.error || 'Upload failed'; m.className = 'msg err';
     $('#upReport').innerHTML = '';

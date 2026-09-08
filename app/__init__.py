@@ -292,7 +292,8 @@ def _ensure_daily_list_schema():
         cols = [c["name"] for c in insp.get_columns("daily_list")]
     except Exception:
         return
-    want = [("amend_state", "VARCHAR(10) DEFAULT ''"),
+    want = [("content_hash", "VARCHAR(40)"),
+            ("amend_state", "VARCHAR(10) DEFAULT ''"),
             ("amend_by", "VARCHAR(80) DEFAULT ''"),
             ("amend_at", "DATETIME"),
             ("amend_note", "VARCHAR(300) DEFAULT ''"),
