@@ -28,6 +28,7 @@ const sandbox = {
     querySelectorAll(){ return []; }},
   fetch: () => Promise.resolve({json: () => Promise.resolve({}), ok:true}),
   setTimeout, clearTimeout, setInterval: () => 0, Date, Math, JSON, Set, Object, Array,
+  requestAnimationFrame: fn => fn(), ResizeObserver: function(){ this.observe = () => {}; },
   encodeURIComponent, navigator: {}, localStorage: {getItem(){return null},setItem(){}},
   location: {search:'', hash:''}, history: {replaceState(){}},
   addEventListener(){}, removeEventListener(){}, alert(){}, confirm(){return true},

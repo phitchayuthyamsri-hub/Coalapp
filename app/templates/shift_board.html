@@ -516,19 +516,35 @@ async function doUpload(){
 
 // The frozen block is the page header plus the filter card. Measure it rather
 // than guess: the filter card grows and shrinks when the upload row appears.
+// Where the frozen table head should sit.
+//
+// Adding up the heights above it was wrong twice, because it assumes what is
+// between them: the header, the filter card, their margins, and whatever else
+// the page grew. So do not assume - ASK the card where its bottom edge actually
+// is, in the same coordinates `position: sticky` uses, and recompute it while
+// scrolling. It cannot be stale, and it cannot be wrong about a layout it never
+// has to model.
 function measureFreeze(){
   const hdr = document.querySelector('header');
   const bar = document.querySelector('.card.sticky');
-  if (!hdr || !bar) return;
-  const h = Math.round(hdr.getBoundingClientRect().height);
-  const b = Math.round(bar.getBoundingClientRect().height);
+  if (!bar) return;
   const root = document.documentElement.style;
-  root.setProperty('--hdr', h + 'px');
-  // No padding: any gap between the filter card and the frozen table head
-  // is a slot that scrolling rows show through.
-  root.setProperty('--freeze', (h + b) + 'px');
+  if (hdr) root.setProperty('--hdr', Math.round(hdr.getBoundingClientRect().height) + 'px');
+  const bottom = Math.round(bar.getBoundingClientRect().bottom);
+  // Once the card is stuck this settles; before then it tracks the card down
+  // the page, which is what makes the head sit against it at every scroll
+  // position instead of at one guessed offset.
+  root.setProperty('--freeze', Math.max(0, bottom) + 'px');
 }
 window.addEventListener('resize', measureFreeze);
+// Sticky offsets are viewport coordinates, so they move as the page scrolls
+// until the card is pinned. Cheap: one getBoundingClientRect per frame at most.
+let _freezeTick = false;
+window.addEventListener('scroll', () => {
+  if (_freezeTick) return;
+  _freezeTick = true;
+  requestAnimationFrame(() => { _freezeTick = false; measureFreeze(); });
+}, {passive: true});
 
 // Measured ONCE at boot was the bug: the filter card changes height afterwards
 // - the upload row appears, a banner comes and goes, an amend request shows -
