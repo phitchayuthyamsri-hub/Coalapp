@@ -84,7 +84,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 <main>
   <div class="card">
     <div class="row">
-      <label class="f">Day the trucks run<input type="date" id="day"></label>
+      <label class="f">Readiness date &mdash; the day the sheet was sent
+        <input type="date" id="day"></label>
       <button class="ghost" id="reload">Reload</button>
       <div class="spacer"></div>
       <div id="who" class="why"></div>
@@ -235,9 +236,10 @@ $('#reload').onclick = load;
   let me = {};
   try { me = await jget('/api/me'); } catch (e) {}
   $('#who').textContent = (me.username || '') + (me.role ? ' · ' + me.role : '');
-  // The decision is made the day before the trucks run, on tomorrow's list.
-  const d = new Date(Date.parse(todayStr() + 'T00:00:00Z') + 86400000);
-  $('#day').value = d.toISOString().slice(0, 10);
+  // The sheet's own date, which is the day it was sent - the same field the
+  // Readiness board shows. Opening on tomorrow looked for a sheet that will not
+  // exist until tomorrow.
+  $('#day').value = todayStr();
   await load();
 })();
 </script>

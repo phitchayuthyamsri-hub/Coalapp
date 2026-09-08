@@ -158,7 +158,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 
   <div class="card">
     <div class="row">
-      <label class="f">Day the trucks run<input type="date" id="day"></label>
+      <label class="f">Readiness date &mdash; the day you send this sheet
+        <input type="date" id="day"></label>
       <label class="f" id="coWrap" style="display:none">Company<select id="sub"></select></label>
       <button class="ghost" id="reload">Reload</button>
       <div class="spacer"></div>
@@ -178,6 +179,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <p class="lede">Every truck the GPS has seen is filled in already - which leg it is on,
         loaded or empty, where it was last, and for the empties coming back, when they should
         reach the mine. Change anything that is wrong: you are on the ground and the GPS is not.
+        The date at the top is the day you send this sheet; the date on each row is the day that
+        truck reaches the mine, which is usually the next day. They are not the same thing.
         Trucks the GPS has not seen are left blank and marked, because a guess dressed up as a
         fact is worse than an empty box.</p>
       <div id="amendBox"></div>
@@ -629,9 +632,12 @@ let OWNER_LABEL = 'the company';
     SUBID = ME.subcontractor_id ? String(ME.subcontractor_id) : null;
   }
   $('#who').textContent = (ME.username || '') + (ME.role ? ' · ' + ME.role : '');
-  // Trucks run tomorrow; the sheet is filled in today.
-  const d = new Date(Date.parse(todayStr() + 'T00:00:00Z') + 86400000);
-  $('#day').value = d.toISOString().slice(0, 10);
+  // TODAY. This is the date the sheet is filed under, and the Readiness board
+  // reads the same field as "the day the sheet was sent". Defaulting it to
+  // tomorrow filed every declaration a day ahead of where the supervisor
+  // looks, and they saw an empty board. When the trucks RUN is a per-row
+  // answer - the Date at mine column - and it is usually a different day.
+  $('#day').value = todayStr();
   await load();
   applyReadOnly();
 })();
