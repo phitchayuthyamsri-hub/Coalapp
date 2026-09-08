@@ -120,5 +120,73 @@ gr.anchor={r:0,c:1}; gr.cur={r:1,c:1};
 gr.clear();
 is('Delete clears the selection', [gr.rows[0].status, gr.rows[1].status], ['','']);
 
+
+// ── sort, filter, and the trap they bring with them ────────────────────────
+console.log('');
+gr = g(mk(5));
+gr.rows[0].status='Repair'; gr.rows[1].status='FH'; gr.rows[2].status='BH';
+gr.rows[3].status=''; gr.rows[4].status='Accident';
+gr.sort = {c:1, dir:'asc'}; gr.applyView();
+is('sort asc orders by value',
+   gr.view.map(i=>gr.rows[i].status), ['Accident','BH','FH','Repair','']);
+gr.sort = {c:1, dir:'desc'}; gr.applyView();
+is('sort desc reverses, blanks still last',
+   gr.view.map(i=>gr.rows[i].status), ['Repair','FH','BH','Accident','']);
+gr.sort = null; gr.applyView();
+is('third click restores the original order', gr.view, [0,1,2,3,4]);
+
+gr = g(mk(5));
+gr.rows[0].status='FH'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
+gr.rows[3].status=''; gr.rows[4].status='BH';
+gr.filters = {status:'FH'}; gr.applyView();
+is('filter to one value', gr.view, [0,2]);
+gr.filters = {status:'\u2205'}; gr.applyView();
+is('the (blank) filter finds unanswered rows', gr.view, [3]);
+gr.filters = {}; gr.applyView();
+is('clearing the filter shows everything', gr.view.length, 5);
+
+gr = g(mk(4));
+gr.rows[0].remark='gearbox'; gr.rows[1].remark='TYRE'; gr.rows[2].remark='gear box';
+gr.filters = {remark:'gear'}; gr.applyView();
+is('text filter is contains, case-insensitive', gr.view, [0,2]);
+
+// THE TRAP: with a sort on, view position 0 is not row 0. An edit must follow
+// the truck, not the screen position.
+gr = g(mk(3));
+gr.rows[0].plate='20C1000'; gr.rows[1].plate='20C1001'; gr.rows[2].plate='20C1002';
+gr.rows[0].status='Repair'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
+gr.sort = {c:1, dir:'asc'}; gr.applyView();     // BH, FH, Repair -> rows 1,2,0
+is('sorted view maps to the right rows', gr.view, [1,2,0]);
+gr.cur = {r:0,c:3}; gr.anchor = {r:0,c:3};
+gr.set(0, 3, 'edited');
+is('editing the top sorted row hits ITS truck', gr.rows[1].remark, 'edited');
+is('...and not the first row on the page', gr.rows[0].remark, '');
+
+// filtered fill-down must not touch hidden rows
+gr = g(mk(5));
+gr.rows[0].status='FH'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
+gr.rows[3].status='BH'; gr.rows[4].status='FH';
+gr.filters = {status:'FH'}; gr.applyView();      // rows 0,2,4
+gr.cur={r:0,c:3}; gr.anchor={r:0,c:3};
+gr.rows[0].remark='out';
+gr.fillDown();
+is('fill-down fills only what is on screen',
+   gr.rows.map(r=>r.remark||''), ['out','','out','','out']);
+
+// ── time normalising ───────────────────────────────────────────────────────
+console.log('');
+const nt = sandbox.window.Grid.normTime;
+[['6','06:00'],['600','06:00'],['6:00','06:00'],['6.00','06:00'],['0600','06:00'],
+ ['18:30','18:30'],['1830','18:30'],['23:59','23:59'],['',''],
+ ['25:00',null],['12:75',null],['abc',null],['9:5',null]
+].forEach(([inp,want]) => is('time "'+inp+'"', nt(inp), want));
+
+gr = g([{plate:'x',status:'',load:'',remark:'',time:''}]);
+gr.cols = gr.cols.concat([{key:'time',label:'Time',kind:'time'}]);
+is('a bad time is refused', gr.set(0,4,'99:99'), false);
+is('...leaving the cell alone', gr.rows[0].time, '');
+is('a loose time is accepted', gr.set(0,4,'6'), true);
+is('...and normalised', gr.rows[0].time, '06:00');
+
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

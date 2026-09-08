@@ -59,6 +59,27 @@
           border-radius:4px;padding:0 5px;font-size:11px}
   .bulk{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
   .bulk button{padding:6px 12px;font-size:11.5px}
+  /* header: a label, a sort arrow, and the format the column expects */
+  #grid th.hd{padding:6px 7px}
+  #grid th.sortable{cursor:pointer;user-select:none}
+  #grid th.sortable:hover .hl{color:var(--txt)}
+  #grid .hl{display:block}
+  #grid .hh{display:block;font-size:9px;font-weight:400;color:#6b7689;
+            text-transform:none;letter-spacing:0;margin-top:1px}
+  #grid tr.filt td{padding:3px 5px;background:var(--panel2);
+                   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+  #grid tr.filt input,#grid tr.filt select{width:100%;padding:3px 5px;font-size:11px;
+      background:#0b1020;border:1px solid var(--line);color:var(--txt);border-radius:5px}
+  /* the list, on click */
+  .gmenu{position:absolute;z-index:9999;background:var(--panel);border:1px solid var(--line);
+         border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:4px;
+         max-height:280px;overflow:auto;min-width:150px}
+  .gopt{padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;white-space:nowrap;
+        color:var(--txt)}
+  .gopt:hover{background:var(--panel2)}
+  .gopt.on{background:rgba(45,212,191,.18);font-weight:700}
+  .gopt.clear{color:var(--mut);border-top:1px solid var(--line);margin-top:4px;
+              border-radius:0 0 6px 6px}
   tr.fh{background:rgba(90,200,250,.05)}
   tr.off{background:rgba(255,176,32,.07)}
   tr.unseen td{color:var(--mut)}
@@ -129,7 +150,9 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     <div class="card">
       <div class="keys">
         <span><b>&larr; &uarr; &darr; &rarr;</b> move</span>
-        <span>type a letter to set &mdash; <b>f</b> FH, <b>b</b> BH, <b>b b</b> Breakdown</span>
+        <span><b>click</b> a Status cell for the list</span>
+        <span>or type &mdash; <b>f</b> FH, <b>b</b> BH, <b>b b</b> Breakdown</span>
+        <span><b>click a heading</b> to sort</span>
         <span><b>Ctrl</b>+<b>D</b> fill down</span>
         <span><b>Ctrl</b>+<b>V</b> paste from Excel</span>
         <span><b>F2</b> edit</span>
@@ -261,9 +284,12 @@ function draw(){
     {key:'status',   label:'Status',         width:'120px', list:STATUS},
     {key:'load',     label:'Loaded / Empty', width:'96px',  list:['Loaded','Empty']},
     {key:'location', label:'Location',       width:'125px', list:PLACES},
-    {key:'date',     label:'Date at mine',   width:'115px', kind:'date'},
-    {key:'time',     label:'Time',           width:'74px'},
-    {key:'back',     label:'Back in service',width:'115px', kind:'date'},
+    {key:'date',     label:'Date at mine',   width:'125px', kind:'date',
+     hint:'day first'},
+    {key:'time',     label:'Time',           width:'92px',  kind:'time',
+     hint:'HH:MM, 24h'},
+    {key:'back',     label:'Back in service',width:'125px', kind:'date',
+     hint:'day first'},
     {key:'remark',   label:'Remark',         width:'190px'},
     {key:'gps',      label:'What the GPS says', ro:true}
   ];
