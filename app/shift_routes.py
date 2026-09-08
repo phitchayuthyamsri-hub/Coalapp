@@ -280,6 +280,31 @@ def _one_company_only():
                          "for “all” to act on."), 400
 
 
+def _list_for_run_day(day, sub_id):
+    """The list whose trucks are due at the mine on `day`.
+
+    The Monitor watches the day the trucks RUN. The sheet that put them there
+    was sent the day before and is filed under that earlier date, so looking it
+    up by its own date finds nothing - and the page then says no list exists on
+    a day it is watching 58 trucks work.
+
+    Worse than nothing, in fact: it found the sheet FILED that day, whose trucks
+    are due tomorrow, and reported every one of them as missed because they had
+    not arrived yet.
+
+    Falls back to the same-day lookup, which is right for older lists written
+    before the two dates were kept apart.
+    """
+    q = (db.session.query(DailyList)
+         .join(DailyListRow, DailyListRow.list_id == DailyList.id)
+         .filter(DailyListRow.state == "approved",
+                 DailyListRow.arrive_date == day))
+    if sub_id is not None:
+        q = q.filter(DailyList.subcontractor_id == sub_id)
+    got = q.order_by(DailyList.list_date.desc()).first()
+    return got or _find_list(day, sub_id)
+
+
 def _find_list(day, sub_id):
     return DailyList.query.filter_by(list_date=day, subcontractor_id=sub_id).first()
 
@@ -1350,7 +1375,7 @@ def track():
             continue
         by_plate.setdefault(r["plate"], r)
 
-    dl = _find_list(day, only)
+    dl = _list_for_run_day(day, only)
     listed = []
     if dl:
         listed = [r.plate for r in DailyListRow.query.filter_by(
@@ -2569,7 +2594,8 @@ def board():
 
     checks = ShiftCheck.query.filter_by(shift_id=shift.id).order_by(ShiftCheck.ordering).all()
     sub_id = _req_sub_id()
-    dl = _find_list(day, sub_id)
+    # By the day the trucks are DUE here, not the day the sheet was filed.
+    dl = _list_for_run_day(day, sub_id)
 
     # The confirmed list is what opens the cycles. Without one there is nothing to
     # expect, so the board is dormant - it does not invent work.
