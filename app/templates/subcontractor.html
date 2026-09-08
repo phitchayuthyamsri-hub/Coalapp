@@ -60,7 +60,10 @@
   .stat{display:flex;gap:22px;flex-wrap:wrap;margin:12px 0 0}
   .stat div{font-size:11px;color:var(--mut)}
   .stat b{display:block;font-size:20px;color:var(--txt);font-weight:700}
-  .wrap-t{max-height:62vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  /* Vertically the PAGE scrolls, not this box. Capping the height here put a
+     second bar inside the frame's own, and the reader had to work out which
+     one moved what. Horizontal stays, because the table is genuinely wide. */
+  .wrap-t{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
   .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
   .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
   .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
