@@ -77,6 +77,7 @@
   .plate{background:#0c1523;border:1px solid var(--line);border-radius:6px;
          padding:3px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
   .msg{font-size:12px;margin-left:8px}
+  #day{min-width:340px;font-variant-numeric:tabular-nums}
   a.trail{color:#5ac8fa;text-decoration:none;font-size:10.5px;font-weight:600;
           margin-left:5px;opacity:.75;white-space:nowrap}
   a.trail:hover{opacity:1;text-decoration:underline}
@@ -111,11 +112,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/logout" style="color:var(--mut);text-decoration:none;font-size:13px">Log out</a>
 </header>
 
+<script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
 <main>
   <div class="card sticky">
     <div class="row">
       <label class="f">Readiness date &mdash; the day the sheet was sent
-        <input type="date" id="day">
+        <select id="day"></select>
       </label>
       <button id="today">Today</button>
       <label class="f">Subcontractor
@@ -706,28 +708,28 @@ $('#btnReject').onclick  = async () => {
 };
 
 // ── boot ---------------------------------------------------------------
-$('#day').onchange = async () => { clearReport(); await loadList(); await loadSummary(); };
-$('#today').onclick = async () => { $('#day').value = todayStr();
+let PICKER = null;
+$('#today').onclick = async () => {
+  if (PICKER && PICKER.today) $('#day').value = PICKER.today;
   $('#dateWhy').textContent = '';
-  await loadList(); };
+  clearReport(); await loadList(); await loadSummary();
+};
 
 (async () => {
-  // Open on the day being worked, not on today - today is normally empty
-  // because a list is built the day before it runs.
-  let start = todayStr(), why = '';
-  try {
-    const l = await jget('/api/shift/latest');
-    if (l && l.date) {
-      start = l.date;
-      if (l.date !== l.today) why = 'showing ' + l.why;
-      if (l.subcontractor_id) SUBID = String(l.subcontractor_id);
-    }
-  } catch (e) { /* fall back to today */ }
-  $('#day').value = start;
-  $('#dateWhy').textContent = why;
+  // A list of the days that exist, each saying what is on it and which one is
+  // live, instead of a calendar that will happily offer a day nothing was ever
+  // filed under - and an empty page reads as "they sent nothing".
+  PICKER = new DayPick({select: $('#day'), detail: true,
+    onPick: async () => { clearReport(); await loadList(); await loadSummary(); }});
+  await PICKER.load(null);
+  $('#dateWhy').textContent = (PICKER.latest && PICKER.latest !== PICKER.today)
+    ? 'today has nothing on it yet' : '';
   await loadSubs();
   await loadList(); await loadSummary();
   $('#btnUpload').onclick = doUpload;
+  // The labels carry counts and states, so they go stale the moment anything
+  // is submitted or confirmed.
+  window._refreshDays = () => PICKER && PICKER.load($('#day').value);
 })();
 </script>
 </body>

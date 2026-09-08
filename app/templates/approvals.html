@@ -70,6 +70,7 @@
   .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
   .n-none{background:var(--panel2);border:1px solid var(--line);color:var(--mut)}
   .msg{font-size:12.5px;margin-left:10px}
+  #day{min-width:340px;font-variant-numeric:tabular-nums}
   .ok{color:var(--grn)} .err{color:var(--red)}
 </style>
 </head>
@@ -85,11 +86,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/ops">Operations</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
+<script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
 <main>
   <div class="card">
     <div class="row">
       <label class="f">Readiness date &mdash; the day the sheet was sent
-        <input type="date" id="day"></label>
+        <select id="day"></select></label>
       <button class="ghost" id="reload">Reload</button>
       <div class="spacer"></div>
       <div id="who" class="why"></div>
@@ -237,23 +239,23 @@ async function act(btn){
       headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Failed');
+    if (PICKER) await PICKER.load($('#day').value);
     await load();
   } catch (e) {
     m.textContent = e.message || 'Failed'; m.className = 'msg err';
   }
 }
 
-$('#day').onchange = load;
-$('#reload').onclick = load;
+let PICKER = null;
+$('#reload').onclick = () => { if (PICKER) PICKER.load($('#day').value); load(); };
 
 (async function(){
   let me = {};
   try { me = await jget('/api/me'); } catch (e) {}
   $('#who').textContent = (me.username || '') + (me.role ? ' · ' + me.role : '');
-  // The sheet's own date, which is the day it was sent - the same field the
-  // Supervisor page shows. Opening on tomorrow looked for a sheet that will not
-  // exist until tomorrow.
-  $('#day').value = todayStr();
+  // The days that exist, newest first, each saying what is waiting on it.
+  PICKER = new DayPick({select: $('#day'), detail: true, onPick: load});
+  await PICKER.load(null);
   await load();
 })();
 </script>

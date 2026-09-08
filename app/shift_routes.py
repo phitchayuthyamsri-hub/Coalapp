@@ -2289,6 +2289,60 @@ def amend_decide():
                    rows_returned=moved)
 
 
+@bp.get("/dates")
+@login_required
+def dates():
+    """The days that actually have a sheet, newest first.
+
+    A free date field invites the one mistake nobody catches: typing a day
+    nothing was ever filed under and reading the empty page as "they sent
+    nothing". Every day offered here has something behind it, except today,
+    which is always offered because that is where a new sheet starts.
+
+    A subcontractor sees only the days it has sent.
+    """
+    today = (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = getattr(current_user, "subcontractor_id", None) \
+        if _role() == "subcontractor" else None
+
+    subs = {x.id: (x.short or x.name) for x in Subcontractor.query.all()}
+    q = DailyList.query
+    if only is not None:
+        q = q.filter_by(subcontractor_id=only)
+
+    by_day = {}
+    for dl in q.all():
+        d = by_day.setdefault(dl.list_date, {
+            "date": dl.list_date, "lists": 0, "trucks": 0,
+            "companies": [], "states": [], "waiting": 0, "amend": 0})
+        d["lists"] += 1
+        d["trucks"] += DailyListRow.query.filter_by(list_id=dl.id).count()
+        d["companies"].append(subs.get(dl.subcontractor_id, "(no company)"))
+        d["states"].append(dl.state)
+        d["waiting"] += DailyListRow.query.filter_by(
+            list_id=dl.id, state="applied").count()
+        if (dl.amend_state or "") == "pending":
+            d["amend"] += 1
+
+    rows = sorted(by_day.values(), key=lambda x: x["date"], reverse=True)
+    have_today = any(r["date"] == today for r in rows)
+    if not have_today:
+        rows.insert(0, {"date": today, "lists": 0, "trucks": 0, "companies": [],
+                        "states": [], "waiting": 0, "amend": 0})
+
+    # "Latest" means the newest day that has something on it, which is not
+    # always today: on a quiet morning today is empty and yesterday is the day
+    # everyone is still working.
+    latest = next((r["date"] for r in rows if r["lists"]), None)
+    for r in rows:
+        r["today"] = (r["date"] == today)
+        r["latest"] = (r["date"] == latest)
+        r["companies"] = sorted(set(r["companies"]))
+        r["states"] = sorted(set(r["states"]))
+    return jsonify(dates=rows, today=today, latest=latest, role=_role(),
+                   scoped=(only is not None))
+
+
 @bp.get("/list")
 @login_required
 def get_list():
