@@ -33,6 +33,26 @@ def create_app(config_class=Config):
     # again - which looked exactly like the fix not working. Revalidate every
     # time; these files are small and answer 304 when unchanged.
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+    @app.context_processor
+    def _asset_version():
+        """Stamp static URLs with the file's own mtime.
+
+        no-cache tells a browser to revalidate, but a copy taken BEFORE that
+        header existed carries no instruction at all and is simply kept - which
+        is how a page ended up calling a function that had shipped hours
+        earlier. A changed file is now a changed URL, which nothing can hold on
+        to by mistake.
+        """
+        import os as _os
+
+        def asset_v(name):
+            try:
+                return str(int(_os.path.getmtime(
+                    _os.path.join(app.static_folder, name))))
+            except OSError:
+                return "0"
+        return {"asset_v": asset_v}
     app.config.from_object(config_class)
 
     # GPS ingestion config (inert unless a provider is enabled + credentialed).
@@ -83,6 +103,7 @@ def create_app(config_class=Config):
         _ensure_user_schema()
         _ensure_admin()
         _ensure_listrow_schema()
+        _ensure_daily_list_schema()
         _ensure_truck_schema()
         _ensure_subcontractors()
         _ensure_plan_settings()
@@ -260,6 +281,30 @@ def _ensure_truck_schema():
         return
     if "driver" not in cols:
         db.session.execute(text("ALTER TABLE truck ADD COLUMN driver VARCHAR(120) DEFAULT ''"))
+        db.session.commit()
+
+
+def _ensure_daily_list_schema():
+    """Add the amend-request columns to an existing daily_list."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("daily_list")]
+    except Exception:
+        return
+    want = [("amend_state", "VARCHAR(10) DEFAULT ''"),
+            ("amend_by", "VARCHAR(80) DEFAULT ''"),
+            ("amend_at", "DATETIME"),
+            ("amend_note", "VARCHAR(300) DEFAULT ''"),
+            ("amend_by_role", "VARCHAR(20) DEFAULT ''"),
+            ("amend_decided_by", "VARCHAR(80) DEFAULT ''"),
+            ("amend_decided_at", "DATETIME"),
+            ("amend_reason", "VARCHAR(300) DEFAULT ''")]
+    stmts = ["ALTER TABLE daily_list ADD COLUMN %s %s" % (n, t)
+             for n, t in want if n not in cols]
+    for st in stmts:
+        db.session.execute(text(st))
+    if stmts:
         db.session.commit()
 
 

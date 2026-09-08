@@ -153,7 +153,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/ops">Operations</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
-<script src="/static/grid.js"></script>
+<script src="/static/grid.js?v={{ asset_v('grid.js') }}"></script>
 <main>
 
   <div class="card">
@@ -180,6 +180,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         reach the mine. Change anything that is wrong: you are on the ground and the GPS is not.
         Trucks the GPS has not seen are left blank and marked, because a guess dressed up as a
         fact is worse than an empty box.</p>
+      <div id="amendBox"></div>
       <div id="gpsNote"></div>
       <div class="stat" id="stats"></div>
     </div>
@@ -245,6 +246,7 @@ const NOT_RUNNING = STATUS.slice(2);
 const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
                 'Workshop','Garage'];
 let ME = null, SUBID = null, ROWS = [], SUGGEST = {}, MAY_EDIT = false;
+let LIST = null, LOCKED = false;
 
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
 
@@ -272,6 +274,12 @@ async function load(){
 
   SUGGEST = {};
   (sug.rows || []).forEach(r => { SUGGEST[r.plate] = r; });
+  LIST = list;
+  // The server decides whether this list is still ours; the page only reports
+  // it. A list gone to the supervisor is locked here on purpose.
+  if (MAY_EDIT && list && list.may_edit === false) LOCKED = true;
+  else LOCKED = false;
+  drawAmend();
 
   // What is already declared wins; the GPS fills the gaps. A declaration is a
   // statement somebody made, and it is not this page's place to overwrite it.
@@ -320,12 +328,72 @@ function statusClass(r){
   return (SUGGEST[r.plate] || {}).seen_at ? '' : 'unseen';
 }
 
+// Sent, and something is wrong with it. The list is not ours to change any
+// more - somebody is working from it - so ask for it back rather than be told
+// no by a greyed-out button with no explanation.
+function drawAmend(){
+  const box = $('#amendBox');
+  if (!box) return;
+  const l = LIST || {};
+  const st = l.amend_state || '';
+  if (!MAY_EDIT){ box.innerHTML = ''; return; }
+
+  if (st === 'pending'){
+    box.innerHTML = '<div class="note n-warn"><b>Amend requested</b> '
+      + esc(l.amend_at || '') + ' &mdash; waiting for the supervisor.<br>'
+      + '<span class="why">You wrote: ' + esc(l.amend_note || '') + '</span></div>';
+    return;
+  }
+  if (st === 'denied'){
+    box.innerHTML = '<div class="note n-warn"><b>Amend declined</b> by '
+      + esc(l.amend_decided_by || '?') + '.<br><span class="why">'
+      + esc(l.amend_reason || '') + '</span></div>';
+  } else if (st === 'allowed' && !LOCKED){
+    box.innerHTML = '<div class="note n-info"><b>Amend allowed</b> by '
+      + esc(l.amend_decided_by || '?') + ' &mdash; the list is back with you. '
+      + 'Change it and send it again.</div>';
+  } else {
+    box.innerHTML = '';
+  }
+  if (!LOCKED) return;
+
+  box.innerHTML += '<div class="note n-warn">'
+    + '<b>This list has gone to the supervisor</b>, so it is not yours to change '
+    + 'now. If something is wrong, ask for it back and say what needs fixing.'
+    + '<div style="margin-top:9px"><button id="askAmend">Request to amend</button></div>'
+    + '</div>';
+  const b = $('#askAmend');
+  if (b) b.onclick = askAmend;
+}
+
+async function askAmend(){
+  const note = prompt('What needs changing?' + String.fromCharCode(10,10) + 'The supervisor sees this, so be '
+    + 'specific - which trucks, and what is wrong.');
+  if (!note || !note.trim()) return;
+  try {
+    const r = await fetch('/api/shift/list/amend/request', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date: $('#day').value,
+                            subcontractor_id: SUBID ? Number(SUBID) : null,
+                            note: note.trim()})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Could not send the request');
+    await load();
+  } catch (e) { alert(e.message || 'Could not send the request'); }
+}
+
 function draw(){
   // Build the grid ONCE. Creating a second one over the same table wired a
   // second set of listeners to it, and from then on a single click ran several
   // handlers, each with its own idea of where the cursor was - which is what
   // "click one cell and it selects many" was.
-  if (GRID){ GRID.setRows(ROWS); paint(); return; }
+  // An older grid.js kept by a browser has no setRows, and calling it threw
+  // and left the page blank. Rebuild instead: worse, but not broken.
+  if (GRID && typeof GRID.setRows === 'function'){
+    GRID.readOnly = (!MAY_EDIT || LOCKED);
+    GRID.setRows(ROWS); paint(); return;
+  }
+  if (GRID) GRID = null;
   const cols = [
     {key:'plate',    label:'Truck',          width:'92px',  ro:true},
     {key:'driver',   label:'Driver',         width:'130px', ro:true},
@@ -343,7 +411,7 @@ function draw(){
   ];
   GRID = new Grid({
     table: document.getElementById('grid'),
-    cols: cols, rows: ROWS, readOnly: !MAY_EDIT,
+    cols: cols, rows: ROWS, readOnly: (!MAY_EDIT || LOCKED),
     rowClass: statusClass,
     render: {
       plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>',

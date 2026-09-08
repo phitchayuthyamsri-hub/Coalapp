@@ -240,6 +240,17 @@ class DailyList(db.Model):
     rejected_by = db.Column(db.String(80))
     rejected_at = db.Column(db.DateTime)
     reject_reason = db.Column(db.String(400), default="")
+    # Asking for the list back. Once it is sent, the company cannot edit it -
+    # correctly, because somebody is now working from it - so instead of a
+    # locked door there is a request, and a supervisor who answers it.
+    amend_state = db.Column(db.String(10), default="")   # ''|pending|allowed|denied
+    amend_by = db.Column(db.String(80), default="")
+    amend_at = db.Column(db.DateTime)
+    amend_note = db.Column(db.String(300), default="")
+    amend_by_role = db.Column(db.String(20), default="")
+    amend_decided_by = db.Column(db.String(80), default="")
+    amend_decided_at = db.Column(db.DateTime)
+    amend_reason = db.Column(db.String(300), default="")
 
     __table_args__ = (db.UniqueConstraint("list_date", "subcontractor_id",
                                           name="uq_daily_list"),)

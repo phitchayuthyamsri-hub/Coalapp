@@ -486,6 +486,13 @@ def _list_payload(dl, day):
         # Named for what it is: rows sitting with the manager, undecided.
         "applied_count": sum(1 for r in rows if r["state"] == "applied"),
         "submitted_by": dl.submitted_by if dl else None,
+        "amend_state": (dl.amend_state or "") if dl else "",
+        "amend_by": (dl.amend_by or "") if dl else "",
+        "amend_note": (dl.amend_note or "") if dl else "",
+        "amend_at": _fmt(dl.amend_at) if dl and dl.amend_at else None,
+        "amend_decided_by": (dl.amend_decided_by or "") if dl else "",
+        "amend_reason": (dl.amend_reason or "") if dl else "",
+        "may_edit": _can("edit", dl.state if dl else "none"),
         "submitted_at": _fmt(dl.submitted_at) if dl else None,
         "confirmed_by": dl.confirmed_by if dl else None,
         "confirmed_at": _fmt(dl.confirmed_at) if dl else None,
@@ -2203,6 +2210,83 @@ def approvals():
     total_waiting = sum(o["waiting"] for o in out)
     return jsonify(date=day, lists=out, waiting=total_waiting,
                    role=_role(), may_decide=_role() in ("manager", "planner", "admin"))
+
+
+@bp.post("/list/amend/request")
+@login_required
+def amend_request():
+    """The company asks for its list back.
+
+    Once submitted the declaration is not theirs to change - a supervisor is
+    working from it, and a list that moves under somebody is worse than one that
+    is briefly wrong. So the answer to "I need to fix this" is a request with a
+    reason on it, which somebody answers, rather than a refusal.
+    """
+    d = request.get_json(force=True, silent=True) or {}
+    day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    sub_id = _req_sub_id(d)
+    dl = _find_list(day, sub_id)
+    if not dl:
+        return jsonify(error="There is no list for %s to amend." % day), 404
+    if _can("edit", dl.state):
+        return jsonify(error="This list is still yours to edit - just change it."), 400
+    note = (d.get("note") or "").strip()
+    if not note:
+        return jsonify(error="Say what needs changing. The supervisor sees this."), 400
+    dl.amend_state = "pending"
+    dl.amend_by = current_user.username
+    dl.amend_by_role = _role()
+    dl.amend_at = datetime.utcnow()
+    dl.amend_note = note[:300]
+    dl.amend_decided_by = ""
+    dl.amend_decided_at = None
+    dl.amend_reason = ""
+    db.session.commit()
+    return jsonify(ok=True, amend_state=dl.amend_state, at=_fmt(dl.amend_at))
+
+
+@bp.post("/list/amend/decide")
+@login_required
+def amend_decide():
+    """The supervisor answers it. Theirs, because it is their step the list is
+    sitting on: the company sent it to them and it has gone no further."""
+    if not _may("readiness"):
+        return jsonify(error="Only the supervisor answers an amend request"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    dl = _find_list(day, _req_sub_id(d))
+    if not dl or (dl.amend_state or "") != "pending":
+        return jsonify(error="There is no request waiting on this list."), 404
+    allow = bool(d.get("allow"))
+    reason = (d.get("reason") or "").strip()[:300]
+
+    if allow:
+        # A confirmed list is the manager's, not the supervisor's, so it cannot
+        # be handed back from here. Saying which door to knock on beats a
+        # refusal that explains nothing.
+        if dl.state == "confirmed":
+            return jsonify(error="This list is already confirmed, so it is the "
+                                 "manager's. They reject the rows that need "
+                                 "changing and it comes back on its own."), 400
+        moved = 0
+        for r in DailyListRow.query.filter_by(list_id=dl.id, state="applied").all():
+            r.state = "pending"          # back out of the supervisor's tray
+            moved += 1
+        dl.state = "draft"
+        dl.submitted_by, dl.submitted_at = "", None
+        dl.reject_reason = ""
+        dl.amend_state = "allowed"
+    else:
+        if not reason:
+            return jsonify(error="Say why. The company sees this."), 400
+        dl.amend_state = "denied"
+        moved = 0
+    dl.amend_decided_by = current_user.username
+    dl.amend_decided_at = datetime.utcnow()
+    dl.amend_reason = reason
+    db.session.commit()
+    return jsonify(ok=True, amend_state=dl.amend_state, state=dl.state,
+                   rows_returned=moved)
 
 
 @bp.get("/list")

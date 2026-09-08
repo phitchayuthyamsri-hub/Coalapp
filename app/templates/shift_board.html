@@ -172,6 +172,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <span id="capConfirm" class="whose">manager</span>
       <span id="capReject"  class="whose">manager</span>
     </div>
+    <div id="amendReq"></div>
     <div id="nextStep" style="color:var(--mut);font-size:12.5px;margin-top:8px"></div>
     <div id="roleNote" style="color:var(--mut);font-size:12px;margin-top:2px"></div>
   </div>
@@ -257,6 +258,56 @@ async function loadSubs(){
 function clearReport(){ $('#upReport').innerHTML = ''; $('#upMsg').textContent = ''; }
 
 // ── upload ------------------------------------------------------------
+// The company has asked for its list back. It is sitting on this step, so it
+// is this step that answers - and the answer is a decision with a name on it,
+// not a silence the company has to chase.
+function drawAmendReq(){
+  const box = document.getElementById('amendReq');
+  if (!box) return;
+  const l = LIST || {};
+  if ((l.amend_state || '') !== 'pending'){ box.innerHTML = ''; return; }
+  const mine = (ROLE === 'supervisor' || ROLE === 'admin');
+  box.innerHTML =
+    '<div style="margin-top:10px;padding:11px 13px;border-radius:9px;'
+    + 'background:#2a1f10;border:1px solid #5a4020;color:#ffb020;font-size:12.5px">'
+    + '<b>' + esc(l.amend_by || 'The company') + ' has asked to amend this list</b>'
+    + (l.amend_at ? ' &middot; ' + esc(l.amend_at) : '')
+    + '<div style="margin-top:5px;color:#e8ecf5">' + esc(l.amend_note || '') + '</div>'
+    + (mine
+        ? '<div style="margin-top:9px;display:flex;gap:8px">'
+          + '<button id="amYes">Allow &mdash; give it back</button>'
+          + '<button id="amNo" class="ghost">Decline</button></div>'
+        : '<div style="margin-top:6px;color:#8b97ad">The supervisor answers this.</div>')
+    + '</div>';
+  if (!mine) return;
+  const yes = document.getElementById('amYes'), no = document.getElementById('amNo');
+  if (yes) yes.onclick = () => decideAmend(true);
+  if (no) no.onclick = () => decideAmend(false);
+}
+
+async function decideAmend(allow){
+  let reason = '';
+  if (!allow){
+    reason = prompt('Why is the request declined?' + String.fromCharCode(10,10)
+      + 'The company sees this.') || '';
+    if (!reason.trim()) return;
+  } else if (!confirm('Give the list back to the company?' + String.fromCharCode(10,10)
+      + 'Anything you had sent to the manager comes back to them, and they '
+      + 'submit it again when it is fixed.')) {
+    return;
+  }
+  try {
+    const r = await fetch('/api/shift/list/amend/decide', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date: $('#day').value,
+                            subcontractor_id: SUBID ? Number(SUBID) : null,
+                            allow: allow, reason: reason.trim()})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Could not answer the request');
+    await load();
+  } catch (e) { alert(e.message || 'Could not answer the request'); }
+}
+
 function renderReport(d){
   const box = (title, items, colour, note) => {
     if (!items || !items.length) return '';
@@ -571,6 +622,7 @@ async function loadList(){
                  : 'Sent back to the supervisor.'
   };
   $('#nextStep').textContent = NEXT[LIST.state] || '';
+  drawAmendReq();
   measureFreeze();
   const none = !(c.edit || c.submit || c.confirm || c.reject || c.reopen);
   $('#roleNote').textContent = none
