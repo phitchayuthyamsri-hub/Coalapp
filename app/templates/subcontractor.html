@@ -43,7 +43,22 @@
      letter-spacing:.05em;font-weight:700;padding:8px 7px;text-align:left;
      border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
   td{padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:middle}
-  td select,td input{width:100%;min-width:70px;padding:5px 7px;font-size:12px}
+  /* Spreadsheet cells: a value is text until you are on it, so fifty-eight
+     rows read as a list rather than as a wall of controls. */
+  #grid{user-select:none}
+  #grid:focus{outline:none}
+  #grid td{cursor:cell;white-space:nowrap;height:29px}
+  #grid td.ro{cursor:default;color:var(--mut)}
+  #grid td.sel{background:rgba(45,212,191,.13)}
+  #grid td.cur{outline:2px solid var(--acc);outline-offset:-2px;background:rgba(45,212,191,.10)}
+  #grid td .ed{width:100%;border:0;background:#0b1020;color:var(--txt);
+               font:inherit;font-size:12px;padding:4px 5px;outline:none}
+  .keys{display:flex;gap:14px;flex-wrap:wrap;color:var(--mut);font-size:11.5px;
+        padding:9px 12px;background:var(--panel2);border-radius:9px;margin:0 0 12px}
+  .keys b{color:var(--txt);font-weight:700;background:#0b1020;border:1px solid var(--line);
+          border-radius:4px;padding:0 5px;font-size:11px}
+  .bulk{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
+  .bulk button{padding:6px 12px;font-size:11.5px}
   tr.fh{background:rgba(90,200,250,.05)}
   tr.off{background:rgba(255,176,32,.07)}
   tr.unseen td{color:var(--mut)}
@@ -80,6 +95,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/ops">Operations</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
+<script src="/static/grid.js"></script>
 <main>
 
   <div class="card">
@@ -111,17 +127,26 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     </div>
 
     <div class="card">
-      <div class="wrap-t"><table id="grid"><thead><tr>
-        <th style="width:96px">Truck</th><th style="width:120px">Driver</th>
-        <th style="width:120px">Status</th><th style="width:96px">Loaded / Empty</th>
-        <th style="width:130px">Location</th>
-        <th style="width:120px">Date at mine</th><th style="width:86px">Time</th>
-        <th style="width:120px">Back in service</th><th>Remark</th>
-        <th style="width:150px">What the GPS says</th>
-      </tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="keys">
+        <span><b>&larr; &uarr; &darr; &rarr;</b> move</span>
+        <span>type a letter to set &mdash; <b>f</b> FH, <b>b</b> BH, <b>b b</b> Breakdown</span>
+        <span><b>Ctrl</b>+<b>D</b> fill down</span>
+        <span><b>Ctrl</b>+<b>V</b> paste from Excel</span>
+        <span><b>F2</b> edit</span>
+        <span><b>Del</b> clear</span>
+      </div>
+      <div class="bulk">
+        <span class="why">With rows selected:</span>
+        <button class="ghost" data-set="FH">All FH</button>
+        <button class="ghost" data-set="BH">All BH</button>
+        <button class="ghost" id="bulkOff">Mark not running&hellip;</button>
+        <button class="ghost" id="bulkGps">Use GPS for the selection</button>
+        <span class="msg" id="gridMsg"></span>
+      </div>
+      <div class="wrap-t"><table id="grid"></table></div>
       <div class="row" style="margin-top:14px">
         <button id="save">Save declaration</button>
-        <button class="ghost" id="reapply">Re-apply GPS to blank rows</button>
+        <button class="ghost" id="reapply">Fill every blank row from GPS</button>
         <span class="msg" id="saveMsg"></span>
       </div>
     </div>
@@ -221,41 +246,93 @@ async function load(){
   draw();
 }
 
-function draw(){
-  $('#rows').innerHTML = ROWS.map((r, i) => {
-    const g = SUGGEST[r.plate] || {};
-    const off = NOT_RUNNING.indexOf(r.status) >= 0;
-    const cls = off ? 'off' : (r.status === 'FH' ? 'fh' : (g.seen_at ? '' : 'unseen'));
-    const gps = g.seen_at
-      ? '<span class="badge b-gps">GPS</span> <span class="why">' + esc(g.why || '')
-        + (g.km_out != null ? ' &middot; ' + g.km_out + ' km out' : '') + '</span>'
-      : '<span class="badge b-none">no GPS</span> <span class="why">'
-        + esc(g.why || 'not seen') + '</span>';
-    return '<tr class="' + cls + '" data-i="' + i + '">'
-      + '<td class="plate">' + esc(r.plate) + '</td>'
-      + '<td class="why">' + esc(r.driver) + '</td>'
-      + '<td><select class="c-status">' + opts(STATUS, r.status, true) + '</select></td>'
-      + '<td><select class="c-load">' + opts(['Loaded','Empty'], r.load, true) + '</select></td>'
-      + '<td><select class="c-loc">' + opts(PLACES, r.location, true) + '</select></td>'
-      + '<td><input type="date" class="c-date" value="' + esc(r.date) + '"></td>'
-      + '<td><input type="text" class="c-time" placeholder="HH:MM" value="' + esc(r.time) + '"></td>'
-      + '<td><input type="date" class="c-back" value="' + esc(r.back) + '"></td>'
-      + '<td><input type="text" class="c-remark" value="' + esc(r.remark) + '"></td>'
-      + '<td>' + gps + '</td></tr>';
-  }).join('');
+let GRID = null;
 
-  $('#rows').querySelectorAll('tr').forEach(tr => {
-    const i = Number(tr.dataset.i);
-    const bind = (sel, key) => {
-      const el = tr.querySelector(sel);
-      if (el) el.onchange = () => { ROWS[i][key] = el.value; if (key === 'status') draw(); paint(); };
-    };
-    bind('.c-status','status'); bind('.c-load','load'); bind('.c-loc','location');
-    bind('.c-date','date'); bind('.c-time','time'); bind('.c-back','back');
-    bind('.c-remark','remark');
+function statusClass(r){
+  if (NOT_RUNNING.indexOf(r.status) >= 0) return 'off';
+  if (r.status === 'FH') return 'fh';
+  return (SUGGEST[r.plate] || {}).seen_at ? '' : 'unseen';
+}
+
+function draw(){
+  const cols = [
+    {key:'plate',    label:'Truck',          width:'92px',  ro:true},
+    {key:'driver',   label:'Driver',         width:'130px', ro:true},
+    {key:'status',   label:'Status',         width:'120px', list:STATUS},
+    {key:'load',     label:'Loaded / Empty', width:'96px',  list:['Loaded','Empty']},
+    {key:'location', label:'Location',       width:'125px', list:PLACES},
+    {key:'date',     label:'Date at mine',   width:'115px', kind:'date'},
+    {key:'time',     label:'Time',           width:'74px'},
+    {key:'back',     label:'Back in service',width:'115px', kind:'date'},
+    {key:'remark',   label:'Remark',         width:'190px'},
+    {key:'gps',      label:'What the GPS says', ro:true}
+  ];
+  GRID = new Grid({
+    table: document.getElementById('grid'),
+    cols: cols, rows: ROWS,
+    rowClass: statusClass,
+    render: {
+      plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>',
+      gps: (r) => {
+        const g = SUGGEST[r.plate] || {};
+        return g.seen_at
+          ? '<span class="badge b-gps">GPS</span> <span class="why">'
+            + esc(g.why || '') + (g.km_out != null ? ' &middot; ' + g.km_out + ' km out' : '')
+            + '</span>'
+          : '<span class="badge b-none">no GPS</span> <span class="why">'
+            + esc(g.why || 'not seen') + '</span>';
+      }
+    },
+    onChange: () => paint()
   });
+  GRID.onSay = (m) => { const el = $('#gridMsg'); el.textContent = m; el.className = 'msg ok'; };
+  GRID.draw();
+  document.getElementById('grid').focus();
   paint();
 }
+
+// Bulk actions work on whatever the selection covers, which is how somebody
+// says "these twenty are all coming back" without touching twenty cells.
+document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => {
+  if (!GRID) return;
+  const box = GRID.box(), v = b.dataset.set;
+  let n = 0;
+  for (let r = box.r1; r <= box.r2; r++){ ROWS[r].status = v; n++; }
+  GRID.draw(); paint();
+  GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' set to ' + v);
+});
+
+$('#bulkOff').onclick = function(){
+  if (!GRID) return;
+  const why = prompt('Mark the selected rows not running.\n\nOne of:\n'
+    + NOT_RUNNING.join('\n'));
+  if (!why) return;
+  const hit = NOT_RUNNING.filter(v => v.toLowerCase() === why.trim().toLowerCase())[0];
+  if (!hit){ GRID.say('"' + why + '" is not one of the reasons'); return; }
+  const box = GRID.box();
+  let n = 0;
+  for (let r = box.r1; r <= box.r2; r++){
+    ROWS[r].status = hit; ROWS[r].date = ''; ROWS[r].time = ''; n++;
+  }
+  GRID.draw(); paint();
+  GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' marked ' + hit);
+};
+
+$('#bulkGps').onclick = function(){
+  if (!GRID) return;
+  const box = GRID.box();
+  let n = 0;
+  for (let r = box.r1; r <= box.r2; r++){
+    const g = SUGGEST[ROWS[r].plate];
+    if (!g || !g.status) continue;
+    ROWS[r].status = g.status; ROWS[r].load = g.load; ROWS[r].location = g.location;
+    if (g.status === 'BH'){ ROWS[r].date = g.eta_date || ''; ROWS[r].time = g.eta_time || ''; }
+    n++;
+  }
+  GRID.draw(); paint();
+  GRID.say(n ? (n + ' row' + (n === 1 ? '' : 's') + ' taken from GPS')
+             : 'GPS has nothing for the selection');
+};
 
 function paint(){
   const running = ROWS.filter(r => r.status && NOT_RUNNING.indexOf(r.status) < 0);
@@ -320,7 +397,8 @@ $('#reapply').onclick = function(){
     if (g.status === 'BH'){ r.date = g.eta_date || ''; r.time = g.eta_time || ''; }
     n++;
   });
-  draw();
+  if (GRID) GRID.draw();
+  paint();
   $('#saveMsg').textContent = n ? (n + ' blank row(s) filled from GPS.')
                                 : 'Nothing blank that GPS can answer.';
   $('#saveMsg').className = 'msg ok';
