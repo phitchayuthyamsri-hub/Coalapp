@@ -53,10 +53,15 @@
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
   th{color:#aab8d0;font-weight:700;font-size:11px;text-transform:uppercase;
      background:#131d30}
-  /* Only the truck list freezes its header. Applying this to every table made
-     the summary table's headers detach and float over the filter card. */
-  #listBody thead th{position:sticky;top:var(--freeze,104px);z-index:20;
-     box-shadow:0 -18px 0 var(--panel)}
+  /* The table head does NOT float.
+     It was sticky, pinned to an offset this page kept getting wrong: sticky
+     pushes an element DOWN to its `top` when that offset sits below where the
+     element naturally is, so an over-large offset does not leave a gap - it
+     drops the headings into the middle of the table with rows above them.
+     Three attempts to compute the right offset were three wrong answers, and a
+     frozen header is a convenience while a table you cannot read is not. It
+     scrolls with its rows now, which cannot be wrong. */
+  #listBody thead th{position:static;background:var(--panel2)}
   .banner{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;
           border:1px solid}
   .b-none{background:#1e293b55;border-color:var(--line);color:var(--mut)}
@@ -516,35 +521,15 @@ async function doUpload(){
 
 // The frozen block is the page header plus the filter card. Measure it rather
 // than guess: the filter card grows and shrinks when the upload row appears.
-// Where the frozen table head should sit.
-//
-// Adding up the heights above it was wrong twice, because it assumes what is
-// between them: the header, the filter card, their margins, and whatever else
-// the page grew. So do not assume - ASK the card where its bottom edge actually
-// is, in the same coordinates `position: sticky` uses, and recompute it while
-// scrolling. It cannot be stale, and it cannot be wrong about a layout it never
-// has to model.
+// The filter card still needs to know how tall the page header is, so it can
+// stick just below it. The table head no longer needs anything: it scrolls.
 function measureFreeze(){
   const hdr = document.querySelector('header');
-  const bar = document.querySelector('.card.sticky');
-  if (!bar) return;
-  const root = document.documentElement.style;
-  if (hdr) root.setProperty('--hdr', Math.round(hdr.getBoundingClientRect().height) + 'px');
-  const bottom = Math.round(bar.getBoundingClientRect().bottom);
-  // Once the card is stuck this settles; before then it tracks the card down
-  // the page, which is what makes the head sit against it at every scroll
-  // position instead of at one guessed offset.
-  root.setProperty('--freeze', Math.max(0, bottom) + 'px');
+  if (!hdr) return;
+  document.documentElement.style.setProperty(
+    '--hdr', Math.round(hdr.getBoundingClientRect().height) + 'px');
 }
 window.addEventListener('resize', measureFreeze);
-// Sticky offsets are viewport coordinates, so they move as the page scrolls
-// until the card is pinned. Cheap: one getBoundingClientRect per frame at most.
-let _freezeTick = false;
-window.addEventListener('scroll', () => {
-  if (_freezeTick) return;
-  _freezeTick = true;
-  requestAnimationFrame(() => { _freezeTick = false; measureFreeze(); });
-}, {passive: true});
 
 // Measured ONCE at boot was the bug: the filter card changes height afterwards
 // - the upload row appears, a banner comes and goes, an amend request shows -
