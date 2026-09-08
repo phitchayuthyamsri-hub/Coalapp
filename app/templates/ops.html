@@ -22,8 +22,9 @@
         font-weight:700;text-transform:uppercase;background:#1e293b;color:var(--acc);
         border:1px solid var(--line)}
 
-  /* The three jobs, in the order the day runs: who is going, what the plan says,
-     what actually happened. Same page, so moving between them is a glance. */
+  /* The chain, in the order the day runs: the company declares, the supervisor
+     rechecks, the manager approves, the planner issues, the monitor watches.
+     Which of them a login sees is the server's call - see /api/shift/views. */
   nav{display:flex;gap:6px}
   nav button{background:transparent;border:1px solid transparent;color:var(--mut);
              padding:7px 16px;border-radius:999px;font:inherit;font-size:13px;
