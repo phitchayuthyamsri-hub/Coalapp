@@ -254,7 +254,13 @@ async function loadSubs(){
     + (s.committed ? ' — ' + s.committed + ' committed' : '') + '</option>').join('');
   // A subcontractor login is pinned to its own company and cannot switch.
   if (j.role === 'subcontractor' && j.mine){ SUBID = String(j.mine); sel.disabled = true; }
-  if (!SUBID && SUBS.length) SUBID = String(SUBS[0].id);
+  // Opening on an arbitrary company shows an empty page on a day that is not
+  // empty. Prefer one that has a sheet on the day being shown.
+  if (!SUBID && SUBS.length){
+    const have = companiesOnDay($('#day').value);
+    const match = SUBS.filter(x => have.indexOf(x.short) >= 0)[0];
+    SUBID = String((match || SUBS[0]).id);
+  }
   sel.value = SUBID;
   sel.onchange = async () => { SUBID = sel.value; clearReport();
     await loadList(); await loadSummary(); };
@@ -499,10 +505,32 @@ const BANNER = {
   mixed:     ['b-none',      'Every company for this date.']
 };
 
+// Which companies have a sheet on the day now showing. Comes from the day
+// picker, which already knows - it is what the label is built from.
+function companiesOnDay(day){
+  if (!PICKER || !PICKER.rows) return [];
+  const r = PICKER.rows.filter(x => x.date === day)[0];
+  return (r && r.companies) || [];
+}
+
 async function loadList(){
   LIST = await jget('/api/shift/list?date=' + $('#day').value + subQ());
   let [cls, text] = BANNER[LIST.state] || BANNER.none;
   let extra = '';
+  // "No list yet" is only true if nobody sent one. If somebody did and you are
+  // simply looking at another company, say so - otherwise the page reports an
+  // absence that is really a filter, and a supervisor goes and chases a
+  // company that already sent its sheet.
+  if ((LIST.state || 'none') === 'none' && SUBID !== 'all'){
+    const others = companiesOnDay($('#day').value);
+    if (others.length){
+      const me = (SUBS.filter(x => String(x.id) === String(SUBID))[0] || {}).short || 'this company';
+      cls = 'b-draft';
+      text = 'Nothing from ' + esc(me) + ' for this date. '
+           + esc(others.join(', ')) + (others.length === 1 ? ' has' : ' have')
+           + ' sent one — switch company above, or pick All companies.';
+    }
+  }
   if (LIST.state === 'submitted' && LIST.submitted_by)
     extra = ' Submitted by ' + esc(LIST.submitted_by) + ' at ' + esc(LIST.submitted_at) + '.';
   // One line, one fact. Only one manager approves, so the name adds nothing on
@@ -732,7 +760,20 @@ $('#today').onclick = async () => {
   // live, instead of a calendar that will happily offer a day nothing was ever
   // filed under - and an empty page reads as "they sent nothing".
   PICKER = new DayPick({select: $('#day'), detail: true,
-    onPick: async () => { clearReport(); await loadList(); await loadSummary(); }});
+    onPick: async () => {
+      clearReport();
+      // Follow the data across days: a company with nothing on the new day
+      // would otherwise show an empty page for a day that has plenty.
+      const have = companiesOnDay($('#day').value);
+      if (SUBID !== 'all' && have.length){
+        const mine = (SUBS.filter(x => String(x.id) === String(SUBID))[0] || {}).short;
+        if (have.indexOf(mine) < 0){
+          const match = SUBS.filter(x => have.indexOf(x.short) >= 0)[0];
+          if (match){ SUBID = String(match.id); $('#sub').value = SUBID; }
+        }
+      }
+      await loadList(); await loadSummary();
+    }});
   await PICKER.load(null);
   $('#dateWhy').textContent = (PICKER.latest && PICKER.latest !== PICKER.today)
     ? 'today has nothing on it yet' : '';
