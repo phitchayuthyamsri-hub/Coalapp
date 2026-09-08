@@ -77,6 +77,9 @@
   .plate{background:#0c1523;border:1px solid var(--line);border-radius:6px;
          padding:3px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
   .msg{font-size:12px;margin-left:8px}
+  a.trail{color:#5ac8fa;text-decoration:none;font-size:10.5px;font-weight:600;
+          margin-left:5px;opacity:.75;white-space:nowrap}
+  a.trail:hover{opacity:1;text-decoration:underline}
   .whose{font-size:11px;color:var(--mut);text-transform:uppercase;
          letter-spacing:.4px;text-align:center;display:none}
   #capSubmit{width:150px} #capConfirm{width:86px} #capReject{width:78px}
@@ -261,6 +264,16 @@ function clearReport(){ $('#upReport').innerHTML = ''; $('#upMsg').textContent =
 // The company has asked for its list back. It is sitting on this step, so it
 // is this step that answers - and the answer is a decision with a name on it,
 // not a silence the company has to chase.
+// A link to the truck's own last day on the map. Checking a declaration means
+// asking "was it really there", and that answer lives on the GPS page - one
+// click away rather than a page, a drop-down and two date fields away.
+function trailLink(plate){
+  if (!plate) return '';
+  return ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
+    + 'yesterday to now" href="/gps-capture?plate=' + encodeURIComponent(plate)
+    + '">◎ trail</a>';
+}
+
 function drawAmendReq(){
   const box = document.getElementById('amendReq');
   if (!box) return;
@@ -549,7 +562,7 @@ async function loadList(){
         // list, so it carries no tick, no timing and no reason box - there is
         // nothing to save against it. It is here to be seen and chased.
         (r.absent
-          ? '<tr style="opacity:.72"><td class="plate">'+esc(r.plate)+'</td>'
+          ? '<tr style="opacity:.72"><td class="plate">'+esc(r.plate)+trailLink(r.plate)+'</td>'
             + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
             + '<td></td><td></td><td></td>'
             + '<td>'+badge('absent')+'</td>'
@@ -557,7 +570,7 @@ async function loadList(){
             + 'Committed for the project and not on this sheet — ask the '
             + 'subcontractor for its status.</td></tr>'
           :
-        '<tr><td class="plate">'+esc(r.plate)
+        '<tr><td class="plate">'+esc(r.plate)+trailLink(r.plate)
         + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
             + 'color:#fcd34d" title="This plate is not on the committed roster '
             + 'for this company">not committed</span>' : '') + '</td>'

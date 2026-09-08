@@ -269,6 +269,39 @@ function populateTrailTrucks(trucks){
   const cur=sel.value;
   sel.innerHTML=(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
   if(cur) sel.value=cur;
+  _autoTrail();
+}
+
+// Arriving from a truck row on Readiness or Approvals: ?plate=20C10615 draws
+// that truck's last day straight away. Somebody checking a declaration should
+// land on the answer, not on a form they have to fill in first.
+var _autoDone=false;
+function _autoTrail(){
+  if(_autoDone) return;
+  var q; try { q=new URLSearchParams(window.location.search); } catch(e){ return; }
+  var want=(q.get('plate')||'').trim();
+  if(!want) return;
+  var sel=document.getElementById('trailTruck'); if(!sel || !sel.options.length) return;
+  var hit=null;
+  for(var i=0;i<sel.options.length;i++){
+    if(sel.options[i].value.split('|')[0].toUpperCase()===want.toUpperCase()){ hit=sel.options[i].value; break; }
+  }
+  var msg=document.getElementById('trailMsg');
+  if(!hit){
+    if(msg) msg.textContent=want+' has no GPS source on this account';
+    _autoDone=true; return;
+  }
+  _autoDone=true;
+  sel.value=hit;
+  var f=document.getElementById('trailFrom'), t=document.getElementById('trailTo');
+  // Yesterday to now unless the link says otherwise.
+  var now=new Date(), from=new Date(now.getTime()-24*3600*1000);
+  if(f) f.value=q.get('from')||_localInput(from);
+  if(t) t.value=q.get('to')||_localInput(now);
+  var btn=document.getElementById('trailBtn');
+  if(btn) btn.click();
+  var bar=document.getElementById('trailBar');
+  if(bar && bar.scrollIntoView) bar.scrollIntoView({block:'center'});
 }
 function drawTrail(pts, plate){
   _ensureMap(); if(!_map) return;

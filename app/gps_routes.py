@@ -47,10 +47,25 @@ def _require_admin():
         abort(403)
 
 
+# Reading a truck's positions is part of checking a declaration, so the people
+# who review one can do it. Pulling from a provider, or poking a provider's API,
+# stays admin: those act on somebody else's system.
+GPS_READERS = ("supervisor", "manager", "planner", "monitor", "admin")
+
+
+def _require_gps_read():
+    if getattr(current_user, "is_admin", False):
+        return
+    # Deliberately not the subcontractor: this page shows every truck on the
+    # account, and one company must not be handed another company's positions.
+    if (getattr(current_user, "role", "") or "").lower() not in GPS_READERS:
+        abort(403)
+
+
 @bp.route("/gps-capture")
 @login_required
 def capture_page():
-    _require_admin()
+    _require_gps_read()
     return render_template("gps_capture.html",
                            maps_key=current_app.config.get("GOOGLE_MAPS_KEY", ""))
 
@@ -58,14 +73,14 @@ def capture_page():
 @bp.get("/api/gps/status")
 @login_required
 def gps_status():
-    _require_admin()
+    _require_gps_read()
     return jsonify(gps_ingest.status_summary(current_app._get_current_object()))
 
 
 @bp.get("/api/gps/points")
 @login_required
 def gps_points():
-    _require_admin()
+    _require_gps_read()
     return jsonify(gps_ingest.latest_points(current_app._get_current_object()))
 
 
@@ -91,7 +106,7 @@ def gps_debug(provider):
 @bp.get("/api/gps/trail")
 @login_required
 def gps_trail():
-    _require_admin()
+    _require_gps_read()
     plate = (request.args.get("plate") or "").strip()
     source = (request.args.get("source") or "").strip()
     f = _parse_arg_dt(request.args.get("from"))
