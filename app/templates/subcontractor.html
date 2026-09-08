@@ -253,7 +253,24 @@ const NOT_RUNNING = STATUS.slice(2);
 const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
                 'Workshop','Garage'];
 let ME = null, SUBID = null, ROWS = [], SUGGEST = {}, MAY_EDIT = false;
-let LIST = null, LOCKED = false, PICKER = null;
+let LIST = null, LOCKED = false, PICKER = null, SUBS = [];
+
+// Which companies filed something on the day now showing.
+function companiesOnDay(){
+  if (!PICKER || !PICKER.rows) return [];
+  const r = PICKER.rows.filter(x => x.date === $('#day').value)[0];
+  return (r && r.companies) || [];
+}
+// Point the company picker at a company that actually has a sheet on this day.
+function followData(initial){
+  const have = companiesOnDay();
+  const mine = (SUBS.filter(x => String(x.id) === String(SUBID))[0] || {});
+  const label = mine.short || mine.name;
+  if (!have.length) { if (initial && !SUBID && SUBS.length) SUBID = String(SUBS[0].id); return; }
+  if (label && have.indexOf(label) >= 0) return;      // already on one that has data
+  const match = SUBS.filter(x => have.indexOf(x.short || x.name) >= 0)[0];
+  if (match){ SUBID = String(match.id); $('#sub').value = SUBID; }
+}
 
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
 
@@ -317,6 +334,20 @@ async function load(){
       remark: d.remark || ''
     };
   });
+
+  // A company with no sheet on this day, while another has one, is a filter -
+  // not an absence. Saying nothing here is how a supervisor concludes the
+  // company declared almost nothing when it declared everything.
+  const have = companiesOnDay();
+  const mineName = (SUBS.filter(x => String(x.id) === String(SUBID))[0] || {});
+  const myLabel = mineName.short || mineName.name;
+  const declared = (list.rows || []).length > 0;
+  if (!declared && have.length && myLabel && have.indexOf(myLabel) < 0){
+    $('#amendBox').innerHTML = '<div class="note n-warn"><b>Nothing from '
+      + esc(myLabel) + ' on this day.</b> ' + esc(have.join(', '))
+      + (have.length === 1 ? ' has' : ' have') + ' sent one — change the company above.'
+      + '</div>';
+  }
 
   const seen = (sug.seen || 0), unseen = (sug.unseen || 0);
   $('#gpsNote').innerHTML = unseen
@@ -649,21 +680,25 @@ let OWNER_LABEL = 'the company';
   if (!pinned){
     try {
       const j = await jget('/api/shift/subcontractors');
-      const subs = j.subcontractors || [];
-      $('#sub').innerHTML = subs.map(s =>
+      SUBS = j.subcontractors || [];
+      $('#sub').innerHTML = SUBS.map(s =>
         '<option value="' + s.id + '">' + esc(s.short || s.name) + '</option>').join('');
-      $('#coWrap').style.display = subs.length ? '' : 'none';
-      SUBID = subs.length ? String(subs[0].id) : null;
+      $('#coWrap').style.display = SUBS.length ? '' : 'none';
     } catch (e) {}
   } else {
     SUBID = ME.subcontractor_id ? String(ME.subcontractor_id) : null;
   }
   $('#who').textContent = (ME.username || '') + (ME.role ? ' · ' + ME.role : '');
-  // The days that exist, not a calendar. Their own days only, and today is
-  // always offered because that is where a new sheet starts.
-  PICKER = new DayPick({select: $('#day'), detail: false,
-                        onPick: function(){ load(); }});
-  await PICKER.load(todayStr());
+  // The days that exist, not a calendar. A subcontractor sees only its own.
+  PICKER = new DayPick({select: $('#day'), detail: !pinned,
+    onPick: function(){ if (!pinned) followData(); load(); }});
+  await PICKER.load(pinned ? todayStr() : null);
+  // Only now is the day known, so only now can the right company be chosen.
+  // Picking the first one in the list showed an empty declaration for a day
+  // that had a full one, and the page then filled it with GPS guesses - which
+  // reads as "the company declared almost nothing".
+  if (!pinned){ followData(true); }
+  $('#sub').value = SUBID || '';
   await load();
   applyReadOnly();
 })();
