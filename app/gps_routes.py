@@ -73,12 +73,14 @@ def _gps_scope():
     from . import engine as _eng
     if sub_id is None:
         return set()                      # scoped to a company they do not have
-    dl = (DailyList.query.filter_by(subcontractor_id=sub_id)
-          .order_by(DailyList.list_date.desc()).first())
-    if not dl:
+    # Every list this company has ever sent, not just the newest. A truck that
+    # was off the sheet yesterday is still one of theirs, and scoping to the
+    # last list alone hid trucks from the company that owns them.
+    ids = [d.id for d in DailyList.query.filter_by(subcontractor_id=sub_id).all()]
+    if not ids:
         return set()
     return {(r.key or _eng.norm_plate(r.plate))
-            for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+            for r in DailyListRow.query.filter(DailyListRow.list_id.in_(ids)).all()}
 
 
 def _in_scope(plate, scope):
