@@ -5,56 +5,184 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin · User management</title>
 <style>
-  :root{ --bg:#0b0b0c; --panel:#161618; --panel2:#1f1f22; --line:#2a2a2e; --ink:#e6e6ea; --mut:#8a8f98; --grn:#34c759; --blue:#0a84ff; --red:#ff5a52; }
+  /* Laid out the same way as the Logistics admin panel on this droplet - tabs,
+     cards with a title and a line of explanation, and users in one table rather
+     than a stack of full-height cards. The palette stays this app's: a
+     white-on-grey page dropped into a dark tool reads as a broken window. */
+  :root{ --bg:#0b0b0c; --panel:#161618; --panel2:#1f1f22; --line:#2a2a2e;
+         --ink:#e6e6ea; --mut:#8a8f98; --grn:#34c759; --blue:#0a84ff; --red:#ff5a52;
+         --amber:#ffb020; }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
-  header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 18px;
+         border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
   header h1{font-size:16px;margin:0}
   header .sp{flex:1}
-  a.btn,button.lnk{color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;background:none;cursor:pointer;font:inherit}
+  a.btn,button.lnk{color:var(--ink);text-decoration:none;border:1px solid var(--line);
+                   border-radius:8px;padding:6px 12px;background:none;cursor:pointer;font:inherit}
   a.btn:hover,button.lnk:hover{border-color:var(--mut)}
-  .wrap{padding:18px;max-width:1150px;margin:0 auto}
-  .note{color:var(--mut);font-size:13px;margin:0 0 16px}
-  h2{font-size:14px;margin:22px 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
-  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .uname{font-weight:600;font-size:15px;min-width:150px}
-  .pill{font-size:11px;color:#000;background:var(--grn);border-radius:999px;padding:2px 8px;font-weight:700}
-  label.chk{display:flex;align-items:center;gap:6px;color:var(--mut);white-space:nowrap}
-  input[type=text],input[type=password],select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit}
-  input[type=text],input[type=password]{min-width:140px}
-  .field{display:flex;flex-direction:column;gap:3px}
-  .field small{color:var(--mut);font-size:11px}
-  .tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:5px 14px;margin:12px 0 0}
-  .tabs label{display:flex;align-items:center;gap:7px}
-  .actions{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
-  button.save{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-weight:600;cursor:pointer}
-  button.create{background:var(--grn);color:#062a12}
-  button.del{background:none;border:1px solid #5a2a2a;color:var(--red);border-radius:8px;padding:7px 12px;cursor:pointer}
-  button.allbtn{background:none;border:1px solid var(--line);color:var(--mut);border-radius:7px;padding:5px 10px;cursor:pointer}
-  .ok{color:var(--grn);font-size:13px}
-  .err{color:var(--red);font-size:13px}
+  .wrap{padding:18px;max-width:1200px;margin:0 auto}
+
+  /* tabs */
+  .tabs{display:flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;
+        margin-bottom:20px;width:fit-content}
+  .tab-btn{padding:7px 18px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;
+           border:none;background:transparent;color:var(--mut);font-family:inherit}
+  .tab-btn.active{background:var(--panel);color:var(--ink)}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  /* cards */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        padding:18px;margin-bottom:16px}
+  .card-title{font-size:13px;font-weight:700;margin-bottom:4px}
+  .card-sub{font-size:11.5px;color:var(--mut);margin-bottom:16px;max-width:70ch}
+
+  /* forms */
+  .form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:10px;font-weight:600;color:var(--mut);text-transform:uppercase;
+               letter-spacing:.05em}
+  input[type=text],input[type=password],select{background:var(--panel2);color:var(--ink);
+       border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit;font-size:12px;
+       outline:none;min-width:150px}
+  input:focus,select:focus{border-color:var(--blue)}
+  .btn2{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:7px;
+        font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:none}
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-green{background:var(--grn);color:#062a12}
+  .btn-red{background:none;border:1px solid #5a2a2a;color:var(--red)}
+  .btn-outline{background:none;border:1px solid var(--line);color:var(--ink)}
+  .btn-sm{padding:4px 11px;font-size:11px}
+  .btn2[disabled]{opacity:.45;cursor:not-allowed}
+
+  /* user table */
+  .utbl{width:100%;border-collapse:collapse;font-size:12px}
+  .utbl th{background:var(--panel2);color:var(--mut);font-size:9.5px;text-transform:uppercase;
+           font-weight:700;letter-spacing:.05em;padding:7px 10px;border-bottom:1px solid var(--line);
+           text-align:left}
+  .utbl td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .utbl tr:last-child td{border-bottom:0}
+  .utbl tr.sel td{background:#12213a}
+  .uname{font-weight:600}
+  .rb{display:inline-block;padding:2px 9px;border-radius:9px;font-size:9.5px;font-weight:700;
+      text-transform:uppercase;letter-spacing:.04em}
+  .r-admin{background:#3a1a18;color:#ff8a80}
+  .r-manager{background:#3a2a10;color:#ffb020}
+  .r-supervisor{background:#102a3a;color:#5ac8fa}
+  .r-monitor{background:#12301f;color:#5fd97e}
+  .r-mine{background:#2a2333;color:#c79bff}
+  .r-subcontractor{background:#2a2410;color:#e0c060}
+  .r-spectator{background:#232326;color:var(--mut)}
+  .tiny{color:var(--mut);font-size:11px}
+
+  /* permissions */
+  .perm-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;
+                padding:12px;background:var(--panel2);border-radius:8px}
+  .perm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+  .perm-group{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:13px}
+  .perm-group-title{font-size:10px;font-weight:700;color:var(--ink);text-transform:uppercase;
+                    letter-spacing:.05em;margin-bottom:9px;padding-bottom:7px;
+                    border-bottom:1px solid var(--line);display:flex;align-items:center}
+  .perm-group-title .sp{flex:1}
+  .perm-item{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:12px;cursor:pointer}
+  .perm-item input{margin:0;cursor:pointer}
+  .note{padding:11px 13px;border-radius:8px;font-size:12px;margin-bottom:14px}
+  .note-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
+  .note-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+
+  /* roles */
+  .role-row{display:grid;grid-template-columns:170px 1fr;gap:14px;padding:12px 0;
+            border-bottom:1px solid var(--line);align-items:start}
+  .role-row:last-child{border-bottom:0}
+  .role-can{font-size:12px;line-height:1.6}
+  .role-can b{color:var(--ink)}
+  .who{color:var(--mut);font-size:11px;margin-top:4px}
+
+  .msg{font-size:12px;margin-left:8px}
+  .ok{color:var(--grn)} .err{color:var(--red)}
 </style>
 </head>
 <body>
 <header>
-  <h1>User management</h1>
+  <h1>Admin panel</h1>
   <div class="sp"></div>
   <a class="btn" href="/admin/activity">Activity</a>
   <a class="btn" href="/tool">← Back to tool</a>
   <a class="btn" href="/logout">Log out</a>
 </header>
 <div class="wrap">
-  <p class="note">Create or remove users and set, per person: password, default language, the page they land on, which tabs they can open, and whether they can edit (uncheck = view-only, no uploads or saving). Admins always see every tab and can open this page. At least one admin is always kept.</p>
 
-  <h2>Create user</h2>
-  <div class="card" id="createCard"></div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="users">Users</button>
+    <button class="tab-btn" data-tab="permissions">Permissions</button>
+    <button class="tab-btn" data-tab="roles">Roles</button>
+  </div>
 
-  <h2>Users</h2>
-  <div id="list">Loading…</div>
+  <!-- USERS -->
+  <div class="tab-panel active" id="tab-users">
+    <div class="card">
+      <div class="card-title">Create user</div>
+      <div class="card-sub">A new login starts with every tab and workspace open. Narrow it
+        afterwards on the Permissions tab if this person should only see part of the tool.</div>
+      <div id="createBox"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Current users</div>
+      <div class="card-sub">Role decides what someone may do in the operation; the admin flag
+        decides whether they can open this page. At least one admin is always kept.</div>
+      <table class="utbl">
+        <thead><tr>
+          <th>User</th><th>Role</th><th>Company</th><th>Lands on</th>
+          <th>Tabs</th><th>Edit</th><th>Admin</th><th style="text-align:right">Actions</th>
+        </tr></thead>
+        <tbody id="userRows"><tr><td colspan="8" class="tiny">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PERMISSIONS -->
+  <div class="tab-panel" id="tab-permissions">
+    <div class="card">
+      <div class="card-title">User permissions</div>
+      <div class="card-sub">Pick someone to set the language they see, the page they land on,
+        the workspaces on their home screen and the tabs they may open inside the tool.
+        An admin always sees every tab, so there is nothing here to narrow.</div>
+      <div class="perm-toolbar">
+        <div class="field"><label>User</label><select id="permUser"></select></div>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn2 btn-outline btn-sm" id="permAll">All tabs</button>
+        <button class="btn2 btn-outline btn-sm" id="permNone">No tabs</button>
+      </div>
+      <div id="permBody"></div>
+    </div>
+  </div>
+
+  <!-- ROLES -->
+  <div class="tab-panel" id="tab-roles">
+    <div class="card">
+      <div class="card-title">Roles</div>
+      <div class="card-sub">A role is what someone may DO in the day's chain, and it is
+        separate from which tabs they can open. These are fixed in code: unlike the Logistics
+        panel there is no custom-role builder here yet.</div>
+      <div id="rolesList"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Who is in each role</div>
+      <div class="card-sub">A role with nobody in it is a gap: whatever it was meant to receive
+        or approve is not reaching anyone.</div>
+      <div id="roleCounts"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 const TABS = [
   ["ops","Operations (Readiness / Planner / Monitor)"],
   ["perf","Performance"],["daily","Daily performance"],["pva","Plan vs Actual"],
@@ -66,194 +194,285 @@ const TABS = [
 const ALL = TABS.map(t => t[0]);
 const APPS = [["tms","TMS : Coal project"],["report","Daily/Weekly performance report"]];
 const ALL_APPS = APPS.map(a => a[0]);
-function appCheckboxes(allowed){
-  return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin:4px 0">' + APPS.map(function(a){
-    const on = allowed.indexOf(a[0]) >= 0 ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="appchk" value="'+a[0]+'"'+on+'>'+a[1]+'</label>';
-  }).join('') + '</div>';
-}
-function collectApps(el){
-  const boxes = Array.from(el.querySelectorAll('.appchk'));
-  const checked = boxes.filter(b=>b.checked).map(b=>b.value);
-  return checked.length === ALL_APPS.length ? null : checked;   // all = unrestricted
-}
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function tabCheckboxes(allowed){
-  return '<div class="tabs">' + TABS.map(t => {
-    const on = allowed.indexOf(t[0]) >= 0 ? ' checked' : '';
-    return '<label><input type="checkbox" class="tabchk" value="'+t[0]+'"'+on+'>'+t[1]+'</label>';
-  }).join('') + '</div>';
-}
-function langSelect(v){ return '<select class="f-lang"><option value="en"'+(v!=='vi'?' selected':'')+'>English</option><option value="vi"'+(v==='vi'?' selected':'')+'>Tiếng Việt</option></select>'; }
-function pageSelect(v){ return '<select class="f-page"><option value="">(default: first allowed)</option>'+TABS.map(t=>'<option value="'+t[0]+'"'+(v===t[0]?' selected':'')+'>'+t[1]+'</option>').join('')+'</select>'; }
+// What each role may do, taken from _can() in shift_routes.py and from who the
+// alert feed addresses. Written out here because a role name on its own tells
+// nobody what granting it actually costs.
+const ROLES = [
+  ['spectator','Spectator',
+   'Looks. Cannot submit, confirm or upload anything.'],
+  ['subcontractor','Subcontractor',
+   'Sees <b>only its own company\'s trucks</b>, everywhere. Uploads its own fleet. '
+   + 'Cannot see another company\'s list, plan or day.'],
+  ['mine','Mine team',
+   'Mine-side operation. View only, and <b>receives the revision notice</b> so the mine '
+   + 'knows which trucks to expect.'],
+  ['monitor','Monitor',
+   'Watches the day against the issued plan. <b>Receives the revision notice.</b>'],
+  ['supervisor','Supervisor',
+   'Builds the readiness list, <b>sets arrival times</b> and submits it. Cannot approve '
+   + 'their own submission.'],
+  ['manager','Manager',
+   'Confirms or rejects a submitted list, <b>issues the week</b> and <b>issues a revision</b>. '
+   + 'Confirming is what makes trucks plannable.'],
+  ['admin','Admin',
+   'Stands in for every role, and is the only one who can open this page.']
+];
 
-// Operational role. Decides who may submit the day's truck list and who may
-// confirm it - not the same thing as the admin flag, which is about access.
-const ROLES = [['spectator','Spectator — view only'],
-               ['subcontractor','Subcontractor — uploads own fleet only'],
-               ['monitor','Monitor'],
-               ['mine','Mine team — mine-side operation'],
-               ['supervisor','Supervisor — submits the list'],
-               ['manager','Manager — confirms the list'],['admin','Admin']];
-function roleSelect(v){
+let SUBS = [], USERS = [], SEL = null;
+
+function subName(id){
+  const s = SUBS.filter(x => String(x.id) === String(id))[0];
+  return s ? (s.short || s.name) : '';
+}
+function roleSelect(v, cls){
   const cur = v || 'monitor';
-  return '<select class="f-role">'+ROLES.map(r=>'<option value="'+r[0]+'"'
-    +(cur===r[0]?' selected':'')+'>'+r[1]+'</option>').join('')+'</select>';
+  return '<select class="' + cls + '">' + ROLES.map(r => '<option value="' + r[0] + '"'
+    + (cur === r[0] ? ' selected' : '') + '>' + esc(r[1]) + '</option>').join('') + '</select>';
 }
-
-// Which company a subcontractor login is confined to. Only that role has one,
-// so the field appears only for it - an empty company box on a monitor invites
-// someone to fill it in and expect it to mean something.
-let SUBS = [];
-function subSelect(v){
+function langSelect(v, cls){
+  return '<select class="' + cls + '"><option value="en"' + (v !== 'vi' ? ' selected' : '')
+    + '>English</option><option value="vi"' + (v === 'vi' ? ' selected' : '')
+    + '>Tiếng Việt</option></select>';
+}
+function pageSelect(v, cls){
+  return '<select class="' + cls + '"><option value="">(first allowed)</option>'
+    + TABS.map(t => '<option value="' + t[0] + '"' + (v === t[0] ? ' selected' : '') + '>'
+        + esc(t[1]) + '</option>').join('') + '</select>';
+}
+function companySelect(v, cls){
   const cur = v == null ? '' : String(v);
-  return '<div class="field f-subwrap" style="display:none">'
-    + '<select class="f-sub"><option value="">— choose company —</option>'
-    + SUBS.map(s=>'<option value="'+s.id+'"'+(cur===String(s.id)?' selected':'')
-        +'>'+esc(s.short||s.name)+'</option>').join('')
-    + '</select><small>company (sees only these trucks)</small></div>';
-}
-function wireRoleScope(el){
-  const role = el.querySelector('.f-role');
-  const wrap = el.querySelector('.f-subwrap');
-  if (!role || !wrap) return;
-  const sync = () => { wrap.style.display = role.value === 'subcontractor' ? '' : 'none'; };
-  role.addEventListener('change', sync);
-  sync();
-}
-// Sent only when it applies, so a monitor is never given a company by accident.
-function scopeOf(el){
-  const role = el.querySelector('.f-role').value;
-  if (role !== 'subcontractor') return null;
-  const v = el.querySelector('.f-sub').value;
-  return v ? Number(v) : null;
+  return '<select class="' + cls + '"><option value="">—</option>'
+    + SUBS.map(s => '<option value="' + s.id + '"' + (cur === String(s.id) ? ' selected' : '')
+        + '>' + esc(s.short || s.name) + '</option>').join('') + '</select>';
 }
 
-function collectTabs(el){
-  const boxes = Array.from(el.querySelectorAll('.tabchk'));
-  const checked = boxes.filter(b=>b.checked).map(b=>b.value);
-  return checked.length === ALL.length ? null : checked;   // all = unrestricted
-}
-function wireAllNone(el){
-  const boxes = () => Array.from(el.querySelectorAll('.tabchk'));
-  el.querySelector('[data-act=all]').onclick = () => boxes().forEach(b=>b.checked=true);
-  el.querySelector('[data-act=none]').onclick = () => boxes().forEach(b=>b.checked=false);
-}
+// ── tabs ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'roles') drawRoles();
+});
 
-function renderCreate(){
-  const el = document.getElementById('createCard');
-  el.innerHTML =
-    '<div class="row">'
-    + '<div class="field"><input type="text" class="f-user" placeholder="username"><small>username</small></div>'
-    + '<div class="field"><input type="password" class="f-pass" placeholder="password"><small>password</small></div>'
-    + '<div class="field">'+langSelect('en')+'<small>language</small></div>'
-    + '<div class="field">'+pageSelect('')+'<small>default page</small></div>'
-    + '<div class="field">'+roleSelect('monitor')+'<small>role</small></div>'
-    + subSelect(null)
-    + '<label class="chk"><input type="checkbox" class="f-edit" checked> can edit</label>'
-    + '<label class="chk"><input type="checkbox" class="f-admin"> admin</label>'
-    + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
+// ── create ──────────────────────────────────────────────────────────────────
+function drawCreate(){
+  $('#createBox').innerHTML =
+    '<div class="form-row">'
+    + '<div class="field"><label>Username</label><input type="text" id="nUser" placeholder="name or email"></div>'
+    + '<div class="field"><label>Password</label><input type="password" id="nPass"></div>'
+    + '<div class="field"><label>Role</label>' + roleSelect('monitor','f-role') + '</div>'
+    + '<div class="field" id="nCoWrap" style="display:none"><label>Company</label>'
+      + companySelect(null,'f-sub') + '</div>'
+    + '<div class="field"><label>Language</label>' + langSelect('en','f-lang') + '</div>'
+    + '<div class="field"><label>Lands on</label>' + pageSelect('','f-page') + '</div>'
+    + '<button class="btn2 btn-green" id="nGo">Create user</button>'
+    + '<span class="msg" id="nMsg"></span>'
     + '</div>'
-    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
-    + appCheckboxes(ALL_APPS)
-    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
-    + tabCheckboxes(ALL)
-    + '<div class="actions"><button class="save create">Create user</button><span class="msg"></span></div>';
-  wireAllNone(el);
-  wireRoleScope(el);
-  el.querySelector('.save').onclick = () => {
-    const msg = el.querySelector('.msg'); msg.textContent='Creating…'; msg.className='msg';
-    const body = {
-      username: el.querySelector('.f-user').value.trim(),
-      password: el.querySelector('.f-pass').value,
-      lang: el.querySelector('.f-lang').value,
-      default_page: el.querySelector('.f-page').value,
-      can_edit: el.querySelector('.f-edit').checked,
-      is_admin: el.querySelector('.f-admin').checked,
-      role: el.querySelector('.f-role').value,
-      subcontractor_id: scopeOf(el),
-      apps: collectApps(el),
-      tabs: collectTabs(el)
-    };
-    fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-      .then(r=>r.json()).then(res=>{
-        if(res && res.ok){ msg.textContent='Created ✓'; msg.className='msg ok'; load(); renderCreate(); }
-        else { msg.textContent = (res && res.error) || 'Failed'; msg.className='msg err'; }
-      }).catch(()=>{ msg.textContent='Failed'; msg.className='msg err'; });
-  };
+    + '<div class="tiny">Starts with every tab and workspace open.</div>';
+  const role = $('#createBox .f-role');
+  const sync = () => { $('#nCoWrap').style.display = role.value === 'subcontractor' ? '' : 'none'; };
+  role.addEventListener('change', sync); sync();
+  $('#nGo').onclick = create;
 }
 
-function userCard(u){
-  const el = document.createElement('div'); el.className='card';
-  const allowed = u.tabs === null ? ALL : u.tabs;
-  el.innerHTML =
-    '<div class="row">'
-    + '<span class="uname">'+esc(u.username)
-      +' <span class="pill">'+esc(u.role||'monitor')+'</span>'
-      +(u.is_admin?' <span class="pill">admin</span>':'')+'</span>'
-    + '<div class="field"><input type="password" class="f-pass" placeholder="leave blank to keep"><small>reset password</small></div>'
-    + '<div class="field">'+langSelect(u.lang)+'<small>language</small></div>'
-    + '<div class="field">'+pageSelect(u.default_page)+'<small>default page</small></div>'
-    + '<div class="field">'+roleSelect(u.role)+'<small>role</small></div>'
-    + subSelect(u.subcontractor_id)
-    + '<label class="chk"><input type="checkbox" class="f-edit"'+(u.can_edit?' checked':'')+'> can edit</label>'
-    + '<label class="chk"><input type="checkbox" class="f-admin"'+(u.is_admin?' checked':'')+'> admin</label>'
-    + '<button class="allbtn" data-act=all>All</button><button class="allbtn" data-act=none>None</button>'
+function create(){
+  const m = $('#nMsg'); m.textContent = 'Creating…'; m.className = 'msg';
+  const role = $('#createBox .f-role').value;
+  const body = {
+    username: $('#nUser').value.trim(), password: $('#nPass').value,
+    lang: $('#createBox .f-lang').value, default_page: $('#createBox .f-page').value,
+    role: role, can_edit: true, is_admin: false,
+    subcontractor_id: role === 'subcontractor'
+      ? (Number($('#createBox .f-sub').value) || null) : null,
+    apps: null, tabs: null
+  };
+  fetch('/api/admin/users', {method:'POST', headers:{'Content-Type':'application/json'},
+                             body: JSON.stringify(body)})
+    .then(r => r.json()).then(res => {
+      if (res && res.ok){ m.textContent = 'Created ✓'; m.className = 'msg ok';
+                          drawCreate(); load(); }
+      else { m.textContent = (res && res.error) || 'Failed'; m.className = 'msg err'; }
+    }).catch(() => { m.textContent = 'Failed'; m.className = 'msg err'; });
+}
+
+// ── the user table ──────────────────────────────────────────────────────────
+function drawUsers(){
+  const tb = $('#userRows');
+  if (!USERS.length){ tb.innerHTML = '<tr><td colspan="8" class="tiny">No users.</td></tr>'; return; }
+  tb.innerHTML = USERS.map(u => {
+    const nTabs = u.tabs === null ? ALL.length : u.tabs.length;
+    const land = (TABS.filter(t => t[0] === u.default_page)[0] || [null,'(first allowed)'])[1];
+    return '<tr data-id="' + u.id + '">'
+      + '<td class="uname">' + esc(u.username) + '</td>'
+      + '<td><span class="rb r-' + esc(u.role || 'monitor') + '">'
+        + esc(u.role || 'monitor') + '</span></td>'
+      + '<td>' + (u.role === 'subcontractor'
+          ? (u.subcontractor_id ? esc(subName(u.subcontractor_id))
+             : '<span class="err">not set</span>') : '<span class="tiny">—</span>') + '</td>'
+      + '<td class="tiny">' + esc(land) + '</td>'
+      + '<td class="tiny">' + (u.tabs === null ? 'all' : nTabs + ' of ' + ALL.length) + '</td>'
+      + '<td>' + (u.can_edit ? '✓' : '<span class="tiny">view</span>') + '</td>'
+      + '<td>' + (u.is_admin ? '✓' : '<span class="tiny">—</span>') + '</td>'
+      + '<td style="text-align:right;white-space:nowrap">'
+        + '<button class="btn2 btn-outline btn-sm act-perm">Permissions</button> '
+        + '<button class="btn2 btn-red btn-sm act-del">Delete</button></td>'
+      + '</tr>';
+  }).join('');
+  tb.querySelectorAll('tr').forEach(tr => {
+    const id = Number(tr.dataset.id);
+    const p = tr.querySelector('.act-perm'), d = tr.querySelector('.act-del');
+    if (p) p.onclick = () => { SEL = id; $('#permUser').value = String(id);
+                               document.querySelector('.tab-btn[data-tab=permissions]').click();
+                               drawPerms(); };
+    if (d) d.onclick = () => del(id);
+  });
+  $('#permUser').innerHTML = USERS.map(u =>
+    '<option value="' + u.id + '">' + esc(u.username) + ' (' + esc(u.role || 'monitor')
+    + ')</option>').join('');
+  if (SEL == null && USERS.length) SEL = USERS[0].id;
+  if (SEL != null) $('#permUser').value = String(SEL);
+}
+
+function del(id){
+  const u = USERS.filter(x => x.id === id)[0];
+  if (!u || !confirm('Delete user "' + u.username + '"? This cannot be undone.')) return;
+  fetch('/api/admin/users/' + id, {method:'DELETE'}).then(r => r.json())
+    .then(res => { if (res && res.ok){ if (SEL === id) SEL = null; load(); }
+                   else alert((res && res.error) || 'Delete failed'); })
+    .catch(() => alert('Delete failed'));
+}
+
+// ── permissions ─────────────────────────────────────────────────────────────
+function drawPerms(){
+  const u = USERS.filter(x => x.id === Number($('#permUser').value))[0];
+  const box = $('#permBody');
+  if (!u){ box.innerHTML = '<div class="tiny">No user selected.</div>'; return; }
+  const tabs = u.tabs === null ? ALL : u.tabs;
+  const apps = u.apps === null ? ALL_APPS : u.apps;
+
+  box.innerHTML =
+    (u.is_admin ? '<div class="note note-info">' + esc(u.username) + ' is an admin, so every '
+        + 'tab is open to them whatever is ticked below and this page stays reachable.</div>' : '')
+    + (u.role === 'subcontractor' && !u.subcontractor_id
+        ? '<div class="note note-warn"><b>No company set.</b> A subcontractor login without a '
+          + 'company is not scoped to anything, which is the opposite of what the role is for. '
+          + 'Set it below.</div>' : '')
+    + '<div class="form-row">'
+    + '<div class="field"><label>Role</label>' + roleSelect(u.role,'p-role') + '</div>'
+    + '<div class="field" id="pCoWrap"><label>Company</label>'
+      + companySelect(u.subcontractor_id,'p-sub') + '</div>'
+    + '<div class="field"><label>Language</label>' + langSelect(u.lang,'p-lang') + '</div>'
+    + '<div class="field"><label>Lands on</label>' + pageSelect(u.default_page,'p-page') + '</div>'
+    + '<div class="field"><label>Reset password</label>'
+      + '<input type="password" class="p-pass" placeholder="blank = keep"></div>'
     + '</div>'
-    + '<div style="margin:10px 0 2px;color:var(--mut);font-size:12px">Workspaces (cards on the home screen)</div>'
-    + appCheckboxes(u.apps === null ? ALL_APPS : u.apps)
-    + '<div style="margin:12px 0 2px;color:var(--mut);font-size:12px">Tabs inside the tool</div>'
-    + tabCheckboxes(allowed)
-    + '<div class="actions"><button class="save">Save</button><button class="del">Delete</button><span class="msg"></span></div>';
-  wireAllNone(el);
-  wireRoleScope(el);
-  el.querySelector('.save').onclick = () => {
-    const msg = el.querySelector('.msg'); msg.textContent='Saving…'; msg.className='msg';
-    const body = {
-      tabs: collectTabs(el),
-      lang: el.querySelector('.f-lang').value,
-      default_page: el.querySelector('.f-page').value,
-      can_edit: el.querySelector('.f-edit').checked,
-      is_admin: el.querySelector('.f-admin').checked,
-      role: el.querySelector('.f-role').value,
-      subcontractor_id: scopeOf(el),
-      apps: collectApps(el)
-    };
-    const pw = el.querySelector('.f-pass').value; if(pw) body.password = pw;
-    fetch('/api/admin/users/'+u.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-      .then(r=>r.json()).then(res=>{
-        if(res && res.ok){ msg.textContent = res.note ? res.note : 'Saved ✓'; msg.className = res.note ? 'msg err':'msg ok'; load(); }
-        else { msg.textContent='Save failed'; msg.className='msg err'; }
-      }).catch(()=>{ msg.textContent='Save failed'; msg.className='msg err'; });
-  };
-  el.querySelector('.del').onclick = () => {
-    if(!confirm('Delete user "'+u.username+'"? This cannot be undone.')) return;
-    const msg = el.querySelector('.msg'); msg.textContent='Deleting…'; msg.className='msg';
-    fetch('/api/admin/users/'+u.id,{method:'DELETE'}).then(r=>r.json()).then(res=>{
-      if(res && res.ok){ load(); } else { msg.textContent=(res&&res.error)||'Delete failed'; msg.className='msg err'; }
-    }).catch(()=>{ msg.textContent='Delete failed'; msg.className='msg err'; });
-  };
-  return el;
+    + '<div class="perm-grid">'
+    + '<div class="perm-group"><div class="perm-group-title">Account</div>'
+      + '<label class="perm-item"><input type="checkbox" class="p-edit"'
+        + (u.can_edit ? ' checked' : '') + '> Can edit (uncheck = view only)</label>'
+      + '<label class="perm-item"><input type="checkbox" class="p-admin"'
+        + (u.is_admin ? ' checked' : '') + '> Admin (can open this page)</label>'
+      + '</div>'
+    + '<div class="perm-group"><div class="perm-group-title">Workspaces'
+      + '<span class="sp"></span></div>'
+      + APPS.map(a => '<label class="perm-item"><input type="checkbox" class="p-app" value="'
+          + a[0] + '"' + (apps.indexOf(a[0]) >= 0 ? ' checked' : '') + '>' + esc(a[1])
+          + '</label>').join('')
+      + '</div>'
+    + '<div class="perm-group" style="grid-column:1/-1">'
+      + '<div class="perm-group-title">Tabs inside the tool<span class="sp"></span></div>'
+      + '<div class="perm-grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 12px">'
+      + TABS.map(t => '<label class="perm-item"><input type="checkbox" class="p-tab" value="'
+          + t[0] + '"' + (tabs.indexOf(t[0]) >= 0 ? ' checked' : '') + '>' + esc(t[1])
+          + '</label>').join('')
+      + '</div></div>'
+    + '</div>'
+    + '<div class="form-row" style="margin-top:16px;margin-bottom:0">'
+      + '<button class="btn2 btn-primary" id="pSave">Save changes</button>'
+      + '<span class="msg" id="pMsg"></span></div>';
+
+  const role = box.querySelector('.p-role');
+  const sync = () => { $('#pCoWrap').style.display = role.value === 'subcontractor' ? '' : 'none'; };
+  role.addEventListener('change', sync); sync();
+  $('#pSave').onclick = () => save(u.id);
 }
 
+function collect(sel){
+  const all = Array.prototype.slice.call(document.querySelectorAll(sel));
+  const on = all.filter(b => b.checked).map(b => b.value);
+  return on.length === all.length ? null : on;     // all = unrestricted
+}
+
+function save(id){
+  const m = $('#pMsg'); m.textContent = 'Saving…'; m.className = 'msg';
+  const box = $('#permBody');
+  const role = box.querySelector('.p-role').value;
+  const body = {
+    role: role, lang: box.querySelector('.p-lang').value,
+    default_page: box.querySelector('.p-page').value,
+    can_edit: box.querySelector('.p-edit').checked,
+    is_admin: box.querySelector('.p-admin').checked,
+    subcontractor_id: role === 'subcontractor'
+      ? (Number(box.querySelector('.p-sub').value) || null) : null,
+    tabs: collect('.p-tab'), apps: collect('.p-app')
+  };
+  const pw = box.querySelector('.p-pass').value;
+  if (pw) body.password = pw;
+  fetch('/api/admin/users/' + id, {method:'PUT', headers:{'Content-Type':'application/json'},
+                                   body: JSON.stringify(body)})
+    .then(r => r.json()).then(res => {
+      if (res && res.ok){ m.textContent = res.note || 'Saved ✓';
+                          m.className = res.note ? 'msg err' : 'msg ok'; load(); }
+      else { m.textContent = (res && res.error) || 'Save failed'; m.className = 'msg err'; }
+    }).catch(() => { m.textContent = 'Save failed'; m.className = 'msg err'; });
+}
+
+$('#permUser') && ($('#permUser').onchange = () => { SEL = Number($('#permUser').value); drawPerms(); });
+$('#permAll').onclick = () => { document.querySelectorAll('.p-tab').forEach(b => b.checked = true); };
+$('#permNone').onclick = () => { document.querySelectorAll('.p-tab').forEach(b => b.checked = false); };
+
+// ── roles ───────────────────────────────────────────────────────────────────
+function drawRoles(){
+  $('#rolesList').innerHTML = ROLES.map(r =>
+    '<div class="role-row"><div><span class="rb r-' + r[0] + '">' + esc(r[1]) + '</span>'
+    + '<div class="who">' + r[0] + '</div></div>'
+    + '<div class="role-can">' + r[2] + '</div></div>').join('');
+
+  const counts = {};
+  USERS.forEach(u => { const k = u.role || 'monitor'; (counts[k] = counts[k] || []).push(u.username); });
+  $('#roleCounts').innerHTML = ROLES.map(r => {
+    const who = counts[r[0]] || [];
+    return '<div class="role-row"><div><span class="rb r-' + r[0] + '">' + esc(r[1]) + '</span></div>'
+      + '<div class="role-can">' + (who.length
+          ? who.map(esc).join(', ')
+          : '<span class="err">nobody holds this role</span>') + '</div></div>';
+  }).join('');
+}
+
+// ── load ────────────────────────────────────────────────────────────────────
 function load(){
-  fetch('/api/admin/users').then(r=>{
-    if(r.status===403){ document.getElementById('list').innerHTML='<p class="err">Admins only.</p>'; return null; }
+  return fetch('/api/admin/users').then(r => {
+    if (r.status === 403){ $('#userRows').innerHTML =
+      '<tr><td colspan="8" class="err">Admins only.</td></tr>'; return null; }
     return r.json();
-  }).then(users=>{
-    if(!users) return;
-    const list = document.getElementById('list'); list.innerHTML='';
-    users.forEach(u => list.appendChild(userCard(u)));
-  }).catch(()=>{ document.getElementById('list').innerHTML='<p class="err">Could not load users.</p>'; });
+  }).then(list => {
+    if (!list) return;
+    USERS = list;
+    drawUsers();
+    drawPerms();
+    drawRoles();
+  }).catch(() => { $('#userRows').innerHTML =
+    '<tr><td colspan="8" class="err">Could not load users.</td></tr>'; });
 }
-// The companies have to be in hand before any card is drawn, or the picker
-// renders empty and silently offers nothing to choose.
+
+// Companies first: every company picker renders empty without them, and offers
+// nothing to choose while looking like a working control.
 fetch('/api/shift/subcontractors')
   .then(r => r.ok ? r.json() : {subcontractors: []})
   .then(j => { SUBS = j.subcontractors || []; })
   .catch(() => { SUBS = []; })
-  .finally(() => { renderCreate(); load(); });
+  .finally(() => { drawCreate(); load(); });
 </script>
 </body>
 </html>

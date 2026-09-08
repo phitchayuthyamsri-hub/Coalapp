@@ -1510,6 +1510,14 @@ def latest():
     return jsonify(date=today, subcontractor_id=None, why="no lists yet", today=today)
 
 
+# Who a revision is addressed to. The subcontractor belongs here as much as
+# the monitor and the mine: it is the party that actually has to run to the
+# revised times, and it was the one party being issued a plan without being
+# told. Its own scoping still applies - a subcontractor login only ever sees a
+# notice for its own company, or one issued for every company at once.
+_DEFAULT_AUDIENCE = "monitor,mine,subcontractor"
+
+
 def _day_start(day):
     return datetime.strptime(day, "%Y-%m-%d")
 
@@ -1650,7 +1658,7 @@ def revision_standing():
 def revision_audience():
     """Who a revision would reach, so the button can say so before it is used."""
     aud = [a.strip() for a in
-           (request.args.get("audience") or "monitor,mine").split(",") if a.strip()]
+           (request.args.get("audience") or _DEFAULT_AUDIENCE).split(",") if a.strip()]
     users = User.query.filter(User.role.in_(aud)).all()
     return jsonify(audience=aud,
                    users=[{"username": u.username, "role": u.role} for u in users],
@@ -1690,7 +1698,7 @@ def revision_issue():
     st = _standing(day, only)
     subs = dict((x.id, (x.short or x.name)) for x in Subcontractor.query.all())
     who = subs.get(only, "all companies")
-    audience = d.get("audience") or "monitor,mine"
+    audience = d.get("audience") or _DEFAULT_AUDIENCE
 
     n = Notice(kind="revision", day=day, subcontractor_id=only,
                title="Revised plan issued for %s (%s)" % (day, who),
