@@ -133,6 +133,43 @@ def _role():
     return (getattr(current_user, "role", "") or "monitor").lower()
 
 
+# The chain of command, in order. A position sees its own step and every step
+# below it, because a manager cannot approve what a supervisor sent without
+# seeing what the subcontractor declared. Monitor is deliberately NOT on this
+# ladder: it watches the day rather than approving it, so it gets its own page
+# and nothing else. The mine is the same.
+TIERS = ["subcontractor", "supervisor", "manager", "planner"]
+OFF_LADDER = {"monitor": ["monitor"], "mine": ["monitor"], "spectator": ["monitor"]}
+
+VIEW_ORDER = ["subcontractor", "readiness", "planner", "monitor"]
+VIEW_TIER = {"subcontractor": 0, "readiness": 1, "planner": 3}
+
+
+def _tier(role=None):
+    """How far up the chain this role sits. -1 for anyone not on it."""
+    r = (role or _role()).lower()
+    if r == "admin":
+        return len(TIERS) - 1
+    return TIERS.index(r) if r in TIERS else -1
+
+
+def _views(role=None):
+    """Which operations views a role may open, in the order they are shown."""
+    r = (role or _role()).lower()
+    if r == "admin":
+        return list(VIEW_ORDER)
+    if r in OFF_LADDER:
+        return list(OFF_LADDER[r])
+    t = _tier(r)
+    if t < 0:
+        return []
+    out = [v for v in VIEW_ORDER if v in VIEW_TIER and VIEW_TIER[v] <= t]
+    # The planner also watches: whoever issues a day has to see how it went.
+    if r == "planner":
+        out.append("monitor")
+    return out
+
+
 def _can(action, state):
     """Who may do what, given the list's current state.
 
