@@ -2116,13 +2116,22 @@ def approvals():
         for r in rows:
             counts[r.state or "pending"] = counts.get(r.state or "pending", 0) + 1
             g = gps.get(r.key) or {}
-            # Compare only what both sides claim to know.
+            # Compare only where BOTH sides actually know something. A truck
+            # between geofences reports "On the road", which contradicts
+            # nothing: with pings hours apart that is the ordinary case, and
+            # flagging it marked 50 of 58 rows on the first real list. A check
+            # that fires on almost every row is one nobody reads.
             diffs = []
-            if g.get("status") and r.note and g["status"] != (r.note or "").strip():
-                diffs.append("leg: declared %s, GPS %s" % (r.note, g["status"]))
-            if g.get("location") and r.location and \
-                    g["location"].lower() != r.location.strip().lower():
-                diffs.append("place: declared %s, GPS %s" % (r.location, g["location"]))
+            declared_leg = (r.note or "").strip()
+            if (g.get("status") and declared_leg in ("FH", "BH")
+                    and g["status"] != declared_leg):
+                diffs.append("leg: declared %s, GPS says %s" % (declared_leg, g["status"]))
+            gp = (g.get("location") or "").strip()
+            dp = (r.location or "").strip()
+            if (gp and dp and gp != "On the road"
+                    and dp.lower() != "on the road"
+                    and gp.lower() != dp.lower()):
+                diffs.append("place: declared %s, GPS at %s" % (dp, gp))
             items.append({
                 "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
                 "status": r.note or "", "load": r.sheet_status or "",
