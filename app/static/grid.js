@@ -64,6 +64,9 @@
     this.typeAt = 0;
     this.editing = null;
     this.menu = null;
+    // Looking is not changing: a read-only grid still sorts, filters, selects
+    // and copies. It just cannot write.
+    this.readOnly = !!opts.readOnly;
     this.applyView();
     this.wire();
   }
@@ -338,7 +341,7 @@
   // ── setting a value ──────────────────────────────────────────────────────
   Grid.prototype.set = function (vr, c, val) {
     var col = this.cols[c];
-    if (!col || col.ro) return false;
+    if (this.readOnly || !col || col.ro) return false;
     var row = this.rowAt(vr);
     if (!row) return false;
     if (col.kind === 'time' && val) {
@@ -392,7 +395,7 @@
   // ── the drop-down, for anyone who does not know the letters ──────────────
   Grid.prototype.openMenu = function () {
     var col = this.cols[this.cur.c];
-    if (!col || !col.list || col.ro) return;
+    if (this.readOnly || !col || !col.list || col.ro) return;
     this.closeMenu();
     var td = this.cell(this.cur.r, this.cur.c);
     if (!td) return;
@@ -434,7 +437,7 @@
   // ── inline editing ───────────────────────────────────────────────────────
   Grid.prototype.edit = function (seed) {
     var col = this.cols[this.cur.c];
-    if (!col || col.ro) return;
+    if (this.readOnly || !col || col.ro) return;
     if (col.list) return this.openMenu();
     var td = this.cell(this.cur.r, this.cur.c);
     if (!td) return;
@@ -489,6 +492,7 @@
   };
 
   Grid.prototype.clear = function () {
+    if (this.readOnly) return 0;
     var b = this.box(), n = 0;
     for (var r = b.r1; r <= b.r2; r++)
       for (var c = b.c1; c <= b.c2; c++)

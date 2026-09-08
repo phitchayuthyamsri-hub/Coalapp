@@ -68,7 +68,13 @@ def views():
     a tab nobody can open should not be drawn, and a page nobody may see should
     not answer just because the URL was typed.
     """
-    return jsonify(views=_views(), role=_role(), tier=_tier())
+    vs = _views()
+    # Sent so a page can render itself read-only rather than offer a button that
+    # will be refused anyway. The server refuses it either way; this is so
+    # nobody is invited to press it.
+    return jsonify(views=vs, role=_role(), tier=_tier(),
+                   can=dict((v, _may(v)) for v in vs),
+                   owner=dict((v, VIEW_OWNER.get(v)) for v in vs))
 
 
 @page_bp.route("/approvals")
@@ -154,6 +160,21 @@ OFF_LADDER = {"monitor": ["monitor"], "mine": ["monitor"], "spectator": ["monito
 VIEW_ORDER = ["subcontractor", "readiness", "approvals", "planner", "monitor"]
 VIEW_TIER = {"subcontractor": 0, "readiness": 1, "approvals": 2, "planner": 3}
 
+# Seeing a step below yours is how the chain is checked; changing it is not.
+# A manager reads what the company declared and what the supervisor sent, and
+# acts on neither - the value of a chain is that each link is answered for by
+# the person whose name is on it.
+VIEW_OWNER = {"subcontractor": "subcontractor", "readiness": "supervisor",
+              "approvals": "manager", "planner": "planner"}
+
+
+def _may(view, role=None):
+    """May this role ACT on that view, as opposed to look at it."""
+    r = (role or _role()).lower()
+    if r == "admin":
+        return True
+    return VIEW_OWNER.get(view) == r
+
 
 def _tier(role=None):
     """How far up the chain this role sits. -1 for anyone not on it."""
@@ -192,19 +213,26 @@ def _can(action, state):
     # sent it, which is the whole point of the chain.
     adm = (r == "admin")
     if action == "edit":
-        # Rows keep their own state, so a supervisor can go on working the
-        # pending ones even after part of the list has been approved.
-        # The planner sits above the manager, so it holds everything below it.
-        return adm or r in ("supervisor", "manager", "planner")
+        # Two positions write these rows, each from its own page: the company
+        # declares them, and the supervisor works them into the day's list.
+        # Nobody above that edits them - they read them and decide.
+        if r == "subcontractor":
+            return state in ("none", "draft", "rejected")   # until it is sent
+        return adm or r == "supervisor"
     if action == "submit":
         # Always available: more trucks can be sent after an earlier batch.
         return (adm or r == "supervisor") and state != "none"
     if action in ("confirm", "reject"):
-        return (adm or r in ("manager", "planner")) and state == "submitted"
+        # The manager's, and only the manager's. The planner sits above them and
+        # reads the decision, but taking it would leave an approval carrying a
+        # name that never made it.
+        return (adm or r == "manager") and state == "submitted"
     if action == "edit_time":
-        # Only the supervisor sets arrival timing. The manager reviews and
-        # confirms; letting both edit it means nobody owns the number.
-        return (adm or r == "supervisor") and state in ("draft", "rejected", "none")
+        # The company states when its truck will be there and the supervisor
+        # corrects it. The manager reviews and confirms; letting the reviewer
+        # edit the number means nobody owns it.
+        return (adm or r in ("supervisor", "subcontractor")) \
+            and state in ("draft", "rejected", "none")
     if action == "reopen":
         # Withdrawn by design: a list is confirmed or it is not. Changes after
         # confirmation go through the per-row pending/reject flow instead.
@@ -697,10 +725,10 @@ def rows_revert():
         if not nxt:
             refused.append("%s is already pending" % row.plate)
             continue
-        if cur in ("approved", "denied") and r not in ("manager", "planner", "admin"):
+        if cur in ("approved", "denied") and r not in ("manager", "admin"):
             refused.append("%s was decided by the manager" % row.plate)
             continue
-        if cur == "applied" and r not in ("supervisor", "manager", "planner", "admin"):
+        if cur == "applied" and r not in ("supervisor", "manager", "admin"):
             refused.append("%s may only be withdrawn by the supervisor"
                            % row.plate)
             continue

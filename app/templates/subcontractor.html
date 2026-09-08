@@ -244,7 +244,7 @@ const STATUS = ['FH','BH','Maintenance','Breakdown','Repair','Accident','No driv
 const NOT_RUNNING = STATUS.slice(2);
 const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
                 'Workshop','Garage'];
-let ME = null, SUBID = null, ROWS = [], SUGGEST = {};
+let ME = null, SUBID = null, ROWS = [], SUGGEST = {}, MAY_EDIT = false;
 
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
 
@@ -343,7 +343,7 @@ function draw(){
   ];
   GRID = new Grid({
     table: document.getElementById('grid'),
-    cols: cols, rows: ROWS,
+    cols: cols, rows: ROWS, readOnly: !MAY_EDIT,
     rowClass: statusClass,
     render: {
       plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>',
@@ -518,8 +518,33 @@ $('#day').onchange = load;
 $('#reload').onclick = load;
 $('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); };
 
+// A position above this one may read the declaration and may not touch it.
+// The server refuses the write either way; this stops the page offering it.
+function applyReadOnly(){
+  if (MAY_EDIT) return;
+  ['#save', '#reapply', '#bulkOff', '#bulkGps'].forEach(function(sel){
+    const el = $(sel); if (el) el.remove();
+  });
+  document.querySelectorAll('[data-set]').forEach(b => b.remove());
+  const bulk = $('.bulk');
+  if (bulk) bulk.innerHTML = '<span class="why">Read only — this is '
+    + esc(OWNER_LABEL) + '’s to fill in. You can sort, filter and copy.</span>';
+  const keys = $('.keys');
+  if (keys) keys.innerHTML = '<span><b>click a heading</b> to sort and filter</span>'
+    + '<span><b>Ctrl</b>+<b>C</b> copy</span>';
+  const tabFile = document.querySelector('.tabs button[data-pane=file]');
+  if (tabFile) tabFile.remove();
+  const paneFile = $('#pane-file');
+  if (paneFile) paneFile.remove();
+}
+let OWNER_LABEL = 'the company';
+
 (async function(){
   try { ME = await jget('/api/me'); } catch (e) { ME = {}; }
+  try {
+    const v = await jget('/api/shift/views');
+    MAY_EDIT = !!(v.can && v.can.subcontractor);
+  } catch (e) { MAY_EDIT = false; }
   // A subcontractor login is pinned to its own company and is never offered the
   // picker; anyone above sees it, because they act on behalf of a company.
   const pinned = (ME.role === 'subcontractor');
@@ -540,6 +565,7 @@ $('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); };
   const d = new Date(Date.parse(todayStr() + 'T00:00:00Z') + 86400000);
   $('#day').value = d.toISOString().slice(0, 10);
   await load();
+  applyReadOnly();
 })();
 </script>
 </body>
