@@ -14,6 +14,7 @@ const store = {};
 const sandbox = {
   window: {}, console,
   document: {addEventListener(){}, createElement: el, body: el(),
+    documentElement: {style: {setProperty(){}, removeProperty(){}}},
     getElementById(id){ return store[id] || (store[id] = el()); },
     // $('#x') must reach the SAME node as getElementById('x'), or the renderer
     // writes into a throwaway element and the test sees nothing.

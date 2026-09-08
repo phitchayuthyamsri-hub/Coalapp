@@ -406,6 +406,7 @@ function drawRows(){
       + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
       + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
   TV.wire(document.getElementById('listTable'));
+  measureFreeze();
 }
 
 function drawAmendReq(){
@@ -528,6 +529,24 @@ function measureFreeze(){
   root.setProperty('--freeze', (h + b) + 'px');
 }
 window.addEventListener('resize', measureFreeze);
+
+// Measured ONCE at boot was the bug: the filter card changes height afterwards
+// - the upload row appears, a banner comes and goes, an amend request shows -
+// and the frozen table head stayed pinned where the card used to end. The strip
+// between them is a slot scrolling rows show through, which reads as the header
+// sitting in the middle of the table.
+(function watchCard(){
+  if (typeof ResizeObserver !== 'function') return;
+  const start = () => {
+    const bar = document.querySelector('.card.sticky');
+    if (!bar) { setTimeout(start, 150); return; }
+    new ResizeObserver(measureFreeze).observe(bar);
+    const hdr = document.querySelector('header');
+    if (hdr) new ResizeObserver(measureFreeze).observe(hdr);
+    measureFreeze();
+  };
+  start();
+})();
 
 // ── all-party summary (managers) --------------------------------------
 function renderTotals(d, label){
