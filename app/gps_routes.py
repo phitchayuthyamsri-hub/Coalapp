@@ -50,16 +50,42 @@ def _require_admin():
 # Reading a truck's positions is part of checking a declaration, so the people
 # who review one can do it. Pulling from a provider, or poking a provider's API,
 # stays admin: those act on somebody else's system.
-GPS_READERS = ("supervisor", "manager", "planner", "monitor", "admin")
-
-
 def _require_gps_read():
+    """Everyone logged in may look at positions. Pulling still needs an admin."""
+    return
+
+
+def _gps_scope():
+    """The plates this login may see, or None for all of them.
+
+    A subcontractor is scoped to its own trucks here exactly as it is
+    everywhere else. The page lists every truck on the GPS account, and one
+    company being handed another company's positions is the thing the whole
+    per-company scoping exists to prevent - so the rule holds on this page too
+    rather than being an exception nobody remembers.
+    """
     if getattr(current_user, "is_admin", False):
-        return
-    # Deliberately not the subcontractor: this page shows every truck on the
-    # account, and one company must not be handed another company's positions.
-    if (getattr(current_user, "role", "") or "").lower() not in GPS_READERS:
-        abort(403)
+        return None
+    if (getattr(current_user, "role", "") or "").lower() != "subcontractor":
+        return None
+    sub_id = getattr(current_user, "subcontractor_id", None)
+    from .models import DailyList, DailyListRow
+    from . import engine as _eng
+    if sub_id is None:
+        return set()                      # scoped to a company they do not have
+    dl = (DailyList.query.filter_by(subcontractor_id=sub_id)
+          .order_by(DailyList.list_date.desc()).first())
+    if not dl:
+        return set()
+    return {(r.key or _eng.norm_plate(r.plate))
+            for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+
+
+def _in_scope(plate, scope):
+    if scope is None:
+        return True
+    from . import engine as _eng
+    return _eng.norm_plate(plate) in scope
 
 
 @bp.route("/gps-capture")
@@ -74,14 +100,23 @@ def capture_page():
 @login_required
 def gps_status():
     _require_gps_read()
-    return jsonify(gps_ingest.status_summary(current_app._get_current_object()))
+    d = gps_ingest.status_summary(current_app._get_current_object())
+    scope = _gps_scope()
+    if scope is not None:
+        d["trucks"] = [t for t in (d.get("trucks") or [])
+                       if _in_scope(t.get("plate"), scope)]
+    return jsonify(d)
 
 
 @bp.get("/api/gps/points")
 @login_required
 def gps_points():
     _require_gps_read()
-    return jsonify(gps_ingest.latest_points(current_app._get_current_object()))
+    pts = gps_ingest.latest_points(current_app._get_current_object())
+    scope = _gps_scope()
+    if scope is not None and isinstance(pts, list):
+        pts = [p for p in pts if _in_scope(p.get("plate"), scope)]
+    return jsonify(pts)
 
 
 @bp.post("/api/gps/pull/<provider>")
@@ -109,6 +144,8 @@ def gps_trail():
     _require_gps_read()
     plate = (request.args.get("plate") or "").strip()
     source = (request.args.get("source") or "").strip()
+    if not _in_scope(plate, _gps_scope()):
+        return jsonify(ok=False, error="That truck is not on your fleet."), 403
     f = _parse_arg_dt(request.args.get("from"))
     t = _parse_arg_dt(request.args.get("to"))
     if not plate or not f or not t:

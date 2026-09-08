@@ -123,6 +123,8 @@
   .plate{font-weight:700;white-space:nowrap}
   .why{color:var(--mut);font-size:10.5px}
   .badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9.5px;font-weight:700}
+  a.trail{color:var(--blue);text-decoration:none;font-size:11px;opacity:.7}
+  a.trail:hover{opacity:1}
   .b-gps{background:#12301f;color:#5fd97e}
   .b-none{background:#2a2410;color:var(--amber)}
   .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;
@@ -417,7 +419,10 @@ function draw(){
     cols: cols, rows: ROWS, readOnly: (!MAY_EDIT || LOCKED),
     rowClass: statusClass,
     render: {
-      plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>',
+      plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>'
+        + ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
+        + 'yesterday to now" href="/gps-capture?plate=' + encodeURIComponent(r.plate)
+        + '" onmousedown="event.stopPropagation()">◎</a>',
       gps: (r) => {
         const g = SUGGEST[r.plate] || {};
         return g.seen_at
