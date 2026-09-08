@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Declare today's trucks</title>
+<style>
+  :root{ --bg:#0b1020; --panel:#121a2e; --panel2:#182238; --line:#243352;
+         --txt:#e8ecf5; --mut:#8b97ad; --acc:#2dd4bf; --amber:#ffb020;
+         --red:#ff6b60; --grn:#34c759; --blue:#5ac8fa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+  body.embed > header{padding:4px 0 10px;background:var(--bg);border-bottom:0}
+  body.embed > header > div:first-child, body.embed > header > a,
+  body.embed > header > .spacer{display:none}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:16px;max-width:1500px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px;margin-bottom:14px}
+  h2{margin:0 0 4px;font-size:15px}
+  .lede{color:var(--mut);font-size:12.5px;margin:0 0 14px;max-width:80ch;line-height:1.6}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mut)}
+  input[type=date],select,input[type=text]{background:var(--panel2);color:var(--txt);
+      border:1px solid var(--line);border-radius:7px;padding:7px 10px;font:inherit;font-size:12px}
+  button{background:var(--acc);color:#04201c;border:0;border-radius:8px;padding:9px 17px;
+         font-weight:700;cursor:pointer;font:inherit}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--txt);font-weight:600}
+  button[disabled]{opacity:.45;cursor:not-allowed}
+  .tabs{display:flex;gap:3px;background:var(--panel2);border-radius:10px;padding:3px;
+        width:fit-content;margin-bottom:16px}
+  .tabs button{background:none;color:var(--mut);font-weight:600;padding:8px 18px;border-radius:8px}
+  .tabs button.on{background:var(--panel);color:var(--txt)}
+  .pane{display:none} .pane.on{display:block}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:var(--panel2);color:var(--mut);font-size:9.5px;text-transform:uppercase;
+     letter-spacing:.05em;font-weight:700;padding:8px 7px;text-align:left;
+     border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+  td{padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:middle}
+  td select,td input{width:100%;min-width:70px;padding:5px 7px;font-size:12px}
+  tr.fh{background:rgba(90,200,250,.05)}
+  tr.off{background:rgba(255,176,32,.07)}
+  tr.unseen td{color:var(--mut)}
+  .plate{font-weight:700;white-space:nowrap}
+  .why{color:var(--mut);font-size:10.5px}
+  .badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9.5px;font-weight:700}
+  .b-gps{background:#12301f;color:#5fd97e}
+  .b-none{background:#2a2410;color:var(--amber)}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;
+        color:var(--mut)}
+  .drop.over{border-color:var(--acc);color:var(--txt)}
+  .msg{font-size:12.5px;margin-left:10px}
+  .ok{color:var(--grn)} .err{color:var(--red)} .warn{color:var(--amber)}
+  .stat{display:flex;gap:22px;flex-wrap:wrap;margin:12px 0 0}
+  .stat div{font-size:11px;color:var(--mut)}
+  .stat b{display:block;font-size:20px;color:var(--txt);font-weight:700}
+  .wrap-t{max-height:62vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
+  .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
+  .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+</style>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+<header>
+  <div><h1>Declare today's trucks</h1>
+    <div class="sub">what is going, what is not, and when the empties get back</div></div>
+  <div class="spacer"></div>
+  <a href="/ops">Operations</a>
+  <a href="/logout" style="color:var(--mut)">Log out</a>
+</header>
+<main>
+
+  <div class="card">
+    <div class="row">
+      <label class="f">Day the trucks run<input type="date" id="day"></label>
+      <label class="f" id="coWrap" style="display:none">Company<select id="sub"></select></label>
+      <button class="ghost" id="reload">Reload</button>
+      <div class="spacer"></div>
+      <div id="who" class="why"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-pane="type">Fill in here</button>
+    <button data-pane="file">Send the Excel file</button>
+  </div>
+
+  <!-- ── on-screen ─────────────────────────────────────────────────────── -->
+  <div class="pane on" id="pane-type">
+    <div class="card">
+      <h2>Fill in here</h2>
+      <p class="lede">Every truck the GPS has seen is filled in already - which leg it is on,
+        loaded or empty, where it was last, and for the empties coming back, when they should
+        reach the mine. Change anything that is wrong: you are on the ground and the GPS is not.
+        Trucks the GPS has not seen are left blank and marked, because a guess dressed up as a
+        fact is worse than an empty box.</p>
+      <div id="gpsNote"></div>
+      <div class="stat" id="stats"></div>
+    </div>
+
+    <div class="card">
+      <div class="wrap-t"><table id="grid"><thead><tr>
+        <th style="width:96px">Truck</th><th style="width:120px">Driver</th>
+        <th style="width:120px">Status</th><th style="width:96px">Loaded / Empty</th>
+        <th style="width:130px">Location</th>
+        <th style="width:120px">Date at mine</th><th style="width:86px">Time</th>
+        <th style="width:120px">Back in service</th><th>Remark</th>
+        <th style="width:150px">What the GPS says</th>
+      </tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="row" style="margin-top:14px">
+        <button id="save">Save declaration</button>
+        <button class="ghost" id="reapply">Re-apply GPS to blank rows</button>
+        <span class="msg" id="saveMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── file ──────────────────────────────────────────────────────────── -->
+  <div class="pane" id="pane-file">
+    <div class="card">
+      <h2>Send the Excel file</h2>
+      <p class="lede">The same declaration, sent as the template file. Use this if you keep the
+        list in Excel anyway. The sheet must keep its headers and be called Readiness - the
+        template already is.</p>
+      <div class="note n-info">Uploading REPLACES the declaration for the day shown above.
+        Anything typed on the other tab and not saved is lost.</div>
+      <div class="drop" id="drop">
+        <div style="font-size:15px;margin-bottom:6px">Drop the file here, or</div>
+        <button class="ghost" id="pick">choose a file</button>
+        <input type="file" id="file" accept=".xlsx,.xlsm" style="display:none">
+        <div class="why" style="margin-top:10px">.xlsx from the daily readiness template</div>
+      </div>
+      <div id="upMsg" class="msg" style="display:block;margin:12px 0 0"></div>
+      <div id="upDetail"></div>
+    </div>
+  </div>
+
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jget = async u => (await fetch(u)).json();
+
+const STATUS = ['FH','BH','Maintenance','Breakdown','Repair','Accident','No driver',
+                'Standby','Paperwork hold','Not available'];
+const NOT_RUNNING = STATUS.slice(2);
+const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
+                'Workshop','Garage'];
+let ME = null, SUBID = null, ROWS = [], SUGGEST = {};
+
+const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
+
+function opts(list, cur, blank){
+  let h = blank ? '<option value=""></option>' : '';
+  return h + list.map(v => '<option value="' + esc(v) + '"'
+    + (String(cur) === v ? ' selected' : '') + '>' + esc(v) + '</option>').join('');
+}
+
+function subQ(){ return SUBID ? '&subcontractor_id=' + encodeURIComponent(SUBID) : ''; }
+
+// ── tabs ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.pane').forEach(p =>
+    p.classList.toggle('on', p.id === 'pane-' + b.dataset.pane));
+});
+
+// ── load ────────────────────────────────────────────────────────────────────
+async function load(){
+  const day = $('#day').value;
+  let list = {rows: []}, sug = {rows: []};
+  try { list = await jget('/api/shift/list?date=' + day + subQ()); } catch (e) {}
+  try { sug = await jget('/api/shift/suggest?date=' + day + subQ()); } catch (e) {}
+
+  SUGGEST = {};
+  (sug.rows || []).forEach(r => { SUGGEST[r.plate] = r; });
+
+  // What is already declared wins; the GPS fills the gaps. A declaration is a
+  // statement somebody made, and it is not this page's place to overwrite it.
+  const byPlate = {};
+  (list.rows || []).forEach(r => { byPlate[r.plate] = r; });
+  const plates = Object.keys(byPlate).length
+    ? Object.keys(byPlate)
+    : (sug.rows || []).map(r => r.plate);
+
+  ROWS = plates.sort().map(pl => {
+    const d = byPlate[pl] || {}, g = SUGGEST[pl] || {};
+    const declared = d.plate !== undefined;
+    return {
+      plate: pl,
+      driver: g.driver || d.driver || '',
+      status: d.sheet_status || d.status || (declared ? '' : g.status || ''),
+      load: d.load || (declared ? '' : g.load || ''),
+      location: d.location || (declared ? '' : g.location || ''),
+      date: d.arrive_date || (declared ? '' : g.eta_date || ''),
+      time: d.arrive_hhmm || (declared ? '' : g.eta_time || ''),
+      back: d.back_in_service || '',
+      remark: d.remark || d.reason || ''
+    };
+  });
+
+  const seen = (sug.seen || 0), unseen = (sug.unseen || 0);
+  $('#gpsNote').innerHTML = unseen
+    ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
+      + ' not seen by GPS</b> in the last two days, so nothing is filled in for '
+      + (unseen === 1 ? 'it' : 'them') + '. Type what you know.</div>'
+    : '<div class="note n-info">Every truck has a recent GPS position.</div>';
+  draw();
+}
+
+function draw(){
+  $('#rows').innerHTML = ROWS.map((r, i) => {
+    const g = SUGGEST[r.plate] || {};
+    const off = NOT_RUNNING.indexOf(r.status) >= 0;
+    const cls = off ? 'off' : (r.status === 'FH' ? 'fh' : (g.seen_at ? '' : 'unseen'));
+    const gps = g.seen_at
+      ? '<span class="badge b-gps">GPS</span> <span class="why">' + esc(g.why || '')
+        + (g.km_out != null ? ' &middot; ' + g.km_out + ' km out' : '') + '</span>'
+      : '<span class="badge b-none">no GPS</span> <span class="why">'
+        + esc(g.why || 'not seen') + '</span>';
+    return '<tr class="' + cls + '" data-i="' + i + '">'
+      + '<td class="plate">' + esc(r.plate) + '</td>'
+      + '<td class="why">' + esc(r.driver) + '</td>'
+      + '<td><select class="c-status">' + opts(STATUS, r.status, true) + '</select></td>'
+      + '<td><select class="c-load">' + opts(['Loaded','Empty'], r.load, true) + '</select></td>'
+      + '<td><select class="c-loc">' + opts(PLACES, r.location, true) + '</select></td>'
+      + '<td><input type="date" class="c-date" value="' + esc(r.date) + '"></td>'
+      + '<td><input type="text" class="c-time" placeholder="HH:MM" value="' + esc(r.time) + '"></td>'
+      + '<td><input type="date" class="c-back" value="' + esc(r.back) + '"></td>'
+      + '<td><input type="text" class="c-remark" value="' + esc(r.remark) + '"></td>'
+      + '<td>' + gps + '</td></tr>';
+  }).join('');
+
+  $('#rows').querySelectorAll('tr').forEach(tr => {
+    const i = Number(tr.dataset.i);
+    const bind = (sel, key) => {
+      const el = tr.querySelector(sel);
+      if (el) el.onchange = () => { ROWS[i][key] = el.value; if (key === 'status') draw(); paint(); };
+    };
+    bind('.c-status','status'); bind('.c-load','load'); bind('.c-loc','location');
+    bind('.c-date','date'); bind('.c-time','time'); bind('.c-back','back');
+    bind('.c-remark','remark');
+  });
+  paint();
+}
+
+function paint(){
+  const running = ROWS.filter(r => r.status && NOT_RUNNING.indexOf(r.status) < 0);
+  const bh = running.filter(r => r.status === 'BH');
+  const fh = running.filter(r => r.status === 'FH');
+  const off = ROWS.filter(r => NOT_RUNNING.indexOf(r.status) >= 0);
+  const missing = bh.filter(r => !(r.date && r.time));
+  const blank = ROWS.filter(r => !r.status);
+  $('#stats').innerHTML =
+      '<div><b>' + ROWS.length + '</b>trucks</div>'
+    + '<div><b>' + bh.length + '</b>coming back (BH)</div>'
+    + '<div><b>' + fh.length + '</b>running out (FH)</div>'
+    + '<div><b>' + off.length + '</b>not running</div>'
+    + (missing.length ? '<div><b class="err">' + missing.length
+        + '</b>BH with no arrival time</div>' : '')
+    + (blank.length ? '<div><b class="warn">' + blank.length + '</b>not filled in</div>' : '');
+}
+
+// ── save ────────────────────────────────────────────────────────────────────
+$('#save').onclick = async function(){
+  const m = $('#saveMsg');
+  const bhMissing = ROWS.filter(r => r.status === 'BH' && !(r.date && r.time));
+  if (bhMissing.length && !confirm(bhMissing.length + ' truck(s) coming back have no arrival '
+      + 'time. They cannot be planned without one. Save anyway?')) return;
+  m.textContent = 'Saving…'; m.className = 'msg';
+  const payload = {
+    date: $('#day').value,
+    subcontractor_id: SUBID ? Number(SUBID) : null,
+    rows: ROWS.filter(r => r.status || r.location || r.date).map(r => ({
+      plate: r.plate,
+      // The importer treats these the same way: Status carries the leg or the
+      // reason, and it is what decides whether a truck is available.
+      activity: r.status,
+      sheet_status: r.load,
+      location: r.location,
+      arrive_date: r.date,
+      arrive_hhmm: r.time,
+      back_in_service: r.back,
+      remark: r.remark,
+      ready: NOT_RUNNING.indexOf(r.status) < 0 && !!r.status
+    }))
+  };
+  try {
+    const res = await fetch('/api/shift/list', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Save failed');
+    m.textContent = 'Saved. The supervisor sees it on the Readiness board.';
+    m.className = 'msg ok';
+  } catch (e) {
+    m.textContent = e.message || 'Save failed'; m.className = 'msg err';
+  }
+};
+
+$('#reapply').onclick = function(){
+  let n = 0;
+  ROWS.forEach(r => {
+    if (r.status) return;                  // never overwrite a declaration
+    const g = SUGGEST[r.plate];
+    if (!g || !g.status) return;
+    r.status = g.status; r.load = g.load; r.location = g.location;
+    if (g.status === 'BH'){ r.date = g.eta_date || ''; r.time = g.eta_time || ''; }
+    n++;
+  });
+  draw();
+  $('#saveMsg').textContent = n ? (n + ' blank row(s) filled from GPS.')
+                                : 'Nothing blank that GPS can answer.';
+  $('#saveMsg').className = 'msg ok';
+};
+
+// ── upload ──────────────────────────────────────────────────────────────────
+$('#pick').onclick = () => $('#file').click();
+$('#file').onchange = e => { if (e.target.files[0]) send(e.target.files[0]); };
+const drop = $('#drop');
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0]; if (f) send(f); });
+
+async function send(f){
+  const m = $('#upMsg');
+  m.textContent = 'Reading ' + f.name + '…'; m.className = 'msg';
+  $('#upDetail').innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('date', $('#day').value);
+  if (SUBID) fd.append('subcontractor_id', SUBID);
+  try {
+    const r = await fetch('/api/shift/upload', {method:'POST', body: fd});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Upload failed');
+    m.textContent = 'Read ' + (j.rows != null ? j.rows : '') + ' truck(s) from ' + f.name + '.';
+    m.className = 'msg ok';
+    if (j.warnings && j.warnings.length){
+      $('#upDetail').innerHTML = '<div class="note n-warn"><b>Read, with warnings:</b><br>'
+        + j.warnings.map(esc).join('<br>') + '</div>';
+    }
+    await load();
+    document.querySelector('.tabs button[data-pane=type]').click();
+  } catch (e) {
+    m.textContent = e.message || 'Upload failed'; m.className = 'msg err';
+  }
+}
+
+$('#day').onchange = load;
+$('#reload').onclick = load;
+$('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); };
+
+(async function(){
+  try { ME = await jget('/api/me'); } catch (e) { ME = {}; }
+  // A subcontractor login is pinned to its own company and is never offered the
+  // picker; anyone above sees it, because they act on behalf of a company.
+  const pinned = (ME.role === 'subcontractor');
+  if (!pinned){
+    try {
+      const j = await jget('/api/shift/subcontractors');
+      const subs = j.subcontractors || [];
+      $('#sub').innerHTML = subs.map(s =>
+        '<option value="' + s.id + '">' + esc(s.short || s.name) + '</option>').join('');
+      $('#coWrap').style.display = subs.length ? '' : 'none';
+      SUBID = subs.length ? String(subs[0].id) : null;
+    } catch (e) {}
+  } else {
+    SUBID = ME.subcontractor_id ? String(ME.subcontractor_id) : null;
+  }
+  $('#who').textContent = (ME.username || '') + (ME.role ? ' · ' + ME.role : '');
+  // Trucks run tomorrow; the sheet is filled in today.
+  const d = new Date(Date.parse(todayStr() + 'T00:00:00Z') + 86400000);
+  $('#day').value = d.toISOString().slice(0, 10);
+  await load();
+})();
+</script>
+</body>
+</html>

@@ -271,6 +271,10 @@ def _ensure_listrow_schema():
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN state VARCHAR(10) DEFAULT 'pending'")
     if "arrive_hhmm" not in cols:
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN arrive_hhmm VARCHAR(5) DEFAULT ''")
+    if "back_in_service" not in cols:
+        stmts.append("ALTER TABLE daily_list_row ADD COLUMN back_in_service VARCHAR(10) DEFAULT ''")
+    if "remark" not in cols:
+        stmts.append("ALTER TABLE daily_list_row ADD COLUMN remark VARCHAR(300) DEFAULT ''")
     if "arrive_date" not in cols:
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN arrive_date VARCHAR(10) DEFAULT ''")
     if "location" not in cols:

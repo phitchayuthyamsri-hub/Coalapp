@@ -60,14 +60,10 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     <h1>Coal Operations</h1>
     <div class="sub">XPPL Mine &rarr; Lalay &rarr; Chan May &middot; local time (UTC+7)</div>
   </div>
-  <nav>
-    <button class="tab on" data-tab="readiness" data-src="/shift-board?embed=1">
-      Readiness<small>who is going</small></button>
-    <button class="tab" data-tab="planner" data-src="/planner?embed=1">
-      Planner<span class="dot" id="planDot" hidden></span><small>what the plan says</small></button>
-    <button class="tab" data-tab="monitor" data-src="/monitor?embed=1">
-      Monitor<small>what happened</small></button>
-  </nav>
+  <!-- Built from /api/shift/views: a position sees its own step in the chain
+       and the ones below it, so the bar shows what this login can actually do
+       rather than everything the app happens to have. -->
+  <nav id="tabbar"></nav>
   <div class="spacer"></div>
   <a href="#" id="openTab" title="Open the current view in its own tab">Open alone</a>
   <span class="chrome"><span class="pill" id="rolePill">&hellip;</span></span>
@@ -82,6 +78,27 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 <script>
 const $ = s => document.querySelector(s);
 const FRAMES = {};
+
+// Every view there is, in chain order. Which appear is the server's decision.
+const VIEWS = {
+  subcontractor: ['Subcontractor', 'what the company declares', '/subcontractor?embed=1'],
+  readiness:     ['Readiness',     'who is going',              '/shift-board?embed=1'],
+  planner:       ['Planner',       'what the plan says',        '/planner?embed=1'],
+  monitor:       ['Monitor',       'what happened',             '/monitor?embed=1']
+};
+let ALLOWED = [];
+
+function buildTabs(list){
+  ALLOWED = list.filter(k => VIEWS[k]);
+  $('#tabbar').innerHTML = ALLOWED.map(function(k, i){
+    const v = VIEWS[k];
+    const dot = (k === 'planner')
+      ? '<span class="dot" id="planDot" hidden></span>' : '';
+    return '<button class="tab' + (i === 0 ? ' on' : '') + '" data-tab="' + k
+      + '" data-src="' + v[2] + '">' + v[0] + dot + '<small>' + v[1] + '</small></button>';
+  }).join('');
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => show(b.dataset.tab));
+}
 
 // Each view is built once, on first visit, and then kept. Switching tabs after
 // that is instant and nothing is reloaded - a monitor left on a shift does not
@@ -130,20 +147,24 @@ window.addEventListener('message', e => {
 pollAlerts();
 setInterval(pollAlerts, 60000);
 
-document.querySelectorAll('.tab').forEach(b =>
-  b.onclick = () => show(b.dataset.tab));
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
 (async function(){
-  try {
-    const me = await (await fetch('/api/shift/subcontractors')).json();
-    $('#rolePill').textContent = me.role || 'monitor';
-  } catch (e) { $('#rolePill').textContent = ''; }
+  let v = {views: ['readiness', 'planner', 'monitor'], role: ''};
+  try { v = await (await fetch('/api/shift/views')).json(); } catch (e) {}
+  $('#rolePill').textContent = v.role || '';
+  buildTabs(v.views || []);
+  if (!ALLOWED.length){
+    $('#frames').innerHTML = '<div class="boot">There is no operations view for the '
+      + (v.role || 'this') + ' role. Ask an admin if you should have one.</div>';
+    return;
+  }
   let want = location.hash.slice(1);
   if (!want){
-    try { want = localStorage.getItem('opsTab') || 'readiness'; } catch (e) { want = 'readiness'; }
+    try { want = localStorage.getItem('opsTab') || ''; } catch (e) { want = ''; }
   }
-  show(document.querySelector('.tab[data-tab="' + want + '"]') ? want : 'readiness');
+  // Remembering a tab this login can no longer open would strand them on it.
+  show(ALLOWED.indexOf(want) >= 0 ? want : ALLOWED[0]);
 })();
 </script>
 </body>

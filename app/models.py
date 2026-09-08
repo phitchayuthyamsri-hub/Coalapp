@@ -268,6 +268,12 @@ class DailyListRow(db.Model):
     reason = db.Column(db.String(300), default="")  # required when held back (Gap Rule)
     arrive_date = db.Column(db.String(10), default="")  # planned arrival at the mine
     arrive_hhmm = db.Column(db.String(5), default="")
+    # When a truck that is not running is expected back. The sheet has always
+    # asked for it; until now it was read and thrown away.
+    back_in_service = db.Column(db.String(10), default="")
+    # The declarer's own words. Separate from note, which carries the status
+    # itself, so a remark is not overwritten by it.
+    remark = db.Column(db.String(300), default="")
     note = db.Column(db.String(300), default="")
 
 

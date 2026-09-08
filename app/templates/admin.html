@@ -70,6 +70,7 @@
       text-transform:uppercase;letter-spacing:.04em}
   .r-admin{background:#3a1a18;color:#ff8a80}
   .r-manager{background:#3a2a10;color:#ffb020}
+  .r-planner{background:#10303a;color:#5ae0e0}
   .r-supervisor{background:#102a3a;color:#5ac8fa}
   .r-monitor{background:#12301f;color:#5fd97e}
   .r-mine{background:#2a2333;color:#c79bff}
@@ -215,6 +216,9 @@ const ROLES = [
   ['manager','Manager',
    'Confirms or rejects a submitted list, <b>issues the week</b> and <b>issues a revision</b>. '
    + 'Confirming is what makes trucks plannable.'],
+  ['planner','Planner',
+   'The top of the chain. Everything a manager may do, plus the Planner itself and the '
+   + 'Monitor, so the person who issues a day can see how it went.'],
   ['admin','Admin',
    'Stands in for every role, and is the only one who can open this page.']
 ];

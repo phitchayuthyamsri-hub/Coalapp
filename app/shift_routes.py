@@ -8,7 +8,7 @@ a code change.
 import re
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, abort
 from flask_login import login_required, current_user
 
 from . import engine
@@ -42,13 +42,41 @@ page_bp.after_request(_no_store)
 @login_required
 def shift_board_page():
     from flask import render_template
+    if "readiness" not in _views():
+        abort(403)
     return render_template("shift_board.html")
+
+
+@page_bp.route("/subcontractor")
+@login_required
+def subcontractor_page():
+    """Where a company declares its own day - by typing it or by sending the
+    template. Open to the whole chain, because a supervisor chasing a company
+    that has not sent anything needs to see what is there."""
+    from flask import render_template
+    if "subcontractor" not in _views():
+        abort(403)
+    return render_template("subcontractor.html")
+
+
+@bp.get("/views")
+@login_required
+def views():
+    """Which operations views this login may open, in order.
+
+    Served rather than decided in the page, so the tab bar and the pages agree:
+    a tab nobody can open should not be drawn, and a page nobody may see should
+    not answer just because the URL was typed.
+    """
+    return jsonify(views=_views(), role=_role(), tier=_tier())
 
 
 @page_bp.route("/planner")
 @login_required
 def planner_page():
     from flask import render_template
+    if "planner" not in _views():
+        abort(403)
     return render_template("dispatch_planner.html")
 
 
@@ -69,6 +97,8 @@ def ops_page():
 @login_required
 def monitor_page():
     from flask import render_template
+    if "monitor" not in _views():
+        abort(403)
     return render_template("monitor.html")
 
 
@@ -283,6 +313,40 @@ def _visits_and_roles():
     return engine.build_visits(pings, anchors, deactivated), roles
 
 
+def _declared_row(r, list_id, prior_state):
+    """A declaration - however it arrived - as one row.
+
+    There are two ways in: the subcontractor types it on their page, or they
+    send the template and it is parsed. They must produce identical rows, or the
+    same truck declared the same way reads differently depending on which route
+    it took. So both go through here.
+
+    Keys are the parser's, because that is the shape the template defines.
+    Status carries the leg while a truck is working and the reason when it is
+    not, so it is what decides `ready`.
+    """
+    plate = (r.get("plate") or "").strip()
+    status = (r.get("activity") or r.get("status_text") or "").strip()
+    runs = readiness_import.is_running(status)
+    st = prior_state if prior_state in ("pending", "applied", "approved", "denied") \
+        else "pending"
+    return DailyListRow(
+        list_id=list_id, plate=plate, key=engine.norm_plate(plate),
+        ready=bool(runs), state=st,
+        location=(r.get("location") or "")[:60],
+        # The load state, which is what this column was always documented as.
+        sheet_status=(r.get("status") or r.get("load") or "")[:30],
+        # Their own words for why it is not running, kept verbatim: "Maintenace"
+        # is what they wrote and what they will ask about.
+        reason=("" if runs else (status or "not running")[:300]),
+        arrive_date=(r.get("arrive_date") or "")[:10],
+        arrive_hhmm=(r.get("arrive_time") or r.get("arrive_hhmm")
+                     or r.get("arrive") or "")[:5],
+        back_in_service=(r.get("back_in_service") or "")[:10],
+        remark=(r.get("remark") or "")[:300],
+        note=(status or r.get("remark") or "")[:300]), runs
+
+
 def _list_payload(dl, day):
     state = dl.state if dl else "none"
     rows = []
@@ -388,8 +452,8 @@ def get_settings():
 @bp.post("/settings")
 @login_required
 def save_settings():
-    if _role() not in ("manager", "admin"):
-        return jsonify(error="Only a manager or admin may change planning figures"), 403
+    if _role() not in ("manager", "planner", "admin"):
+        return jsonify(error="Only a planner, a manager or an admin may change planning figures"), 403
     d = request.get_json(force=True, silent=True) or {}
     now, who = datetime.utcnow(), current_user.username
     changed = []
@@ -521,23 +585,10 @@ def upload():
 
     running = 0
     for r in rows:
-        runs = readiness_import.is_running(r.get("activity"))
+        row, runs = _declared_row(r, dl.id, prior.get(r["key"], "pending"))
         if runs:
             running += 1
-        st = prior.get(r["key"], "pending")
-        if st not in ("pending", "applied", "approved", "denied"):
-            st = "pending"
-        db.session.add(DailyListRow(
-            list_id=dl.id, plate=r["plate"], key=r["key"],
-            ready=bool(runs), state=st,
-            location=(r.get("location") or "")[:60],
-            sheet_status=(r.get("status") or "")[:30],
-            # The sheet's own words for why it is not running - kept verbatim,
-            # because "Maintenace" is what they wrote and what they will ask about.
-            reason=("" if runs else (r.get("activity") or "not running")[:300]),
-            arrive_date=(r.get("arrive_date") or "")[:10],
-            arrive_hhmm=(r.get("arrive_time") or "")[:5],
-            note=(r.get("activity") or r.get("remark") or "")[:300]))
+        db.session.add(row)
 
     _restate(dl)
     db.session.commit()
@@ -591,7 +642,7 @@ def rows_revert():
         if not nxt:
             refused.append("%s is already pending" % row.plate)
             continue
-        if cur in ("approved", "denied") and r not in ("manager", "admin"):
+        if cur in ("approved", "denied") and r not in ("manager", "planner", "admin"):
             refused.append("%s was decided by the manager" % row.plate)
             continue
         if cur == "applied" and r not in ("supervisor", "manager", "admin"):
@@ -902,8 +953,8 @@ def week_issue():
     Issuing is a decision, not a save: from here the subcontractor works to
     these times and the revision is measured against them.
     """
-    if _role() not in ("manager", "admin"):
-        return jsonify(error="Only a manager or admin may issue a plan"), 403
+    if _role() not in ("manager", "planner", "admin"):
+        return jsonify(error="Only a planner, a manager or an admin may issue a plan"), 403
     d = request.get_json(force=True, silent=True) or {}
     only = _req_sub_id(d)
     data = _week_data(d.get("start"), only, True)
@@ -1663,7 +1714,7 @@ def revision_audience():
     return jsonify(audience=aud,
                    users=[{"username": u.username, "role": u.role} for u in users],
                    count=len(users),
-                   may_issue=_role() in ("manager", "admin"))
+                   may_issue=_role() in ("manager", "planner", "admin"))
 
 
 @bp.post("/revision/issue")
@@ -1675,8 +1726,8 @@ def revision_issue():
     team watches against these times and the mine expects these trucks, so it
     leaves a record of what was issued and who was told.
     """
-    if _role() not in ("manager", "admin"):
-        return jsonify(error="Only a manager or an admin may issue a revision"), 403
+    if _role() not in ("manager", "planner", "admin"):
+        return jsonify(error="Only a planner, a manager or an admin may issue a revision"), 403
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id(d)
@@ -1857,6 +1908,125 @@ def plan_day():
                          for d, n in sorted(days.items())])
 
 
+@bp.get("/suggest")
+@login_required
+def suggest():
+    """Fill in what the GPS can already answer, and be honest about the rest.
+
+    The subcontractor is being asked three things - which leg, loaded or empty,
+    and where - that the positions already imply. So they are offered filled in,
+    with the evidence beside them, and the subcontractor corrects what is wrong
+    rather than typing fifty rows from nothing.
+
+    Rule 3 holds throughout: a truck the GPS has not seen gets NO suggestion at
+    all. It is left blank and said to be unseen, because a guess presented in
+    the same colour as a fact is worse than an empty cell.
+    """
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = _req_sub_id()
+
+    anchors = Anchor.query.all()
+    roles = {a.role: a.id for a in anchors if a.role}
+    by_id = {a.id: a for a in anchors}
+    visits, _r = _visits_and_roles()
+
+    lo, _hi = _day_bounds(day)
+    window_start = lo - CYCLE_SPAN
+
+    last = {}
+    for g in (GpsPing.query.filter(GpsPing.dt >= window_start)
+              .order_by(GpsPing.dt).all()):
+        last[engine.norm_plate(g.plate)] = g
+
+    per_plate = {}
+    for v in visits:
+        if v.get("enter") and v["enter"] >= window_start:
+            per_plate.setdefault(engine.norm_plate(v["plate"]), []).append(v)
+
+    # The way home, and the speed the planner uses for an empty truck, so the
+    # estimate here and the plan cannot disagree about how long the run takes.
+    home = RouteLeg.query.filter_by(leg_key="mine_border").first()
+    to_mine = list(reversed(home.points or [])) if home else []
+    empty_leg = RouteLeg.query.filter_by(leg_key="port_mine").first()
+    empty_kmh = (empty_leg.speed if empty_leg and empty_leg.speed else 40.0)
+
+    trucks = Truck.query.order_by(Truck.plate).all()
+    if only is not None:
+        names = {only}
+        # A company's fleet is whatever is on its most recent list; the truck
+        # table is not divided by company.
+        dl = (DailyList.query.filter_by(subcontractor_id=only)
+              .order_by(DailyList.list_date.desc()).first())
+        if dl:
+            keys = {r.key for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+            trucks = [t for t in trucks if engine.norm_plate(t.plate) in keys]
+
+    out = []
+    port_id = roles.get("port")
+    mine_id = roles.get("xppl")
+    for t in trucks:
+        k = engine.norm_plate(t.plate)
+        g = last.get(k)
+        row = {"plate": t.plate, "driver": t.driver or "",
+               "status": "", "load": "", "location": "",
+               "eta_date": "", "eta_time": "", "km_out": None,
+               "seen_at": None, "why": "", "confident": False}
+
+        if g is None:
+            row["why"] = "no GPS position in the last two days"
+            out.append(row)
+            continue
+
+        row["seen_at"] = _fmt(g.dt)
+
+        # Where it is: inside a geofence if it is in one, otherwise on the road.
+        here = None
+        for a in anchors:
+            if a.polygon and engine.point_in_polygon(g.lat, g.lng, a.polygon):
+                here = a
+                break
+        row["location"] = here.name if here else "On the road"
+
+        # Which leg: the port splits the loop. Seen at the port since it last
+        # left the mine and it is on its way home; otherwise it is running out.
+        vs = sorted(per_plate.get(k, []), key=lambda x: x["enter"])
+        last_mine = None
+        for v in vs:
+            if v["anchor_id"] == mine_id:
+                last_mine = v["enter"]
+        passed_port = any(v["anchor_id"] == port_id
+                          and (last_mine is None or v["enter"] > last_mine)
+                          for v in vs)
+        if not vs:
+            row["why"] = "seen by GPS, but not yet at any checkpoint - leg unknown"
+            out.append(row)
+            continue
+
+        row["status"] = "BH" if passed_port else "FH"
+        row["load"] = "Empty" if passed_port else "Loaded"
+        row["confident"] = True
+        row["why"] = ("passed the port at %s" % _fmt(
+                          [v for v in vs if v["anchor_id"] == port_id][-1]["enter"])
+                      if passed_port else "not yet at the port on this run")
+
+        # Only a returning truck gets an estimate, because only a returning
+        # truck has an arrival to estimate.
+        if passed_port and to_mine:
+            km = engine.remaining_km_along_route(to_mine, g.lat, g.lng)
+            if km is not None:
+                row["km_out"] = round(km, 1)
+                eta = _local(g.dt) + timedelta(hours=km / empty_kmh)
+                row["eta_date"] = eta.strftime("%Y-%m-%d")
+                row["eta_time"] = eta.strftime("%H:%M")
+        out.append(row)
+
+    seen = sum(1 for r in out if r["seen_at"])
+    return jsonify(date=day, subcontractor_id=only, rows=out,
+                   trucks=len(out), seen=seen, unseen=len(out) - seen,
+                   empty_kmh=empty_kmh)
+
+
 @bp.get("/list")
 @login_required
 def get_list():
@@ -1902,20 +2072,15 @@ def save_list():
              for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
     DailyListRow.query.filter_by(list_id=dl.id).delete()
     for r in incoming:
-        plate = (r.get("plate") or "").strip()
-        ready = bool(r.get("ready", True))
-        st = prior.get(engine.norm_plate(plate), "pending")
-        if st not in ("approved", "pending", "denied", "applied"):
-            st = "pending"
-        db.session.add(DailyListRow(list_id=dl.id, plate=plate,
-                                    key=engine.norm_plate(plate),
-                                    ready=ready, state=st,
-                                    location=(r.get("location") or "").strip()[:60],
-                                    sheet_status=(r.get("sheet_status") or "").strip()[:30],
-                                    reason=(r.get("reason") or "").strip(),
-                                    arrive_date=(r.get("arrive_date") or "").strip()[:10],
-                                    arrive_hhmm=(r.get("arrive") or "").strip()[:5],
-                                    note=(r.get("note") or "").strip()))
+        # Same mapping as an uploaded sheet. The old code here read "arrive"
+        # while the parser produced "arrive_time", so a time typed on the board
+        # was stored and a time from a sheet was not - or the other way about,
+        # depending which page you were on.
+        row, _runs = _declared_row(
+            r, dl.id, prior.get(engine.norm_plate((r.get("plate") or "").strip()), "pending"))
+        if "ready" in r:
+            row.ready = bool(r.get("ready"))
+        db.session.add(row)
     db.session.commit()
     return jsonify(_list_payload(dl, day))
 
