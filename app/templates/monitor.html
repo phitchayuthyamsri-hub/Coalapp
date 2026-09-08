@@ -108,7 +108,14 @@
   td.tel .ph{margin-left:6px;font-size:9.5px;color:var(--warn);
         text-transform:uppercase;letter-spacing:.3px}
 
-  #trackTable th.hd{cursor:pointer;position:relative;padding-right:15px}
+  /* sticky, NOT relative. `top` is set on every header cell so the row can
+     freeze under the filter bar; on a RELATIVE cell that same `top` is an
+     offset instead, and the sortable headers were shoved a hundred pixels down
+     the table, over the trucks. Sticky is positioned too, so the arrow still
+     has something to hang off. */
+  #trackTable th.hd{cursor:pointer;position:sticky;padding-right:15px}
+  #trackTable th.hd.sub2{padding-right:12px}
+  #trackTable th.hd.sub2 .harrow{right:2px;font-size:8px}
   #trackTable th.hd:hover{background:#1d2a44}
   #trackTable th.filt-on{color:var(--acc)}
   #trackTable th.filt-on .harrow{color:var(--acc)}
@@ -349,38 +356,73 @@ function drawTrack(){
     + '<span><b class="t-est">~14:24</b> <i>estimate, not confirmed</i></span>'
     + '<span><b style="color:var(--mut)">&mdash;</b> <i>nothing planned or seen</i></span>'
     + '</div>';
-  // Sort and filter on the columns that are one value per truck. The place
-  // columns are pairs under a shared heading - a plan and an actual - and a
-  // menu on half of a pair would sort the table by one of two times that only
-  // mean anything together.
+  // Going home the truck runs port, QL49, border, mine, so the cells are read
+  // back to front on the back-haul - the same reversal the headings get.
+  const cellsOf = r => LEG === 'bh' ? r.bh.slice().reverse() : r.fh;
   const whereOf = r => r.last_seen ? r.last_seen.place
                      : (r.enroute ? 'on the road' : 'not seen');
-  if (!TV){
-    TV = new TableView({
-      cols: [
-        {key:'plate', label:'Truck',       rowspan:2},
-        {key:'phone', label:'Phone',       rowspan:2, get: r => r.phone || ''},
-        {key:'sub',   label:'Sub',         rowspan:2, get: r => r.sub || ''},
-        {key:'where', label:'Where it is', rowspan:2, get: whereOf}
-      ],
-      onChange: () => drawTrack()
+  // What a time cell IS, in the words the key at the top of the table uses.
+  // The clock sorts; this is what the filter menu offers, because "show me the
+  // late ones" is the question, and a menu of fifty-eight distinct times is
+  // not an answer to it.
+  const stateOf = c => {
+    if (c.actual){
+      const g = c.delay;
+      if (g === null || g === undefined || Math.abs(g) <= TOL) return 'on time';
+      return g < 0 ? 'early' : 'late';
+    }
+    return c.estimate ? 'estimate' : 'not seen';
+  };
+  if (!TV) TV = new TableView({cols: [], onChange: () => drawTrack()});
+
+  // Rebuilt every draw: the place columns belong to the leg on screen, and
+  // flipping FH/BH turns them round. Keyed by leg and place, never by position,
+  // so a filter set on the Mine column stays on the Mine column.
+  const idCols = [
+    {key:'plate', label:'Truck',       rowspan:2},
+    {key:'phone', label:'Phone',       rowspan:2, get: r => r.phone || ''},
+    {key:'sub',   label:'Sub',         rowspan:2, get: r => r.sub || ''}
+  ];
+  const whereCol = {key:'where', label:'Where it is', rowspan:2, get: whereOf};
+  const placeCols = [];
+  locs.forEach(function(l, j){
+    // The sort runs on the full timestamp, not the clock: an estimate that
+    // lands after midnight is later than 23:00, and "00:40" is not.
+    placeCols.push({
+      key: LEG + ':' + l.key + ':plan', label: 'Plan', cls: 'sub2',
+      tag: l.label + ' plan',
+      get:  r => cellsOf(r)[j].plan || '',
+      fget: r => clock(cellsOf(r)[j].plan) || ''
     });
-  }
+    placeCols.push({
+      key: LEG + ':' + l.key + ':act', label: 'Actual', cls: 'sub2',
+      tag: l.label + ' actual',
+      get:  r => { const c = cellsOf(r)[j]; return c.actual || c.estimate || ''; },
+      fget: r => stateOf(cellsOf(r)[j])
+    });
+  });
+  TV.cols = idCols.concat(placeCols, [whereCol]);
+  // A filter or a sort held on the other leg's columns is not silently carried
+  // over: those columns are not on screen and the footer could not honestly
+  // count what they hide.
+  Object.keys(TV.filters).forEach(function(k){ if (!TV.byKey(k)) delete TV.filters[k]; });
+  TV.sortSeq = TV.sortSeq.filter(lv => TV.byKey(lv.key));
+
   TV.rows = d.rows;
   const view = TV.view(d.rows);
   const hidden = d.rows.length - view.length;
 
   $('#track').innerHTML = key +
     '<table class="grid" id="trackTable"><thead>'
-    + '<tr>' + TV.head(TV.cols[0]) + TV.head(TV.cols[1]) + TV.head(TV.cols[2])
+    + '<tr>' + idCols.map(c => TV.head(c)).join('')
     + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
-    + TV.head(TV.cols[3]) + '</tr>'
-    + '<tr>' + locs.map(() => '<th class="sub2">Plan</th><th class="sub2">Actual</th>').join('')
+    + TV.head(whereCol) + '</tr>'
+    + '<tr>' + placeCols.map(c => TV.head(c)).join('')
     + '</tr></thead><tbody>'
     + view.map(function(i){
         const r = d.rows[i];
         return (function(r){
-        const cs = LEG === 'bh' ? r[LEG].slice().reverse() : r[LEG];
+        const cs = cellsOf(r);
         const where = r.last_seen
           ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
             + clock(r.last_seen.at) + '</span>'

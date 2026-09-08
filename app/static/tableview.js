@@ -51,6 +51,17 @@
     return col.get ? col.get(row) : row[col.key];
   };
 
+  /* What the FILTER offers, which is not always what the sort compares.
+   *
+   * A column of arrival times sorts by the time and by nothing else. But a
+   * filter list of times is one line per truck - fifty-eight choices, none of
+   * them a question anybody asks. What is asked of that column is "show me the
+   * late ones", so a column may name a second, coarser value for the menu while
+   * the ordering still runs on the real clock. */
+  TableView.prototype.fval = function (row, col) {
+    return col.fget ? col.fget(row) : this.val(row, col);
+  };
+
   TableView.prototype.view = function (rows) {
     var self = this;
     if (rows) this.rows = rows;
@@ -62,8 +73,8 @@
         if (!allow) continue;
         var col = self.byKey(k);
         if (!col) continue;
-        if (!allow.has(String(self.val(self.rows[i], col) == null
-                              ? '' : self.val(self.rows[i], col)))) return false;
+        var fv = self.fval(self.rows[i], col);
+        if (!allow.has(String(fv == null ? '' : fv))) return false;
       }
       return true;
     });
@@ -107,7 +118,8 @@
         + (this.sortSeq.length > 1 ? (lv + 1) : '') + '</span>';
     return '<th data-col="' + esc(col.key) + '"'
       + (col.rowspan ? ' rowspan="' + col.rowspan + '"' : '')
-      + ' class="hd' + (this.active(col.key) ? ' filt-on' : '') + '">'
+      + ' class="hd' + (col.cls ? ' ' + col.cls : '')
+      + (this.active(col.key) ? ' filt-on' : '') + '">'
       + '<span class="hl">' + esc(col.label) + badge + '</span>'
       + (col.hint ? '<span class="hh">' + esc(col.hint) + '</span>' : '')
       + '<span class="harrow">▾</span></th>';
@@ -155,14 +167,14 @@
         + this.sortSeq.map(function (lv, i) {
             var c = self.byKey(lv.key);
             return '<span class="cm-seq-tag">' + (i + 1) + '. '
-              + esc(c ? c.label : lv.key) + ' ' + (lv.asc ? '▲' : '▼')
+              + esc(c ? (c.tag || c.label) : lv.key) + ' ' + (lv.asc ? '▲' : '▼')
               + '</span>'; }).join(' ')
         + '<button data-a="clearsort">Clear sorting</button></div>';
     }
 
     var counts = {};
     this.rows.forEach(function (r) {
-      var v = String(self.val(r, col) == null ? '' : self.val(r, col));
+      var v = String(self.fval(r, col) == null ? '' : self.fval(r, col));
       counts[v] = (counts[v] || 0) + 1;
     });
     var allow = this.filters[key];
