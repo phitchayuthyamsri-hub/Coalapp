@@ -194,12 +194,13 @@ def _can(action, state):
     if action == "edit":
         # Rows keep their own state, so a supervisor can go on working the
         # pending ones even after part of the list has been approved.
-        return adm or r in ("supervisor", "manager")
+        # The planner sits above the manager, so it holds everything below it.
+        return adm or r in ("supervisor", "manager", "planner")
     if action == "submit":
         # Always available: more trucks can be sent after an earlier batch.
         return (adm or r == "supervisor") and state != "none"
     if action in ("confirm", "reject"):
-        return (adm or r == "manager") and state == "submitted"
+        return (adm or r in ("manager", "planner")) and state == "submitted"
     if action == "edit_time":
         # Only the supervisor sets arrival timing. The manager reviews and
         # confirms; letting both edit it means nobody owns the number.
@@ -493,14 +494,16 @@ def get_settings():
                     "unit": "km/h", "group": "speed", "kind": "leg",
                     "km": round(km, 1),
                     "hours": round(km / r.speed, 2) if r.speed else None})
-    return jsonify(settings=out, can_edit=(_role() in ("manager", "admin")))
+    return jsonify(settings=out, can_edit=(_role() in ("planner", "admin")))
 
 
 @bp.post("/settings")
 @login_required
 def save_settings():
-    if _role() not in ("manager", "planner", "admin"):
-        return jsonify(error="Only a planner, a manager or an admin may change planning figures"), 403
+    # The figures are the model the plan is computed from, so they belong to
+    # whoever answers for the plan. That is Logistics Asia.
+    if _role() not in ("planner", "admin"):
+        return jsonify(error="Only a planner or an admin may change planning figures"), 403
     d = request.get_json(force=True, silent=True) or {}
     now, who = datetime.utcnow(), current_user.username
     changed = []
@@ -692,7 +695,7 @@ def rows_revert():
         if cur in ("approved", "denied") and r not in ("manager", "planner", "admin"):
             refused.append("%s was decided by the manager" % row.plate)
             continue
-        if cur == "applied" and r not in ("supervisor", "manager", "admin"):
+        if cur == "applied" and r not in ("supervisor", "manager", "planner", "admin"):
             refused.append("%s may only be withdrawn by the supervisor"
                            % row.plate)
             continue
@@ -995,13 +998,19 @@ def _figures_now():
 @bp.post("/week/issue")
 @login_required
 def week_issue():
-    """Freeze this week's plan as issued. Only a manager or admin may.
+    """Freeze this week's plan as issued. The planner, or an admin.
 
     Issuing is a decision, not a save: from here the subcontractor works to
     these times and the revision is measured against them.
+
+    It is deliberately NOT the manager's. The manager is a Vietnam-team
+    position and approves the readiness list; the plan is issued by the control
+    tower at Logistics Asia. Letting both issue would move that decision across
+    a company boundary without anyone noticing it had moved.
     """
-    if _role() not in ("manager", "planner", "admin"):
-        return jsonify(error="Only a planner, a manager or an admin may issue a plan"), 403
+    if _role() not in ("planner", "admin"):
+        return jsonify(error="Issuing the plan is the planner's. A manager approves "
+                             "the readiness list; the plan is issued by Logistics Asia."), 403
     d = request.get_json(force=True, silent=True) or {}
     only = _req_sub_id(d)
     data = _week_data(d.get("start"), only, True)
@@ -1761,7 +1770,7 @@ def revision_audience():
     return jsonify(audience=aud,
                    users=[{"username": u.username, "role": u.role} for u in users],
                    count=len(users),
-                   may_issue=_role() in ("manager", "planner", "admin"))
+                   may_issue=_role() in ("planner", "admin"))
 
 
 @bp.post("/revision/issue")
@@ -1769,12 +1778,15 @@ def revision_audience():
 def revision_issue():
     """Issue the revised day, and tell the people who have to act on it.
 
-    Same bar as issuing a week: a decision, not a save. From here the monitoring
-    team watches against these times and the mine expects these trucks, so it
-    leaves a record of what was issued and who was told.
+    Same bar as issuing a week, and the same reason: a decision, not a save, and
+    one that belongs to the control tower rather than to the team being planned.
+    From here the monitoring team watches against these times and the mine
+    expects these trucks, so it leaves a record of what was issued and who was
+    told.
     """
-    if _role() not in ("manager", "planner", "admin"):
-        return jsonify(error="Only a planner, a manager or an admin may issue a revision"), 403
+    if _role() not in ("planner", "admin"):
+        return jsonify(error="Issuing a revision is the planner's. A manager approves "
+                             "the readiness list; the plan is issued by Logistics Asia."), 403
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id(d)
