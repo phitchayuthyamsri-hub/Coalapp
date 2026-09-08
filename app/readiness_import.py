@@ -16,15 +16,17 @@ HEADER_MAP = {
     "no": "no", "stt": "no",
     "plate": "plate", "licenseplate": "plate", "bienso": "plate", "truck": "plate",
     "location": "location", "vitri": "location",
-    # "Status" now means the TRUCK's status - running, maintenance, breakdown -
-    # and it is what is_running() reads, so it maps to the activity field. The
-    # load state has its own column. An older sheet heading a Loaded/Empty column
-    # "Status" therefore lands in activity, where it carries no keyword and the
-    # truck reads as running: the same answer that sheet used to give.
-    "status": "activity", "trangthai": "activity", "truckstatus": "activity",
+    # Status is the leg the truck is on - FH out, BH back. It says nothing about
+    # whether the truck is available, so it is NOT what decides that.
+    "status": "status", "trangthai": "status", "leg": "status",
+    # Availability has a column of its own: blank means the truck is running,
+    # and anything in it is the reason it is not. Kept on the activity field
+    # because that is what is_running() reads and what older free-text sheets
+    # filled in, so both shapes still work.
+    "notrunningreason": "activity", "notrunning": "activity",
+    "unavailablereason": "activity", "downtimereason": "activity",
+    "reason": "activity", "lydo": "activity",
     "activity": "activity", "note": "activity", "ghichu": "activity",
-    "loadedempty": "status", "loadempty": "status", "loadedorempty": "status",
-    "loadstatus": "status", "cohang": "status",
     "timearrivemine": "arrive_time", "timearrivalmine": "arrive_time",
     "arrivetime": "arrive_time", "giodenmo": "arrive_time",
     # older BBC sheets head these columns "Arrive Mine" / "Entry Mine Date"
@@ -155,7 +157,12 @@ def parse(path):
 # a working truck. The misspelling is deliberate - it is what they actually send.
 NOT_RUNNING = ("maintenance", "maintenace", "maintainance", "not available",
                "standby", "stand by", "breakdown", "break down", "repair",
-               "workshop", "garage")
+               "workshop", "garage",
+               # Added with the drop-down: every value it offers must be
+               # recognised, or a truck picked as out of service would still be
+               # planned a load. Phrases, not single words, so ordinary remarks
+               # do not trip them.
+               "accident", "no driver", "paperwork")
 
 
 def is_running(activity):
