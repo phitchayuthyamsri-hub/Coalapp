@@ -121,41 +121,61 @@ gr.clear();
 is('Delete clears the selection', [gr.rows[0].status, gr.rows[1].status], ['','']);
 
 
-// ── sort, filter, and the trap they bring with them ────────────────────────
+// ── sort levels, value filters, and the trap they bring with them ──────────
 console.log('');
 gr = g(mk(5));
 gr.rows[0].status='Repair'; gr.rows[1].status='FH'; gr.rows[2].status='BH';
 gr.rows[3].status=''; gr.rows[4].status='Accident';
-gr.sort = {c:1, dir:'asc'}; gr.applyView();
-is('sort asc orders by value',
+gr.sortSeq = [{c:1, asc:true}]; gr.applyView();
+is('Sort A->Z orders by value',
    gr.view.map(i=>gr.rows[i].status), ['Accident','BH','FH','Repair','']);
-gr.sort = {c:1, dir:'desc'}; gr.applyView();
-is('sort desc reverses, blanks still last',
+gr.sortSeq = [{c:1, asc:false}]; gr.applyView();
+is('Sort Z->A reverses, blanks still last',
    gr.view.map(i=>gr.rows[i].status), ['Repair','FH','BH','Accident','']);
-gr.sort = null; gr.applyView();
-is('third click restores the original order', gr.view, [0,1,2,3,4]);
+gr.sortSeq = []; gr.applyView();
+is('Clear sorting restores the original order', gr.view, [0,1,2,3,4]);
 
+// a second level only decides ties in the first
+gr = g(mk(4));
+gr.rows[0].status='FH'; gr.rows[0].remark='b';
+gr.rows[1].status='BH'; gr.rows[1].remark='z';
+gr.rows[2].status='FH'; gr.rows[2].remark='a';
+gr.rows[3].status='BH'; gr.rows[3].remark='a';
+gr.sortSeq = [{c:1, asc:true}, {c:3, asc:true}]; gr.applyView();
+is('then-by breaks ties in the first level',
+   gr.view.map(i=>gr.rows[i].status + gr.rows[i].remark), ['BHa','BHz','FHa','FHb']);
+is('sortLevel reports the level of a column', [gr.sortLevel(1), gr.sortLevel(3), gr.sortLevel(2)],
+   [0,1,-1]);
+
+// value checkboxes
 gr = g(mk(5));
 gr.rows[0].status='FH'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
 gr.rows[3].status=''; gr.rows[4].status='BH';
-gr.filters = {status:'FH'}; gr.applyView();
-is('filter to one value', gr.view, [0,2]);
-gr.filters = {status:'\u2205'}; gr.applyView();
-is('the (blank) filter finds unanswered rows', gr.view, [3]);
+gr.filters = {status: new Set(['FH'])}; gr.applyView();
+is('ticking one value shows only it', gr.view, [0,2]);
+gr.filters = {status: new Set(['FH','BH'])}; gr.applyView();
+is('ticking two shows both', gr.view, [0,1,2,4]);
+gr.filters = {status: new Set([''])}; gr.applyView();
+is('the (blank) entry finds unanswered rows', gr.view, [3]);
 gr.filters = {}; gr.applyView();
-is('clearing the filter shows everything', gr.view.length, 5);
+is('no filter shows everything', gr.view.length, 5);
+is('filtered() is false with none set', gr.filtered(), false);
+gr.filters = {status: new Set(['FH'])};
+is('filtered() is true with one set', gr.filtered(), true);
 
+// two columns filtered at once
 gr = g(mk(4));
-gr.rows[0].remark='gearbox'; gr.rows[1].remark='TYRE'; gr.rows[2].remark='gear box';
-gr.filters = {remark:'gear'}; gr.applyView();
-is('text filter is contains, case-insensitive', gr.view, [0,2]);
+gr.rows[0].status='FH'; gr.rows[0].load='Loaded';
+gr.rows[1].status='FH'; gr.rows[1].load='Empty';
+gr.rows[2].status='BH'; gr.rows[2].load='Empty';
+gr.rows[3].status='FH'; gr.rows[3].load='Loaded';
+gr.filters = {status:new Set(['FH']), load:new Set(['Loaded'])}; gr.applyView();
+is('two filters are ANDed', gr.view, [0,3]);
 
-// THE TRAP: with a sort on, view position 0 is not row 0. An edit must follow
-// the truck, not the screen position.
+// THE TRAP: with a sort on, view position 0 is not row 0.
 gr = g(mk(3));
-gr.rows[0].plate='20C1000'; gr.rows[1].plate='20C1001'; gr.rows[2].plate='20C1002';
 gr.rows[0].status='Repair'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
-gr.sort = {c:1, dir:'asc'}; gr.applyView();     // BH, FH, Repair -> rows 1,2,0
+gr.sortSeq = [{c:1, asc:true}]; gr.applyView();
 is('sorted view maps to the right rows', gr.view, [1,2,0]);
 gr.cur = {r:0,c:3}; gr.anchor = {r:0,c:3};
 gr.set(0, 3, 'edited');
@@ -166,7 +186,7 @@ is('...and not the first row on the page', gr.rows[0].remark, '');
 gr = g(mk(5));
 gr.rows[0].status='FH'; gr.rows[1].status='BH'; gr.rows[2].status='FH';
 gr.rows[3].status='BH'; gr.rows[4].status='FH';
-gr.filters = {status:'FH'}; gr.applyView();      // rows 0,2,4
+gr.filters = {status:new Set(['FH'])}; gr.applyView();
 gr.cur={r:0,c:3}; gr.anchor={r:0,c:3};
 gr.rows[0].remark='out';
 gr.fillDown();

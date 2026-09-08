@@ -31,6 +31,21 @@
     return (h < 10 ? '0' + h : '' + h) + ':' + (mi < 10 ? '0' + mi : '' + mi);
   }
 
+  // Dates first, then numbers, then text; blanks always last. Copied in spirit
+  // from the Logistics grid so both tables sort a column the same way.
+  function cmpVal(a, b) {
+    var sa = String(a == null ? '' : a).trim(), sb = String(b == null ? '' : b).trim();
+    if (sa === '' && sb === '') return 0;
+    if (sa === '') return 1;
+    if (sb === '') return -1;
+    var da = Date.parse(sa), db = Date.parse(sb);
+    var looksDate = /^\d{4}-\d{2}-\d{2}/;
+    if (looksDate.test(sa) && looksDate.test(sb) && !isNaN(da) && !isNaN(db)) return da - db;
+    var na = Number(sa), nb = Number(sb);
+    if (sa !== '' && sb !== '' && !isNaN(na) && !isNaN(nb)) return na - nb;
+    return sa.localeCompare(sb, undefined, {numeric: true, sensitivity: 'base'});
+  }
+
   function Grid(opts) {
     this.table = opts.table;
     this.cols = opts.cols;
@@ -38,8 +53,10 @@
     this.onChange = opts.onChange || function () {};
     this.render = opts.render || {};
     this.rowClass = opts.rowClass || function () { return ''; };
-    this.sort = null;                     // {c, dir}
-    this.filters = {};                    // colKey -> string
+    // A sequence, not one column: "sort by company, then by time" is the
+    // question people actually ask of a truck list.
+    this.sortSeq = [];                    // [{c, asc}]
+    this.filters = {};                    // colKey -> Set of allowed values
     this.view = [];
     this.cur = {r: 0, c: this.firstEditable()};
     this.anchor = {r: 0, c: this.cur.c};
@@ -63,33 +80,32 @@
 
     idx = idx.filter(function (i) {
       for (var k in self.filters) {
-        var want = (self.filters[k] || '').trim().toLowerCase();
-        if (!want) continue;
-        var got = String(self.rows[i][k] == null ? '' : self.rows[i][k]).toLowerCase();
-        // A list filter is an exact value; a text filter is "contains", which
-        // is what people expect from a box they type into.
-        var col = self.colByKey(k);
-        // The blank option asks for rows nobody has answered yet, which is the
-        // filter the supervisor actually wants before chasing a company.
-        if (want === '∅') { if (got !== '') return false; }
-        else if (col && col.list) { if (got !== want) return false; }
-        else if (got.indexOf(want) < 0) return false;
+        var allow = self.filters[k];
+        if (!allow) continue;
+        var got = String(self.rows[i][k] == null ? '' : self.rows[i][k]);
+        if (!allow.has(got)) return false;
       }
       return true;
     });
 
-    if (this.sort) {
-      var key = this.cols[this.sort.c].key, dir = this.sort.dir;
+    if (this.sortSeq.length) {
+      var seq = this.sortSeq.map(function (lv) {
+        return {key: self.cols[lv.c].key, asc: lv.asc};
+      });
       idx.sort(function (a, b) {
-        var x = String(self.rows[a][key] == null ? '' : self.rows[a][key]);
-        var y = String(self.rows[b][key] == null ? '' : self.rows[b][key]);
-        // Blanks sort last whichever way the column is pointing: an empty cell
-        // is not a small value, it is a missing one.
-        if (!x && !y) return a - b;
-        if (!x) return 1;
-        if (!y) return -1;
-        var n = x.localeCompare(y, undefined, {numeric: true, sensitivity: 'base'});
-        return dir === 'desc' ? -n : n;
+        for (var i = 0; i < seq.length; i++) {
+          var va = self.rows[a][seq[i].key], vb = self.rows[b][seq[i].key];
+          var ea = String(va == null ? '' : va).trim() === '';
+          var eb = String(vb == null ? '' : vb).trim() === '';
+          // Blanks last whichever way the column points. An empty cell is not a
+          // small value, it is a missing one, and burying the rows nobody has
+          // answered at the top of a descending sort is the opposite of useful.
+          if (ea !== eb) return ea ? 1 : -1;
+          if (ea && eb) continue;
+          var n = cmpVal(va, vb);
+          if (n) return seq[i].asc ? n : -n;
+        }
+        return a - b;                     // stable: original order breaks ties
       });
     }
     this.view = idx;
@@ -107,27 +123,17 @@
   Grid.prototype.draw = function () {
     var self = this;
     var head = '<tr>' + this.cols.map(function (c, ci) {
-      var arrow = (self.sort && self.sort.c === ci)
-        ? (self.sort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+      var lv = self.sortLevel(ci);
+      var badge = lv < 0 ? ''
+        : '<span class="hsort">' + (self.sortSeq[lv].asc ? '▲' : '▼')
+          + (self.sortSeq.length > 1 ? (lv + 1) : '') + '</span>';
+      var on = self.filters[c.key] ? ' filt-on' : '';
       return '<th data-c="' + ci + '"' + (c.width ? ' style="width:' + c.width + '"' : '')
-        + ' class="hd' + (c.sortable === false ? '' : ' sortable') + '">'
-        + '<span class="hl">' + esc(c.label) + arrow + '</span>'
+        + ' class="hd' + on + '">'
+        + '<span class="hl">' + esc(c.label) + badge + '</span>'
         + (c.hint ? '<span class="hh">' + esc(c.hint) + '</span>' : '')
+        + '<span class="harrow">▾</span>'
         + '</th>';
-    }).join('') + '</tr>';
-
-    var filt = '<tr class="filt">' + this.cols.map(function (c, ci) {
-      if (c.filter === false) return '<td></td>';
-      var v = self.filters[c.key] || '';
-      if (c.list) {
-        return '<td><select data-fc="' + ci + '"><option value="">(all)</option>'
-          + c.list.map(function (o) {
-              return '<option value="' + esc(o) + '"' + (v === o ? ' selected' : '') + '>'
-                + esc(o) + '</option>'; }).join('')
-          + '<option value="∅"' + (v === '∅' ? ' selected' : '') + '>(blank)</option>'
-          + '</select></td>';
-      }
-      return '<td><input data-fc="' + ci + '" placeholder="filter" value="' + esc(v) + '"></td>';
     }).join('') + '</tr>';
 
     var body = this.view.map(function (ri, vr) {
@@ -141,51 +147,140 @@
       return '<tr class="' + self.rowClass(row) + '">' + tds + '</tr>';
     }).join('');
 
-    this.table.innerHTML = '<thead>' + head + filt + '</thead><tbody>' + body + '</tbody>';
+    this.table.innerHTML = '<thead>' + head + '</thead><tbody>' + body + '</tbody>';
     this.paint();
     this.wireHead();
   };
 
+  Grid.prototype.sortLevel = function (ci) {
+    for (var i = 0; i < this.sortSeq.length; i++) if (this.sortSeq[i].c === ci) return i;
+    return -1;
+  };
+
   Grid.prototype.wireHead = function () {
     var self = this;
-    Array.prototype.forEach.call(this.table.querySelectorAll('th.sortable'), function (th) {
-      th.onclick = function () {
-        var c = +th.dataset.c;
-        // asc, then desc, then back to the order the rows arrived in.
-        if (!self.sort || self.sort.c !== c) self.sort = {c: c, dir: 'asc'};
-        else if (self.sort.dir === 'asc') self.sort = {c: c, dir: 'desc'};
-        else self.sort = null;
-        self.applyView();
-        self.draw();
-        self.say(self.sort ? ('sorted by ' + self.cols[c].label + ' ' + self.sort.dir)
-                           : 'sort cleared');
-      };
-    });
-    Array.prototype.forEach.call(this.table.querySelectorAll('[data-fc]'), function (el) {
-      var apply = function () {
-        var c = +el.dataset.fc;
-        self.filters[self.cols[c].key] = el.value;
-        self.applyView();
-        self.draw();
-        var n = self.view.length;
-        self.say(self.filtered()
-          ? (n + ' of ' + self.rows.length + ' row' + (n === 1 ? '' : 's') + ' shown')
-          : 'filter cleared');
-        var again = self.table.querySelector('[data-fc="' + c + '"]');
-        if (again && again.focus) { again.focus(); if (again.setSelectionRange && again.value)
-          again.setSelectionRange(again.value.length, again.value.length); }
-      };
-      el.onchange = apply;
-      if (el.tagName === 'INPUT') {
-        var t = null;
-        el.oninput = function () { clearTimeout(t); t = setTimeout(apply, 250); };
-      }
-      el.onkeydown = function (e) { e.stopPropagation(); };
+    Array.prototype.forEach.call(this.table.querySelectorAll('th'), function (th) {
+      th.onclick = function (e) { self.openColMenu(e, +th.dataset.c); };
     });
   };
 
+  // ── the column menu ──────────────────────────────────────────────────────
+  // Sort, then sort again by something else, then tick the values you want.
+  // The same shape as the Logistics grid, because these are the same people.
+  Grid.prototype.openColMenu = function (ev, ci) {
+    ev.stopPropagation();
+    var self = this, col = this.cols[ci];
+    if (this.cmenu && this.cmKey === ci) { this.closeColMenu(); return; }
+    this.closeColMenu();
+    this.closeMenu();
+    this.cmKey = ci;
+
+    var m = document.createElement('div');
+    m.className = 'col-menu';
+    m.innerHTML =
+      '<div class="cm-sort"><button data-s="az">\u25B2 Sort A\u2192Z</button>'
+      + '<button data-s="za">\u25BC Sort Z\u2192A</button></div>'
+      + '<div class="cm-sort cm-sort2"><button data-s="+az">+ then A\u2192Z</button>'
+      + '<button data-s="+za">+ then Z\u2192A</button></div>'
+      + '<div class="cm-seq"></div>'
+      + '<input class="cm-search" placeholder="Search values\u2026">'
+      + '<div class="cm-list"></div>'
+      + '<div class="cm-actions"><button data-a="all">All</button>'
+      + '<button data-a="none">None</button>'
+      + '<button class="cm-apply" data-a="apply">Apply</button></div>';
+    document.body.appendChild(m);
+    this.cmenu = m;
+
+    var seqEl = m.querySelector('.cm-seq');
+    if (this.sortSeq.length) {
+      seqEl.innerHTML = '<div class="cm-seq-in"><b>Sorted by</b> '
+        + this.sortSeq.map(function (lv, i) {
+            return '<span class="cm-seq-tag">' + (i + 1) + '. '
+              + esc(self.cols[lv.c].label) + ' ' + (lv.asc ? '\u25B2' : '\u25BC')
+              + '</span>'; }).join(' ')
+        + '<button data-a="clearsort">Clear sorting</button></div>';
+    }
+
+    // Every distinct value in the column, counted, taken from ALL rows so the
+    // list does not shrink as you filter yourself into a corner.
+    var counts = {};
+    this.rows.forEach(function (r) {
+      var v = String(r[col.key] == null ? '' : r[col.key]);
+      counts[v] = (counts[v] || 0) + 1;
+    });
+    var vals = Object.keys(counts).sort(cmpVal);
+    var allow = this.filters[col.key];
+    m.querySelector('.cm-list').innerHTML = vals.map(function (v) {
+      var on = (!allow || allow.has(v)) ? ' checked' : '';
+      return '<label class="cm-item"><input type="checkbox" value="' + esc(v) + '"' + on + '>'
+        + '<span>' + (v === '' ? '(blank)' : esc(v)) + '</span>'
+        + '<i>' + counts[v] + '</i></label>';
+    }).join('');
+
+    m.addEventListener('click', function (e) { e.stopPropagation(); });
+    m.querySelector('.cm-search').addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      Array.prototype.forEach.call(m.querySelectorAll('.cm-item'), function (li) {
+        li.style.display = li.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+      });
+    });
+    m.addEventListener('mousedown', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      e.preventDefault();
+      var sc = b.dataset.s, a = b.dataset.a;
+      if (sc === 'az' || sc === 'za') {
+        self.sortSeq = [{c: ci, asc: sc === 'az'}];
+        self.closeColMenu(); self.applyView(); self.draw();
+        self.say('sorted by ' + col.label);
+      } else if (sc === '+az' || sc === '+za') {
+        var at = self.sortLevel(ci);
+        if (at >= 0) self.sortSeq[at].asc = (sc === '+az');
+        else self.sortSeq.push({c: ci, asc: sc === '+az'});
+        self.closeColMenu(); self.applyView(); self.draw();
+        self.say('then by ' + col.label);
+      } else if (a === 'clearsort') {
+        self.sortSeq = [];
+        self.closeColMenu(); self.applyView(); self.draw();
+        self.say('sorting cleared');
+      } else if (a === 'all' || a === 'none') {
+        Array.prototype.forEach.call(m.querySelectorAll('.cm-item'), function (li) {
+          if (li.style.display !== 'none') li.querySelector('input').checked = (a === 'all');
+        });
+      } else if (a === 'apply') {
+        var boxes = Array.prototype.slice.call(m.querySelectorAll('.cm-item input'));
+        var on = boxes.filter(function (x) { return x.checked; })
+                      .map(function (x) { return x.value; });
+        // Everything ticked is not a filter, it is the absence of one.
+        if (on.length === boxes.length) delete self.filters[col.key];
+        else self.filters[col.key] = new Set(on);
+        self.closeColMenu(); self.applyView(); self.draw();
+        var n = self.view.length;
+        self.say(self.filtered() ? (n + ' of ' + self.rows.length + ' shown')
+                                 : 'filter cleared');
+      }
+    });
+
+    var r = ev.target.closest('th').getBoundingClientRect();
+    m.style.left = Math.max(4, Math.min(r.left + window.scrollX,
+                            window.innerWidth - m.offsetWidth - 8)) + 'px';
+    var want = Math.min(m.offsetHeight || 320, window.innerHeight * 0.7);
+    var below = window.innerHeight - r.bottom;
+    m.style.top = ((below < want + 8 && r.top > want + 8)
+      ? Math.max(4, r.top + window.scrollY - want - 2)
+      : r.bottom + window.scrollY + 2) + 'px';
+    var sf = m.querySelector('.cm-search');
+    if (sf) sf.focus();
+  };
+
+  Grid.prototype.closeColMenu = function () {
+    if (this.cmenu && this.cmenu.parentNode) this.cmenu.parentNode.removeChild(this.cmenu);
+    this.cmenu = null;
+    this.cmKey = null;
+  };
+
   Grid.prototype.filtered = function () {
-    for (var k in this.filters) if ((this.filters[k] || '').trim()) return true;
+    for (var k in this.filters) if (this.filters[k]) return true;
     return false;
   };
 
@@ -466,6 +561,7 @@
     });
     document.addEventListener('mouseup', function () { self.dragging = false; });
     document.addEventListener('mousedown', function (e) {
+      if (self.cmenu && !self.cmenu.contains(e.target)) self.closeColMenu();
       if (!self.menu) return;
       if (self.menu.contains(e.target)) return;
       if (t.contains(e.target)) return;
@@ -529,7 +625,7 @@
         case 'PageDown':   e.preventDefault(); self.go(self.cur.r + 12, self.cur.c, shift); return;
         case 'Delete':
         case 'Backspace':  e.preventDefault(); self.clear(); self.say('cleared'); return;
-        case 'Escape':     self.closeMenu(); return;
+        case 'Escape':     self.closeMenu(); self.closeColMenu(); return;
       }
       if (mod || e.altKey) return;
       if (k.length !== 1) return;
@@ -554,6 +650,7 @@
   Grid.prototype.setRows = function (rows) {
     this.commit();
     this.closeMenu();
+    this.closeColMenu();
     this.rows = rows;
     this.applyView();
     if (this.cur.r >= this.view.length) this.cur.r = 0;

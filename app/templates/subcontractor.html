@@ -66,10 +66,47 @@
   #grid .hl{display:block}
   #grid .hh{display:block;font-size:9px;font-weight:400;color:#6b7689;
             text-transform:none;letter-spacing:0;margin-top:1px}
-  #grid tr.filt td{padding:3px 5px;background:var(--panel2);
-                   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
-  #grid tr.filt input,#grid tr.filt select{width:100%;padding:3px 5px;font-size:11px;
-      background:#0b1020;border:1px solid var(--line);color:var(--txt);border-radius:5px}
+  #grid th.hd{cursor:pointer;position:relative;padding-right:16px}
+  #grid th.hd:hover{background:#1d2a44}
+  #grid th.filt-on{color:var(--acc)}
+  #grid th.filt-on .harrow{color:var(--acc)}
+  #grid .harrow{position:absolute;right:5px;top:50%;transform:translateY(-50%);
+                font-size:9px;color:var(--mut)}
+  #grid .hsort{margin-left:4px;color:var(--acc);font-size:9px}
+  /* the column menu, same shape as the one on the Logistics grid */
+  .col-menu{position:absolute;z-index:10000;background:var(--panel);
+            border:1px solid var(--line);border-radius:10px;width:250px;
+            box-shadow:0 12px 34px rgba(0,0,0,.55);display:flex;flex-direction:column;
+            max-height:70vh;overflow:hidden}
+  .col-menu .cm-sort{display:flex;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .col-menu .cm-sort button{flex:1;padding:8px 6px;border:none;background:none;
+      cursor:pointer;font-size:11.5px;color:var(--txt);font-weight:600;font-family:inherit}
+  .col-menu .cm-sort button:hover{background:var(--panel2)}
+  .col-menu .cm-sort2 button{font-size:10.5px;color:var(--mut);font-weight:500}
+  .col-menu .cm-seq{font-size:10.5px;color:var(--txt);flex:0 0 auto}
+  .col-menu .cm-seq-in{padding:7px 9px;border-bottom:1px solid var(--line);
+                       background:var(--panel2);line-height:1.8}
+  .col-menu .cm-seq-tag{display:inline-block;background:#1d3350;border-radius:7px;
+                        padding:0 6px;margin-right:3px;font-weight:700;color:var(--blue)}
+  .col-menu .cm-seq-in button{margin-top:6px;width:100%;padding:4px;font-size:10.5px;
+      border:1px solid var(--line);background:none;border-radius:5px;cursor:pointer;
+      color:var(--red);font-weight:700;font-family:inherit}
+  .col-menu .cm-search{margin:8px 9px 5px;padding:6px 9px;background:#0b1020;
+      border:1px solid var(--line);border-radius:7px;font-size:11.5px;color:var(--txt);
+      font-family:inherit;flex:0 0 auto;outline:none}
+  .col-menu .cm-search:focus{border-color:var(--acc)}
+  .col-menu .cm-list{overflow-y:auto;padding:2px 5px;flex:1 1 auto;min-height:60px}
+  .col-menu .cm-item{display:flex;align-items:center;gap:8px;font-size:11.5px;
+      padding:4px 7px;border-radius:5px;cursor:pointer;color:var(--txt)}
+  .col-menu .cm-item:hover{background:var(--panel2)}
+  .col-menu .cm-item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .col-menu .cm-item i{color:var(--mut);font-style:normal;font-size:10px}
+  .col-menu .cm-actions{display:flex;gap:6px;padding:8px 9px;border-top:1px solid var(--line);
+                        flex:0 0 auto}
+  .col-menu .cm-actions button{flex:1;padding:6px 0;font-size:11.5px;border:1px solid var(--line);
+      border-radius:6px;background:none;color:var(--txt);cursor:pointer;font-family:inherit}
+  .col-menu .cm-actions .cm-apply{background:var(--acc);color:#04201c;border-color:var(--acc);
+                                  font-weight:700}
   /* the list, on click */
   .gmenu{position:absolute;z-index:9999;background:var(--panel);border:1px solid var(--line);
          border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:4px;
@@ -152,7 +189,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <span><b>&larr; &uarr; &darr; &rarr;</b> move</span>
         <span><b>click</b> a Status cell for the list</span>
         <span>or type &mdash; <b>f</b> FH, <b>b</b> BH, <b>b b</b> Breakdown</span>
-        <span><b>click a heading</b> to sort</span>
+        <span><b>click a heading</b> to sort and filter</span>
         <span><b>Ctrl</b>+<b>D</b> fill down</span>
         <span><b>Ctrl</b>+<b>V</b> paste from Excel</span>
         <span><b>F2</b> edit</span>
