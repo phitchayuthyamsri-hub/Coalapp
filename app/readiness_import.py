@@ -16,8 +16,15 @@ HEADER_MAP = {
     "no": "no", "stt": "no",
     "plate": "plate", "licenseplate": "plate", "bienso": "plate", "truck": "plate",
     "location": "location", "vitri": "location",
-    "status": "status", "trangthai": "status",
+    # "Status" now means the TRUCK's status - running, maintenance, breakdown -
+    # and it is what is_running() reads, so it maps to the activity field. The
+    # load state has its own column. An older sheet heading a Loaded/Empty column
+    # "Status" therefore lands in activity, where it carries no keyword and the
+    # truck reads as running: the same answer that sheet used to give.
+    "status": "activity", "trangthai": "activity", "truckstatus": "activity",
     "activity": "activity", "note": "activity", "ghichu": "activity",
+    "loadedempty": "status", "loadempty": "status", "loadedorempty": "status",
+    "loadstatus": "status", "cohang": "status",
     "timearrivemine": "arrive_time", "timearrivalmine": "arrive_time",
     "arrivetime": "arrive_time", "giodenmo": "arrive_time",
     # older BBC sheets head these columns "Arrive Mine" / "Entry Mine Date"
@@ -56,7 +63,12 @@ def _as_date(v):
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
     s = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m", "%d-%m"):
+    # Four-digit years first, so "04-09-2026" is never mistaken for a two-digit
+    # form. Day always leads: "04-09-26" is 4 September, never 9 April - which is
+    # the confusion the template's header warns about.
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y",
+                "%d-%m-%y", "%d/%m/%y",
+                "%d/%m", "%d-%m"):
         try:
             d = datetime.strptime(s, fmt)
             return d.strftime("%Y-%m-%d") if d.year > 1900 else ""
