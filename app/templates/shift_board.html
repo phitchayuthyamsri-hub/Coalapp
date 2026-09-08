@@ -78,6 +78,53 @@
          padding:3px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
   .msg{font-size:12px;margin-left:8px}
   #day{min-width:340px;font-variant-numeric:tabular-nums}
+  #listTable th.hd{cursor:pointer;position:relative;padding-right:16px}
+  #listTable th.hd:hover{background:#1d2a44}
+  #listTable th.filt-on{color:var(--acc)}
+  #listTable th.filt-on .harrow{color:var(--acc)}
+  #listTable .harrow{position:absolute;right:5px;top:50%;transform:translateY(-50%);
+                     font-size:9px;color:var(--mut)}
+  #listTable .hl{display:block}
+  #listTable .hh{display:block;font-size:9px;font-weight:400;color:#6b7689;
+                 text-transform:none;letter-spacing:0;margin-top:1px}
+  #listTable .hsort{margin-left:4px;color:var(--acc);font-size:9px}
+  /* The declared leg or reason, which is what makes a blank date readable. */
+  .decl{display:inline-block;padding:1px 8px;border-radius:8px;font-size:11px;
+        font-weight:700;background:#12301f;color:#5fd97e}
+  .decl-off{background:#3a2a10;color:#ffb020}
+  tr.needtime{background:rgba(255,107,96,.07)}
+  .needwhy{color:#ff6b60;font-size:10px;margin-top:2px}
+  .col-menu{position:absolute;z-index:10000;background:var(--panel);
+            border:1px solid var(--line);border-radius:10px;width:250px;
+            box-shadow:0 12px 34px rgba(0,0,0,.55);display:flex;flex-direction:column;
+            max-height:70vh;overflow:hidden}
+  .col-menu .cm-sort{display:flex;border-bottom:1px solid var(--line)}
+  .col-menu .cm-sort button{flex:1;padding:8px 6px;border:none;background:none;
+      cursor:pointer;font-size:11.5px;color:var(--txt);font-weight:600;font-family:inherit}
+  .col-menu .cm-sort button:hover{background:var(--panel2)}
+  .col-menu .cm-sort2 button{font-size:10.5px;color:var(--mut);font-weight:500}
+  .col-menu .cm-seq-in{padding:7px 9px;border-bottom:1px solid var(--line);
+                       background:var(--panel2);line-height:1.8;font-size:10.5px}
+  .col-menu .cm-seq-tag{display:inline-block;background:#1d3350;border-radius:7px;
+                        padding:0 6px;margin-right:3px;font-weight:700;color:#5ac8fa}
+  .col-menu .cm-seq-in button{margin-top:6px;width:100%;padding:4px;font-size:10.5px;
+      border:1px solid var(--line);background:none;border-radius:5px;cursor:pointer;
+      color:var(--bad);font-weight:700;font-family:inherit}
+  .col-menu .cm-search{margin:8px 9px 5px;padding:6px 9px;background:#0b1020;
+      border:1px solid var(--line);border-radius:7px;font-size:11.5px;color:var(--txt);
+      font-family:inherit;outline:none}
+  .col-menu .cm-list{overflow-y:auto;padding:2px 5px;flex:1 1 auto;min-height:60px}
+  .col-menu .cm-item{display:flex;align-items:center;gap:8px;font-size:11.5px;
+      padding:4px 7px;border-radius:5px;cursor:pointer;color:var(--txt)}
+  .col-menu .cm-item:hover{background:var(--panel2)}
+  .col-menu .cm-item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .col-menu .cm-item i{color:var(--mut);font-style:normal;font-size:10px}
+  .col-menu .cm-actions{display:flex;gap:6px;padding:8px 9px;border-top:1px solid var(--line)}
+  .col-menu .cm-actions button{flex:1;padding:6px 0;font-size:11.5px;
+      border:1px solid var(--line);border-radius:6px;background:none;color:var(--txt);
+      cursor:pointer;font-family:inherit}
+  .col-menu .cm-actions .cm-apply{background:var(--acc);color:#04201c;
+      border-color:var(--acc);font-weight:700}
   a.trail{color:#5ac8fa;text-decoration:none;font-size:10.5px;font-weight:600;
           margin-left:5px;opacity:.75;white-space:nowrap}
   a.trail:hover{opacity:1;text-decoration:underline}
@@ -113,6 +160,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 </header>
 
 <script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
+<script src="/static/tableview.js?v={{ asset_v('tableview.js') }}"></script>
 <main>
   <div class="card sticky">
     <div class="row">
@@ -186,6 +234,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 
 <script>
 const $ = s => document.querySelector(s);
+let TV = null, CAN = {edit:false, edit_time:false};
 let LIST = null, ROLE = 'monitor', DIRTY = false;
 let SUBS = [], SUBID = '';
 
@@ -280,6 +329,83 @@ function trailLink(plate){
   return ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
     + 'yesterday to now" href="/truck-trail?plate=' + encodeURIComponent(plate)
     + '">◎ trail</a>';
+}
+
+// A tick is the supervisor APPLYING for the truck to run. It only becomes an
+// approval when the manager confirms the list - until then, saying "approved"
+// would claim a decision nobody has made. The row's own state says where it is,
+// so batches show side by side.
+const pill = (bg, fg, t) =>
+  '<span class="pill" style="background:'+bg+';color:'+fg+'">'+t+'</span>';
+const badge = s =>
+    s === 'approved' ? pill('#22c55e22', '#86efac', 'approved')
+  : s === 'denied'   ? pill('#ef444422', '#fca5a5', 'denied')
+  : s === 'applied'  ? pill('#f59e0b22', '#fcd34d', 'applied')
+  : s === 'absent'   ? pill('#ef444422', '#fca5a5', 'no show')
+  :                    pill('#1e293b',   '#8b9ab4', 'pending');
+
+function drawRows(){
+  const editable = CAN.edit, timeEditable = CAN.edit_time;
+  const view = TV.view(LIST.rows || []);
+  const head = '<tr>' + TV.cols.map(c => TV.head(c)).join('') + '</tr>';
+  const body = view.map(i => {
+    const r = LIST.rows[i];
+    if (r.absent){
+      // Committed for the project and never on the sheet. No tick, no timing
+      // and no reason box: there is nothing to save against it.
+      return '<tr style="opacity:.72"><td class="plate">' + esc(r.plate)
+        + trailLink(r.plate) + '</td>'
+        + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
+        + '<td>' + badge('absent') + '</td>'
+        + '<td colspan="7" style="color:var(--bad);font-size:12px">'
+        + 'Committed for the project and not on this sheet — ask the '
+        + 'subcontractor for its status.</td></tr>';
+    }
+    const declared = r.note || r.reason || '';
+    const running = declared === 'FH' || declared === 'BH';
+    // A blank time is only a question on a truck that is coming back.
+    const wantsTime = (declared === 'BH');
+    const missing = wantsTime && !(r.arrive_date && r.arrive);
+    return '<tr' + (missing ? ' class="needtime"' : '') + '>'
+      + '<td class="plate">' + esc(r.plate) + trailLink(r.plate)
+      + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
+          + 'color:#fcd34d" title="This plate is not on the committed roster '
+          + 'for this company">not committed</span>' : '') + '</td>'
+      + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
+      + '<td>' + (declared
+          ? '<span class="decl' + (running ? '' : ' decl-off') + '">'
+            + esc(declared) + '</span>'
+          : '<span style="color:var(--mut)">—</span>') + '</td>'
+      + '<td style="font-size:12px">' + esc(r.sheet_status||'') + '</td>'
+      + '<td style="color:var(--mut);font-size:12px">' + esc(r.location||'') + '</td>'
+      + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
+        + 'style="width:150px"' + (timeEditable?'':' disabled') + '></td>'
+      + '<td><input type="time" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
+        + 'style="width:110px"' + (timeEditable?'':' disabled') + '>'
+        + (missing ? '<div class="needwhy">BH with no arrival — cannot be planned</div>' : '')
+        + '</td>'
+      + '<td class="r-state" data-i="'+i+'">' + badge(r.state)
+        + (canRevert(r) ? ' <button class="r-back" data-plate="'+esc(r.plate)+'" '
+           + 'title="Step this truck back to '+esc(BACK_ONE[r.state])+'" '
+           + 'style="padding:1px 7px;font-size:12px;line-height:1.4">&#8630;</button>' : '')
+        + '</td>'
+      + '<td><input type="checkbox" class="r-ready" data-i="'+i+'"'
+        + (r.ready?' checked':'')
+        + ((editable && canTick(r)) ? '' : ' disabled') + '></td>'
+      + '<td><input type="text" class="r-reason" data-i="'+i+'" value="'+esc(r.reason)+'" '
+        + 'style="width:100%" placeholder="required when not applied"'
+        + (editable?'':' disabled') + '></td></tr>';
+  }).join('');
+
+  const hidden = (LIST.rows || []).length - view.length;
+  $('#listBody').innerHTML =
+    '<table id="listTable"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>'
+    + (hidden > 0 ? '<div class="empty" style="margin-top:6px">' + hidden
+        + ' row(s) hidden by a filter.</div>' : '')
+    + (editable ? '<div class="empty" style="margin-top:8px">Add more, one plate per line:</div>'
+      + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
+      + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
+  TV.wire(document.getElementById('listTable'));
 }
 
 function drawAmendReq(){
@@ -435,6 +561,24 @@ async function loadSummary(){
 let LAST_BOX = null;
 const BACK_ONE = {approved:'applied', denied:'applied', applied:'pending'};
 
+// Who may tick a row, and who may step one back. At top level because the row
+// renderer is its own function now: left inside the caller they were invisible
+// to it, and the table would have thrown on the first draw.
+// Stepping a truck back changes one company's list, so it is not offered while
+// reading them all - the button would have no list to act on.
+const canRevert = r => (LIST && LIST.all) ? false :
+    (r.state === 'approved' || r.state === 'denied')
+      ? (ROLE === 'manager' || ROLE === 'admin')
+  : (r.state === 'applied')
+      ? (ROLE === 'supervisor' || ROLE === 'manager' || ROLE === 'admin')
+  : false;
+// A supervisor ticks rows still with them; a manager ticks the ones that have
+// arrived. Nobody re-ticks a row that is already decided.
+const canTick = r => (ROLE === 'admin')
+  ? r.state !== 'approved' && r.state !== 'denied'
+  : (ROLE === 'manager') ? r.state === 'applied'
+  : r.state === 'pending';
+
 async function revertPlates(plates){
   if (!plates.length) return;
   const r = await jpost('/api/shift/rows/revert',
@@ -557,20 +701,6 @@ async function loadList(){
   // arrived. Nobody re-ticks a row that is already decided.
   // Undo one step: the manager takes back a decision, the supervisor withdraws
   // something not yet decided.
-  // Stepping a truck back changes one company's list, so it is not offered
-  // while reading them all - the button would have no list to act on.
-  const canRevert = r => LIST.all ? false :
-      (r.state === 'approved' || r.state === 'denied')
-        ? (ROLE === 'manager' || ROLE === 'admin')
-    : (r.state === 'applied')
-        ? (ROLE === 'supervisor' || ROLE === 'manager' || ROLE === 'admin')
-    : false;
-  const canTick = r => (ROLE === 'admin')
-    ? r.state !== 'approved' && r.state !== 'denied'
-    : (ROLE === 'manager') ? r.state === 'applied'
-    : r.state === 'pending';
-  // The manager reviews timing but does not set it - that is the supervisor's call.
-  const timeEditable = LIST.can.edit_time;
   if (!LIST.rows.length){
     $('#listBody').innerHTML = editable
       ? '<div class="empty">No trucks yet. Paste or type plate numbers below, one per line.</div>'
@@ -585,60 +715,35 @@ async function loadList(){
     // The row's own state says where it is, so batches show side by side:
     // some trucks still with the supervisor, some awaiting the manager, some
     // already decided - all on the same list.
-    const pill = (bg, fg, t) =>
-      '<span class="pill" style="background:'+bg+';color:'+fg+'">'+t+'</span>';
-    const badge = s =>
-        s === 'approved' ? pill('#22c55e22', '#86efac', 'approved')
-      : s === 'denied'   ? pill('#ef444422', '#fca5a5', 'denied')
-      : s === 'applied'  ? pill('#f59e0b22', '#fcd34d', 'applied')
-      : s === 'absent'   ? pill('#ef444422', '#fca5a5', 'no show')
-      :                    pill('#1e293b',   '#8b9ab4', 'pending');
-    $('#listBody').innerHTML =
-      '<table><thead><tr><th>Truck</th><th>Sub</th><th>Approve</th>'
-      + '<th>Date arrive Mine</th><th>Time arrive Mine</th>'
-      + '<th>Stage</th>'
-      + '<th>Status</th><th>Location</th><th>Reason if not applied</th>'
-      + '</tr></thead><tbody>'
-      + LIST.rows.map((r,i) =>
-        // A committed truck that never reached the sheet. It has no row in the
-        // list, so it carries no tick, no timing and no reason box - there is
-        // nothing to save against it. It is here to be seen and chased.
-        (r.absent
-          ? '<tr style="opacity:.72"><td class="plate">'+esc(r.plate)+trailLink(r.plate)+'</td>'
-            + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
-            + '<td></td><td></td><td></td>'
-            + '<td>'+badge('absent')+'</td>'
-            + '<td colspan="3" style="color:var(--bad);font-size:12px">'
-            + 'Committed for the project and not on this sheet — ask the '
-            + 'subcontractor for its status.</td></tr>'
-          :
-        '<tr><td class="plate">'+esc(r.plate)+trailLink(r.plate)
-        + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
-            + 'color:#fcd34d" title="This plate is not on the committed roster '
-            + 'for this company">not committed</span>' : '') + '</td>'
-        + '<td style="color:var(--mut)">'+esc(r.sub||'')+'</td>'
-        + '<td><input type="checkbox" class="r-ready" data-i="'+i+'"'
-        + (r.ready?' checked':'')
-        + ((editable && canTick(r)) ? '' : ' disabled') + '></td>'
-        + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
-        + 'style="width:150px"' + (timeEditable?'':' disabled') + '></td>'
-        + '<td><input type="time" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
-        + 'style="width:110px"' + (timeEditable?'':' disabled') + '></td>'
-        + '<td class="r-state" data-i="'+i+'">'+badge(r.state)
-          + (canRevert(r) ? ' <button class="r-back" data-plate="'+esc(r.plate)+'" '
-             + 'title="Step this truck back to '+esc(BACK_ONE[r.state])+'" '
-             + 'style="padding:1px 7px;font-size:12px;line-height:1.4">&#8630;</button>' : '')
-          + '</td>'
-        + '<td style="font-size:12px">'+esc(r.sheet_status||'')+'</td>'
-        + '<td style="color:var(--mut);font-size:12px">'+esc(r.location||'')+'</td>'
-        + '<td><input type="text" class="r-reason" data-i="'+i+'" value="'+esc(r.reason)+'" '
-        + 'style="width:100%" placeholder="required when not applied"'
-        + (editable?'':' disabled') + '></td></tr>')).join('')
-      + '</tbody></table>'
-      + (editable ? '<div class="empty" style="margin-top:8px">Add more, one plate per line:</div>'
-        + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
-        + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
+    // The same shape as the declaration the company sent, so a supervisor is
+    // rechecking the sheet in front of them rather than translating between two
+    // layouts. Status comes FIRST after the truck, because it is what makes a
+    // blank date readable: an FH truck or one in the workshop has nothing to
+    // put there, and a BH truck with nothing there is the problem to chase.
+    CAN = (LIST && LIST.can) || {edit:false, edit_time:false};
+    if (!TV){
+      TV = new TableView({
+        cols: [
+          {key:'plate',    label:'Truck'},
+          {key:'sub',      label:'Sub'},
+          {key:'status',   label:'Status',  hint:'FH / BH / why not',
+           get: r => r.absent ? 'absent' : (r.note || r.reason || '')},
+          {key:'load',     label:'Loaded / Empty', get: r => r.sheet_status || ''},
+          {key:'location', label:'Location', get: r => r.location || ''},
+          {key:'adate',    label:'Date arrive Mine', hint:'day first',
+           get: r => r.arrive_date || ''},
+          {key:'atime',    label:'Time', hint:'HH:MM, 24h', get: r => r.arrive || ''},
+          {key:'stage',    label:'Stage',  get: r => r.absent ? 'absent' : (r.state || '')},
+          {key:'approve',  label:'Approve', get: r => (r.ready ? 'yes' : 'no')},
+          {key:'reason',   label:'Reason if not applied', get: r => r.reason || ''}
+        ],
+        onChange: () => drawRows()
+      });
+    }
+    drawRows();
   }
+
+  // Split out so a sort or a filter redraws the rows without reloading the day.
   $('#listBody').insertAdjacentHTML('beforeend',
     '<div class="empty" id="counts" style="margin-top:6px"></div>');
   DIRTY = false; paintDirty();
