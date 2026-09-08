@@ -91,6 +91,16 @@ try {
   const out = store['track'].innerHTML;
   console.log('  renderer ran, produced ' + out.length + ' chars\n');
   is('every truck is drawn', plates().length, 4);
+  is('last location leads the row',
+     out.indexOf('<td class="where"') < out.indexOf('<td class="plate"'), true);
+  is('...and is not repeated at the end',
+     (out.match(/<td class="where"/g) || []).length, 4);
+  is('every row links to that truck trail',
+     (out.match(/href="\/truck-trail\?plate=/g) || []).length, 4);
+  is('...including the one never seen',
+     out.indexOf('truck-trail?plate=20H00717') >= 0, true);
+  is('the last-location header comes first',
+     out.indexOf('data-col="where"') < out.indexOf('data-col="plate"'), true);
   is('the Plan sub-header is now a menu',
      out.indexOf('data-col="fh:mine:plan"') >= 0, true);
   is('so is Actual', out.indexOf('data-col="fh:port:act"') >= 0, true);

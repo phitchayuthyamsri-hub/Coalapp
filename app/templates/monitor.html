@@ -85,6 +85,11 @@
         text-align:right;width:64px}
   table.grid td.ac{text-align:left;width:78px}
   table.grid td.ac b{font-weight:600}
+  table.grid td.where{white-space:nowrap;max-width:230px;overflow:hidden;
+        text-overflow:ellipsis}
+  a.trail{color:#5ac8fa;text-decoration:none;font-size:10.5px;font-weight:600;
+          margin-left:5px;opacity:.75;white-space:nowrap}
+  a.trail:hover{opacity:1;text-decoration:underline}
   /* Thirty-three trucks scroll past the header long before the eye is done with
      them, so the header travels: both rows of it, under the filter bar. */
   table.grid thead th{position:sticky;z-index:6}
@@ -98,7 +103,10 @@
   .t-ok{color:var(--ok)}
   .t-early{color:var(--warn)}
   .t-late{color:var(--bad)}
-  .t-est{color:#cbd5e5}
+  /* An estimate is the one time on this table nobody measured. Pale grey,
+     neutral where every confirmed time is tinted, so the eye passes over
+     it and lands on what was actually seen. */
+  .t-est{color:#a6aab2}
   td.tel{white-space:nowrap}
   td.tel a{color:var(--acc);text-decoration:none;font-size:12px}
   td.tel a:hover{text-decoration:underline}
@@ -273,6 +281,17 @@ const gap = m => (Math.abs(m) >= 60
   ? (Math.abs(m) / 60).toFixed(1).replace(/\.0$/, '') + ' h'
   : Math.abs(m) + ' m');
 
+// The same link the supervisor and the manager have. A place and a time on
+// this table is a claim; the trail is where you go to see whether it holds -
+// and "not seen" is the row that most needs asking about, so the link is there
+// too, on the trucks with nothing to show.
+function trailLink(plate){
+  if (!plate) return '';
+  return ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
+    + 'yesterday to now" href="/truck-trail?plate=' + encodeURIComponent(plate)
+    + '">◎ trail</a>';
+}
+
 function cellHtml(c, planDay){
   if (c.actual){
     const d = c.delay;
@@ -378,12 +397,15 @@ function drawTrack(){
   // Rebuilt every draw: the place columns belong to the leg on screen, and
   // flipping FH/BH turns them round. Keyed by leg and place, never by position,
   // so a filter set on the Mine column stays on the Mine column.
+  // Last location leads. It is the column the eye goes to first - where is
+  // this truck now - and it was sitting past eight columns of times on the far
+  // right, which is the last place anybody looks.
   const idCols = [
-    {key:'plate', label:'Truck',       rowspan:2},
-    {key:'phone', label:'Phone',       rowspan:2, get: r => r.phone || ''},
-    {key:'sub',   label:'Sub',         rowspan:2, get: r => r.sub || ''}
+    {key:'where', label:'Last location', rowspan:2, get: whereOf},
+    {key:'plate', label:'Truck',         rowspan:2},
+    {key:'phone', label:'Phone',         rowspan:2, get: r => r.phone || ''},
+    {key:'sub',   label:'Sub',           rowspan:2, get: r => r.sub || ''}
   ];
-  const whereCol = {key:'where', label:'Where it is', rowspan:2, get: whereOf};
   const placeCols = [];
   locs.forEach(function(l, j){
     // The sort runs on the full timestamp, not the clock: an estimate that
@@ -401,7 +423,7 @@ function drawTrack(){
       fget: r => stateOf(cellsOf(r)[j])
     });
   });
-  TV.cols = idCols.concat(placeCols, [whereCol]);
+  TV.cols = idCols.concat(placeCols);
   // A filter or a sort held on the other leg's columns is not silently carried
   // over: those columns are not on screen and the footer could not honestly
   // count what they hide.
@@ -416,7 +438,7 @@ function drawTrack(){
     '<table class="grid" id="trackTable"><thead>'
     + '<tr>' + idCols.map(c => TV.head(c)).join('')
     + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
-    + TV.head(whereCol) + '</tr>'
+    + '</tr>'
     + '<tr>' + placeCols.map(c => TV.head(c)).join('')
     + '</tr></thead><tbody>'
     + view.map(function(i){
@@ -430,13 +452,14 @@ function drawTrack(){
              ? '<span style="color:var(--blind)">on the road</span> '
                + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
              : '<span style="color:var(--mut)">not seen</span>');
-        return '<tr><td class="plate">' + esc(r.plate) + '</td>'
+        return '<tr><td class="where">' + where + trailLink(r.plate) + '</td>'
+          + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td class="tel">' + phoneCell(r) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
           + cs.map(c => '<td class="pl">'
               + (c.plan ? clock(c.plan) : '<span style="color:var(--mut)">&mdash;</span>')
               + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>').join('')
-          + '<td>' + where + '</td></tr>';
+          + '</tr>';
         })(r);
       }).join('')
     + '</tbody></table>'
