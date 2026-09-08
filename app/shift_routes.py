@@ -281,19 +281,22 @@ def _one_company_only():
 
 
 def _list_for_run_day(day, sub_id):
-    """The list whose trucks are due at the mine on `day`.
+    """The single list due on `day` - the plural version, first match.
 
-    The Monitor watches the day the trucks RUN. The sheet that put them there
-    was sent the day before and is filed under that earlier date, so looking it
-    up by its own date finds nothing - and the page then says no list exists on
-    a day it is watching 58 trucks work.
+    Kept because most callers want one company's sheet; the monitor wants
+    every company's, and both must agree on what "due that day" means."""
+    got = _lists_for_run_day(day, sub_id)
+    return got[0] if got else None
 
-    Worse than nothing, in fact: it found the sheet FILED that day, whose trucks
-    are due tomorrow, and reported every one of them as missed because they had
-    not arrived yet.
 
-    Falls back to the same-day lookup, which is right for older lists written
-    before the two dates were kept apart.
+def _lists_for_run_day(day, sub_id):
+    """EVERY list whose approved trucks are due at the mine on `day`.
+
+    The single-list version answers "whose sheet is this", which is the right
+    question for one company. The monitor asks a different one - what is coming
+    to the mine today - and the corridor does not belong to one haulier. With
+    two companies running, taking the first list found would report one of them
+    and quietly lose the other.
     """
     q = (db.session.query(DailyList)
          .join(DailyListRow, DailyListRow.list_id == DailyList.id)
@@ -301,8 +304,15 @@ def _list_for_run_day(day, sub_id):
                  DailyListRow.arrive_date == day))
     if sub_id is not None:
         q = q.filter(DailyList.subcontractor_id == sub_id)
-    got = q.order_by(DailyList.list_date.desc()).first()
-    return got or _find_list(day, sub_id)
+    out, seen = [], set()
+    for dl in q.order_by(DailyList.list_date.desc()).all():
+        if dl.id not in seen:
+            seen.add(dl.id)
+            out.append(dl)
+    if out:
+        return out
+    one = _find_list(day, sub_id)
+    return [one] if one else []
 
 
 def _find_list(day, sub_id):
@@ -1375,11 +1385,15 @@ def track():
             continue
         by_plate.setdefault(r["plate"], r)
 
-    dl = _list_for_run_day(day, only)
+    due = _lists_for_run_day(day, only)
+    dl = due[0] if due else None
     listed = []
-    if dl:
-        listed = [r.plate for r in DailyListRow.query.filter_by(
-            list_id=dl.id, state="approved").order_by(DailyListRow.plate).all()]
+    if due:
+        listed = [r.plate for r in
+                  DailyListRow.query.filter(
+                      DailyListRow.list_id.in_([x.id for x in due]),
+                      DailyListRow.state == "approved")
+                  .order_by(DailyListRow.plate).all()]
     sub = db.session.get(Subcontractor, only) if only else None
     sub_short = (sub.short or sub.name) if sub else ""
 
@@ -2601,11 +2615,16 @@ def board():
     checks = ShiftCheck.query.filter_by(shift_id=shift.id).order_by(ShiftCheck.ordering).all()
     sub_id = _req_sub_id()
     # By the day the trucks are DUE here, not the day the sheet was filed.
-    dl = _list_for_run_day(day, sub_id)
+    due = _lists_for_run_day(day, sub_id)
+    confirmed = [x for x in due if x.state == "confirmed"]
+    # Any confirmed list opens the shift. The one kept for the message below is
+    # the most advanced, so "still a draft" is only said when that is the whole
+    # truth for the day.
+    dl = (confirmed or due or [None])[0]
 
     # The confirmed list is what opens the cycles. Without one there is nothing to
     # expect, so the board is dormant - it does not invent work.
-    if dl is None or dl.state != "confirmed":
+    if not confirmed:
         why = {
             "none": "No truck list has been made for this date.",
             "draft": "The list for this date is still a draft - the supervisor has "
@@ -2625,7 +2644,10 @@ def board():
 
     # Only trucks actually SENT are monitored. A truck held back as pending was
     # never dispatched, so chasing it through the checkpoints would be nonsense.
-    expected = [r.plate for r in DailyListRow.query.filter_by(list_id=dl.id, state="approved")
+    expected = [r.plate for r in
+                DailyListRow.query.filter(
+                    DailyListRow.list_id.in_([x.id for x in confirmed]),
+                    DailyListRow.state == "approved")
                 .order_by(DailyListRow.plate).all()]
     if not expected:
         return jsonify(

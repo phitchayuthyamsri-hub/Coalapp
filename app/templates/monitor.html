@@ -177,7 +177,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
 const jget = async u => (await fetch(u)).json();
 let PICKER = null;
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
-let TIMER = null, SUBID = '';
+let TIMER = null, SUBID = '', SUBS = [];
 
 const stat = (n, l, c) =>
   '<div class="stat"><div class="n" style="color:' + (c || 'var(--txt)') + '">' + n + '</div>'
@@ -193,14 +193,22 @@ async function loadConfig(){
   // quietly fall back to the legacy list and report two trucks where there are
   // thirty-three.
   const j = await jget('/api/shift/subcontractors');
-  const list = j.subcontractors || [];
-  $('#sub').innerHTML = list.map(s =>
-    '<option value="' + s.id + '">' + esc(s.short) + '</option>').join('')
+  SUBS = j.subcontractors || [];
+  const canSeeAll = (j.role !== 'subcontractor');
+  // The corridor is one day, not one company's day: a monitor watching the mine
+  // wants everything arriving there, and picking through companies one at a
+  // time to find which one is running is not watching, it is hunting.
+  $('#sub').innerHTML = (canSeeAll ? '<option value="all">All companies</option>' : '')
+    + SUBS.map(s => '<option value="' + s.id + '">' + esc(s.short) + '</option>').join('')
     // Lists made before per-company lists existed still belong to somebody's
     // shift. Named for what it is rather than hidden behind "all".
-    + (j.role !== 'subcontractor'
-       ? '<option value="none">(no company &mdash; legacy list)</option>' : '');
-  $('#sub').value = SUBID || (list[0] ? String(list[0].id) : 'none');
+    + (canSeeAll ? '<option value="none">(no company &mdash; legacy list)</option>' : '');
+  if (j.role === 'subcontractor' && j.mine){ SUBID = String(j.mine); $('#sub').disabled = true; }
+  // Land on something with trucks on it. Defaulting to the first company
+  // alphabetically showed an empty page on a day that is not empty - which on
+  // this page reads as "nothing ran".
+  if (!SUBID) SUBID = canSeeAll ? 'all' : (SUBS[0] ? String(SUBS[0].id) : 'none');
+  $('#sub').value = SUBID;
 }
 
 // -- every truck: plan against actual, by place -------------------------------
