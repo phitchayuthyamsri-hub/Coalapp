@@ -440,7 +440,6 @@
       if (!td || td.dataset.r === undefined) return;
       self.commit();
       var r = +td.dataset.r, c = +td.dataset.c;
-      var same = (r === self.cur.r && c === self.cur.c);
       if (e.shiftKey) { self.cur = {r: r, c: c}; }
       else { self.cur = {r: r, c: c}; self.anchor = {r: r, c: c}; }
       self.paint();
@@ -448,15 +447,18 @@
       // A single click on a list cell opens the list. The letters are faster
       // once you know them, and nobody knows them on the first day.
       if (!e.shiftKey && self.cols[c].list && !self.cols[c].ro) {
-        if (same && self.menu) self.closeMenu();
-        else self.openMenu();
+        self.openMenu();          // click or double-click, the list opens
       } else {
         self.closeMenu();
         self.dragging = true;
       }
     });
     t.addEventListener('mouseover', function (e) {
-      if (!self.dragging) return;
+      // e.buttons is the truth about whether a button is still held. The flag
+      // alone could survive a mouseup that happened outside this document -
+      // in an iframe, that is most of them - and then a plain mouse move
+      // dragged a selection across the page.
+      if (!self.dragging || !(e.buttons & 1)) { self.dragging = false; return; }
       var td = e.target.closest && e.target.closest('td');
       if (!td || td.dataset.r === undefined) return;
       self.cur = {r: +td.dataset.r, c: +td.dataset.c};
@@ -546,6 +548,17 @@
       self.say(res.ok + ' cell' + (res.ok === 1 ? '' : 's') + ' pasted'
         + (res.bad ? ', ' + res.bad + ' rejected (not an allowed value)' : ''));
     });
+  };
+
+  // Swap the data without rewiring anything.
+  Grid.prototype.setRows = function (rows) {
+    this.commit();
+    this.closeMenu();
+    this.rows = rows;
+    this.applyView();
+    if (this.cur.r >= this.view.length) this.cur.r = 0;
+    if (this.anchor.r >= this.view.length) this.anchor.r = this.cur.r;
+    this.draw();
   };
 
   Grid.prototype.say = function (msg) { if (this.onSay) this.onSay(msg); };

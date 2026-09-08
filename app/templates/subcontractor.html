@@ -247,16 +247,22 @@ async function load(){
   ROWS = plates.sort().map(pl => {
     const d = byPlate[pl] || {}, g = SUGGEST[pl] || {};
     const declared = d.plate !== undefined;
+    // These names are the API's, not the column titles. Getting them the wrong
+    // way round put Loaded/Empty under Status and the not-running reason under
+    // Remark, which is exactly what a declaration must never do.
+    //   note          the status: FH, BH, or the reason it is not running
+    //   sheet_status  the load state: Loaded or Empty
+    //   arrive        the time, not arrive_hhmm
     return {
       plate: pl,
-      driver: g.driver || d.driver || '',
-      status: d.sheet_status || d.status || (declared ? '' : g.status || ''),
-      load: d.load || (declared ? '' : g.load || ''),
+      driver: g.driver || '',
+      status: d.note || d.reason || (declared ? '' : g.status || ''),
+      load: d.sheet_status || (declared ? '' : g.load || ''),
       location: d.location || (declared ? '' : g.location || ''),
       date: d.arrive_date || (declared ? '' : g.eta_date || ''),
-      time: d.arrive_hhmm || (declared ? '' : g.eta_time || ''),
+      time: d.arrive || (declared ? '' : g.eta_time || ''),
       back: d.back_in_service || '',
-      remark: d.remark || d.reason || ''
+      remark: d.remark || ''
     };
   });
 
@@ -278,6 +284,11 @@ function statusClass(r){
 }
 
 function draw(){
+  // Build the grid ONCE. Creating a second one over the same table wired a
+  // second set of listeners to it, and from then on a single click ran several
+  // handlers, each with its own idea of where the cursor was - which is what
+  // "click one cell and it selects many" was.
+  if (GRID){ GRID.setRows(ROWS); paint(); return; }
   const cols = [
     {key:'plate',    label:'Truck',          width:'92px',  ro:true},
     {key:'driver',   label:'Driver',         width:'130px', ro:true},

@@ -423,7 +423,11 @@ def _list_payload(dl, day):
                 "arrive_date": r.arrive_date or "",
                 "arrive": r.arrive_hhmm or "",
                 "location": r.location or "",
+                # sheet_status is the LOAD state - Loaded or Empty. The status
+                # itself (FH, BH, or the reason it is not running) is in note.
                 "sheet_status": r.sheet_status or "",
+                "back_in_service": r.back_in_service or "",
+                "remark": r.remark or "",
                 # A plate nobody committed. Shown on its row rather than only in
                 # the import report, which is gone the moment the page reloads.
                 "uncommitted": bool(roster) and r.key not in roster,
@@ -443,7 +447,8 @@ def _list_payload(dl, day):
                     "plate": plate, "sub": short, "ready": False,
                     "state": "absent", "reason": "", "note": "",
                     "arrive_date": "", "arrive": "", "location": "",
-                    "sheet_status": "", "uncommitted": False,
+                    "sheet_status": "", "back_in_service": "", "remark": "",
+                    "uncommitted": False,
                     "absent": True,
                 })
     out = {

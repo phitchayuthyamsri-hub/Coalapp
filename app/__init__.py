@@ -28,6 +28,11 @@ def _unauthorized():
 
 def create_app(config_class=Config):
     app = Flask(__name__)
+    # The grid is served from /static. With Flask's default twelve-hour cache a
+    # corrected grid.js reached nobody until their browser felt like asking
+    # again - which looked exactly like the fix not working. Revalidate every
+    # time; these files are small and answer 304 when unchanged.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     app.config.from_object(config_class)
 
     # GPS ingestion config (inert unless a provider is enabled + credentialed).
