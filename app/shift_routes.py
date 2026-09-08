@@ -71,6 +71,16 @@ def views():
     return jsonify(views=_views(), role=_role(), tier=_tier())
 
 
+@page_bp.route("/approvals")
+@login_required
+def approvals_page():
+    """The manager's decision, on its own, with the evidence."""
+    from flask import render_template
+    if "approvals" not in _views():
+        abort(403)
+    return render_template("approvals.html")
+
+
 @page_bp.route("/planner")
 @login_required
 def planner_page():
@@ -141,8 +151,8 @@ def _role():
 TIERS = ["subcontractor", "supervisor", "manager", "planner"]
 OFF_LADDER = {"monitor": ["monitor"], "mine": ["monitor"], "spectator": ["monitor"]}
 
-VIEW_ORDER = ["subcontractor", "readiness", "planner", "monitor"]
-VIEW_TIER = {"subcontractor": 0, "readiness": 1, "planner": 3}
+VIEW_ORDER = ["subcontractor", "readiness", "approvals", "planner", "monitor"]
+VIEW_TIER = {"subcontractor": 0, "readiness": 1, "approvals": 2, "planner": 3}
 
 
 def _tier(role=None):
@@ -1962,7 +1972,13 @@ def suggest():
     day = request.args.get("date") or (
         datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id()
+    return jsonify(**_gps_view(day, only))
 
+
+def _gps_view(day, only):
+    """The GPS answer for every truck, shared by the declaration page and the
+    approval page. One computation, so what a subcontractor is offered and what
+    a manager checks it against can never be two different answers."""
     anchors = Anchor.query.all()
     roles = {a.role: a.id for a in anchors if a.role}
     by_id = {a.id: a for a in anchors}
@@ -2059,9 +2075,80 @@ def suggest():
         out.append(row)
 
     seen = sum(1 for r in out if r["seen_at"])
-    return jsonify(date=day, subcontractor_id=only, rows=out,
-                   trucks=len(out), seen=seen, unseen=len(out) - seen,
-                   empty_kmh=empty_kmh)
+    return dict(date=day, subcontractor_id=only, rows=out,
+                trucks=len(out), seen=seen, unseen=len(out) - seen,
+                empty_kmh=empty_kmh)
+
+
+@bp.get("/approvals")
+@login_required
+def approvals():
+    """Everything waiting on a decision, with the evidence beside it.
+
+    The supervisor sends a list; the manager decides it. That decision is the
+    only thing on this page, and it carries more than the board does on purpose:
+    against every declared row sits what the GPS says about the same truck, so a
+    manager can see where the two disagree before approving rather than after.
+
+    A disagreement is not an accusation. The pulls are hours apart and a truck
+    can move a long way between them, so it is reported as a difference to look
+    at, never as a false declaration.
+    """
+    if "approvals" not in _views():
+        return jsonify(error="Not your view"), 403
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = _req_sub_id()
+
+    gps = {engine.norm_plate(r["plate"]): r
+           for r in _gps_view(day, None)["rows"]}
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
+
+    q = DailyList.query.filter_by(list_date=day)
+    if only is not None:
+        q = q.filter_by(subcontractor_id=only)
+
+    out = []
+    for dl in q.order_by(DailyList.id).all():
+        rows = DailyListRow.query.filter_by(list_id=dl.id).order_by(
+            DailyListRow.plate).all()
+        items, counts = [], {"pending": 0, "applied": 0, "approved": 0, "denied": 0}
+        for r in rows:
+            counts[r.state or "pending"] = counts.get(r.state or "pending", 0) + 1
+            g = gps.get(r.key) or {}
+            # Compare only what both sides claim to know.
+            diffs = []
+            if g.get("status") and r.note and g["status"] != (r.note or "").strip():
+                diffs.append("leg: declared %s, GPS %s" % (r.note, g["status"]))
+            if g.get("location") and r.location and \
+                    g["location"].lower() != r.location.strip().lower():
+                diffs.append("place: declared %s, GPS %s" % (r.location, g["location"]))
+            items.append({
+                "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
+                "status": r.note or "", "load": r.sheet_status or "",
+                "location": r.location or "", "reason": r.reason or "",
+                "arrive_date": r.arrive_date or "", "arrive_hhmm": r.arrive_hhmm or "",
+                "back_in_service": r.back_in_service or "", "remark": r.remark or "",
+                "gps_seen": g.get("seen_at"), "gps_status": g.get("status") or "",
+                "gps_location": g.get("location") or "",
+                "gps_eta": ((g.get("eta_date") or "") + " " + (g.get("eta_time") or "")).strip(),
+                "gps_km_out": g.get("km_out"),
+                "differs": diffs,
+            })
+        out.append({
+            "list_id": dl.id, "state": dl.state,
+            "subcontractor_id": dl.subcontractor_id,
+            "company": subs.get(dl.subcontractor_id, "(no company)"),
+            "submitted_by": dl.submitted_by, "submitted_at": _fmt(dl.submitted_at),
+            "confirmed_by": dl.confirmed_by, "confirmed_at": _fmt(dl.confirmed_at),
+            "reject_reason": dl.reject_reason or "",
+            "counts": counts, "rows": items,
+            "waiting": counts.get("applied", 0),
+            "can_decide": _can("confirm", dl.state),
+        })
+    total_waiting = sum(o["waiting"] for o in out)
+    return jsonify(date=day, lists=out, waiting=total_waiting,
+                   role=_role(), may_decide=_role() in ("manager", "planner", "admin"))
 
 
 @bp.get("/list")

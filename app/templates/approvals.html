@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals</title>
+<style>
+  :root{ --bg:#0b1020; --panel:#121a2e; --panel2:#182238; --line:#243352;
+         --txt:#e8ecf5; --mut:#8b97ad; --acc:#2dd4bf; --amber:#ffb020;
+         --red:#ff6b60; --grn:#34c759; --blue:#5ac8fa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+  body.embed > header{padding:4px 0 10px;background:var(--bg);border-bottom:0}
+  body.embed > header > div:first-child, body.embed > header > a,
+  body.embed > header > .spacer{display:none}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:16px;max-width:1600px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px;margin-bottom:14px}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mut)}
+  input[type=date],select,input[type=text]{background:var(--panel2);color:var(--txt);
+      border:1px solid var(--line);border-radius:7px;padding:7px 10px;font:inherit;font-size:12px}
+  button{background:var(--acc);color:#04201c;border:0;border-radius:8px;padding:9px 17px;
+         font-weight:700;cursor:pointer;font:inherit}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--txt);font-weight:600}
+  button.no{background:none;border:1px solid #5a2a2a;color:var(--red);font-weight:600}
+  button[disabled]{opacity:.4;cursor:not-allowed}
+  .co{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+  .co h2{margin:0;font-size:15px}
+  .pill{font-size:10px;font-weight:700;padding:2px 9px;border-radius:9px;text-transform:uppercase}
+  .p-draft{background:#232326;color:var(--mut)}
+  .p-submitted{background:#3a2a10;color:var(--amber)}
+  .p-confirmed{background:#12301f;color:#5fd97e}
+  .p-rejected{background:#3a1a18;color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:var(--panel2);color:var(--mut);font-size:9.5px;text-transform:uppercase;
+     letter-spacing:.05em;font-weight:700;padding:8px 7px;text-align:left;
+     border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+  td{padding:6px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr.waiting{background:rgba(255,176,32,.07)}
+  tr.denied{opacity:.5}
+  .plate{font-weight:700;white-space:nowrap}
+  .why{color:var(--mut);font-size:10.5px}
+  .st{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9.5px;font-weight:700}
+  .s-applied{background:#3a2a10;color:var(--amber)}
+  .s-approved{background:#12301f;color:#5fd97e}
+  .s-denied{background:#3a1a18;color:var(--red)}
+  .s-pending{background:#232326;color:var(--mut)}
+  .diff{color:var(--amber);font-size:10.5px;display:block}
+  .agree{color:var(--mut);font-size:10.5px}
+  .stat{display:flex;gap:22px;flex-wrap:wrap;margin:0 0 14px}
+  .stat div{font-size:11px;color:var(--mut)}
+  .stat b{display:block;font-size:20px;color:var(--txt);font-weight:700}
+  .wrap-t{max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
+  .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
+  .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+  .n-none{background:var(--panel2);border:1px solid var(--line);color:var(--mut)}
+  .msg{font-size:12.5px;margin-left:10px}
+  .ok{color:var(--grn)} .err{color:var(--red)}
+</style>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+<header>
+  <div><h1>Approvals</h1>
+    <div class="sub">what the supervisor sent, and what the GPS says about it</div></div>
+  <div class="spacer"></div>
+  <a href="/ops">Operations</a>
+  <a href="/logout" style="color:var(--mut)">Log out</a>
+</header>
+<main>
+  <div class="card">
+    <div class="row">
+      <label class="f">Day the trucks run<input type="date" id="day"></label>
+      <button class="ghost" id="reload">Reload</button>
+      <div class="spacer"></div>
+      <div id="who" class="why"></div>
+    </div>
+    <div class="stat" id="stats" style="margin-top:14px"></div>
+  </div>
+  <div id="body"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jget = async u => (await fetch(u)).json();
+const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
+let DATA = null;
+
+async function load(){
+  const day = $('#day').value;
+  try { DATA = await jget('/api/shift/approvals?date=' + day); }
+  catch (e) { $('#body').innerHTML = '<div class="card">Could not load.</div>'; return; }
+  draw();
+}
+
+function draw(){
+  const d = DATA;
+  if (!d || d.error){
+    $('#body').innerHTML = '<div class="card">' + esc((d && d.error) || 'Nothing to show.')
+      + '</div>';
+    return;
+  }
+  const lists = d.lists || [];
+  const waiting = d.waiting || 0;
+  const total = lists.reduce((n, l) => n + l.rows.length, 0);
+  const differs = lists.reduce((n, l) =>
+    n + l.rows.filter(r => r.state === 'applied' && r.differs.length).length, 0);
+  $('#stats').innerHTML =
+      '<div><b>' + waiting + '</b>waiting on you</div>'
+    + '<div><b>' + lists.length + '</b>' + (lists.length === 1 ? 'company' : 'companies') + '</div>'
+    + '<div><b>' + total + '</b>trucks declared</div>'
+    + (differs ? '<div><b class="err">' + differs + '</b>differ from GPS</div>' : '');
+
+  if (!lists.length){
+    $('#body').innerHTML = '<div class="card"><div class="note n-none">'
+      + 'No company has declared anything for this day yet. Nothing to approve.</div></div>';
+    return;
+  }
+
+  $('#body').innerHTML = lists.map((l, li) => {
+    const c = l.counts || {};
+    const head = '<div class="co"><h2>' + esc(l.company) + '</h2>'
+      + '<span class="pill p-' + esc(l.state) + '">' + esc(l.state) + '</span>'
+      + '<span class="why">'
+        + (l.submitted_at ? 'submitted by ' + esc(l.submitted_by || '?') + ' at '
+            + esc(l.submitted_at) : 'not submitted yet')
+        + (l.confirmed_at ? ' &middot; confirmed by ' + esc(l.confirmed_by || '?')
+            + ' at ' + esc(l.confirmed_at) : '')
+      + '</span><div class="spacer" style="flex:1"></div>'
+      + '<span class="why">' + (c.applied || 0) + ' waiting &middot; '
+        + (c.approved || 0) + ' approved &middot; ' + (c.denied || 0) + ' denied &middot; '
+        + (c.pending || 0) + ' still with the supervisor</span></div>';
+
+    const rows = l.rows.map(r => {
+      const cls = r.state === 'applied' ? 'waiting' : (r.state === 'denied' ? 'denied' : '');
+      const gps = !r.gps_seen
+        ? '<span class="why">not seen by GPS</span>'
+        : (r.differs.length
+            ? r.differs.map(x => '<span class="diff">' + esc(x) + '</span>').join('')
+            : '<span class="agree">agrees with GPS</span>')
+          + (r.gps_km_out != null
+              ? '<span class="why">' + r.gps_km_out + ' km from the mine'
+                + (r.gps_eta ? ' &middot; GPS eta ' + esc(r.gps_eta) : '') + '</span>'
+              : '');
+      return '<tr class="' + cls + '">'
+        + '<td class="plate">' + esc(r.plate) + '</td>'
+        + '<td><span class="st s-' + esc(r.state) + '">' + esc(r.state) + '</span></td>'
+        + '<td>' + esc(r.status || '—')
+          + (r.reason ? '<span class="why">' + esc(r.reason) + '</span>' : '') + '</td>'
+        + '<td>' + esc(r.load || '—') + '</td>'
+        + '<td>' + esc(r.location || '—') + '</td>'
+        + '<td>' + (r.arrive_date ? esc(r.arrive_date) + ' ' + esc(r.arrive_hhmm)
+            : '<span class="why">no time</span>') + '</td>'
+        + '<td>' + esc(r.back_in_service || '—') + '</td>'
+        + '<td class="why">' + esc(r.remark || '') + '</td>'
+        + '<td>' + gps + '</td></tr>';
+    }).join('');
+
+    const canDecide = l.can_decide && (c.applied || 0) > 0;
+    const actions = '<div class="row" style="margin-top:12px">'
+      + '<button data-act="confirm" data-i="' + li + '"' + (canDecide ? '' : ' disabled')
+        + '>Confirm ' + (c.applied || 0) + ' truck' + ((c.applied || 0) === 1 ? '' : 's') + '</button>'
+      + '<button class="no" data-act="reject" data-i="' + li + '"' + (canDecide ? '' : ' disabled')
+        + '>Reject</button>'
+      + '<span class="msg" id="m' + li + '">'
+        + (canDecide ? '' : (l.state === 'confirmed'
+            ? 'Already confirmed.'
+            : ((c.applied || 0) ? 'Your role may not decide this.'
+                                : 'Nothing has been sent for approval yet.')))
+      + '</span></div>';
+
+    return '<div class="card">' + head
+      + (l.reject_reason ? '<div class="note n-warn"><b>Rejected:</b> '
+          + esc(l.reject_reason) + '</div>' : '')
+      + '<div class="wrap-t"><table><thead><tr>'
+      + '<th style="width:92px">Truck</th><th style="width:80px">State</th>'
+      + '<th style="width:110px">Status</th><th style="width:70px">Load</th>'
+      + '<th style="width:110px">Location</th><th style="width:120px">At mine</th>'
+      + '<th style="width:100px">Back in service</th><th>Remark</th>'
+      + '<th style="width:230px">GPS check</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + actions + '</div>';
+  }).join('');
+
+  document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b));
+}
+
+async function act(btn){
+  const l = DATA.lists[Number(btn.dataset.i)];
+  const action = btn.dataset.act;
+  const m = $('#m' + btn.dataset.i);
+  const body = {date: $('#day').value, subcontractor_id: l.subcontractor_id};
+  if (action === 'reject'){
+    const why = prompt('Why is ' + l.company + "'s list being rejected?\n\n"
+      + 'The supervisor sees this, so say what needs fixing.');
+    if (!why || !why.trim()) return;
+    body.reason = why.trim();
+  } else {
+    if (!confirm('Confirm ' + (l.counts.applied || 0) + ' truck(s) for ' + l.company + '?\n\n'
+        + 'Confirming is what makes them plannable - the planner can build the day '
+        + 'from them straight after.')) return;
+  }
+  m.textContent = action === 'confirm' ? 'Confirming…' : 'Rejecting…';
+  m.className = 'msg';
+  try {
+    const r = await fetch('/api/shift/list/' + action, {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Failed');
+    await load();
+  } catch (e) {
+    m.textContent = e.message || 'Failed'; m.className = 'msg err';
+  }
+}
+
+$('#day').onchange = load;
+$('#reload').onclick = load;
+
+(async function(){
+  let me = {};
+  try { me = await jget('/api/me'); } catch (e) {}
+  $('#who').textContent = (me.username || '') + (me.role ? ' · ' + me.role : '');
+  // The decision is made the day before the trucks run, on tomorrow's list.
+  const d = new Date(Date.parse(todayStr() + 'T00:00:00Z') + 86400000);
+  $('#day').value = d.toISOString().slice(0, 10);
+  await load();
+})();
+</script>
+</body>
+</html>

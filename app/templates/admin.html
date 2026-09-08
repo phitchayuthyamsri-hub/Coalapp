@@ -199,6 +199,20 @@ const ALL_APPS = APPS.map(a => a[0]);
 // What each role may do, taken from _can() in shift_routes.py and from who the
 // alert feed addresses. Written out here because a role name on its own tells
 // nobody what granting it actually costs.
+// Which ORGANISATION each position belongs to matters as much as what it may
+// do: the readiness chain up to approval is run by the Vietnam team, and the
+// plan is issued by Logistics Asia. A role handed to the wrong side moves a
+// decision across a company boundary without anyone noticing.
+const ORG = {
+  subcontractor: ['Bac Nam / haulier', '#2a2410', '#e0c060'],
+  mine:          ['Mine site',         '#2a2333', '#c79bff'],
+  supervisor:    ['Vietnam team',      '#102a3a', '#5ac8fa'],
+  manager:       ['Vietnam team',      '#102a3a', '#5ac8fa'],
+  planner:       ['Logistics Asia',    '#10303a', '#5ae0e0'],
+  monitor:       ['Logistics Asia',    '#12301f', '#5fd97e'],
+  admin:         ['Logistics Asia',    '#3a1a18', '#ff8a80'],
+  spectator:     ['-',                 '#232326', '#8a8f98']
+};
 const ROLES = [
   ['spectator','Spectator',
    'Looks. Cannot submit, confirm or upload anything.'],
@@ -212,10 +226,11 @@ const ROLES = [
    'Watches the day against the issued plan. <b>Receives the revision notice.</b>'],
   ['supervisor','Supervisor',
    'Builds the readiness list, <b>sets arrival times</b> and submits it. Cannot approve '
-   + 'their own submission.'],
+   + 'their own submission. Sees the Subcontractor and Readiness tabs.'],
   ['manager','Manager',
-   'Confirms or rejects a submitted list, <b>issues the week</b> and <b>issues a revision</b>. '
-   + 'Confirming is what makes trucks plannable.'],
+   'Confirms or rejects a submitted list on the <b>Approvals</b> tab, where every declared '
+   + 'row sits next to what the GPS says about the same truck. Confirming is what makes '
+   + 'trucks plannable.'],
   ['planner','Planner',
    'The top of the chain. Everything a manager may do, plus the Planner itself and the '
    + 'Monitor, so the person who issues a day can see how it went.'],
@@ -310,7 +325,7 @@ function drawUsers(){
     return '<tr data-id="' + u.id + '">'
       + '<td class="uname">' + esc(u.username) + '</td>'
       + '<td><span class="rb r-' + esc(u.role || 'monitor') + '">'
-        + esc(u.role || 'monitor') + '</span></td>'
+        + esc(u.role || 'monitor') + '</span>' + orgTag(u.role || 'monitor') + '</td>'
       + '<td>' + (u.role === 'subcontractor'
           ? (u.subcontractor_id ? esc(subName(u.subcontractor_id))
              : '<span class="err">not set</span>') : '<span class="tiny">—</span>') + '</td>'
@@ -437,10 +452,17 @@ $('#permAll').onclick = () => { document.querySelectorAll('.p-tab').forEach(b =>
 $('#permNone').onclick = () => { document.querySelectorAll('.p-tab').forEach(b => b.checked = false); };
 
 // ── roles ───────────────────────────────────────────────────────────────────
+function orgTag(role){
+  const o = ORG[role];
+  if (!o) return '';
+  return '<span class="rb" style="background:' + o[1] + ';color:' + o[2]
+    + ';margin-left:6px">' + esc(o[0]) + '</span>';
+}
 function drawRoles(){
   $('#rolesList').innerHTML = ROLES.map(r =>
     '<div class="role-row"><div><span class="rb r-' + r[0] + '">' + esc(r[1]) + '</span>'
-    + '<div class="who">' + r[0] + '</div></div>'
+    + '<div class="who">' + r[0] + '</div>'
+    + '<div style="margin-top:5px">' + orgTag(r[0]) + '</div></div>'
     + '<div class="role-can">' + r[2] + '</div></div>').join('');
 
   const counts = {};
