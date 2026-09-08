@@ -37,6 +37,7 @@
   function DayPick(opts) {
     this.sel = opts.select;
     this.detail = !!opts.detail;
+    this.source = opts.source || 'sheet';
     this.onPick = opts.onPick || function () {};
     this.rows = [];
     this.today = null;
@@ -52,6 +53,14 @@
       if (!r.lists) return head + (r.today ? '  ·  new sheet' : '');
       var st = r.states.join('/');
       return head + '  ·  ' + r.trucks + ' trucks  ·  ' + st;
+    }
+    if (this.source === 'run'){
+      var run = [];
+      if (r.latest) run.push('NOW');
+      if (r.today && !r.latest) run.push('today');
+      run.push(r.trucks ? (r.trucks + ' due at the mine') : 'nothing due');
+      if (r.trucks) run.push(r.issued ? 'plan issued' : 'not issued yet');
+      return head + '  ·  ' + run.join('  ·  ');
     }
     var bits = [];
     if (r.latest) bits.push('LATEST');
@@ -80,8 +89,16 @@
     return this.sel.value;
   };
 
+  /* Two kinds of day, and they are not interchangeable.
+   *   'sheet' - the day a sheet was SENT. What the declaration, the supervisor
+   *             and the manager work on, because they work on sheets.
+   *   'run'   - the day trucks reach the mine. What the planner and the monitor
+   *             watch, because that is when anything happens.
+   * Feeding one a list of the other is the fault this whole picker exists to
+   * stop, so the source is named rather than assumed. */
   DayPick.prototype.load = function (want) {
     var self = this;
+    if (this.source === 'run') return this.loadRun(want);
     return fetch('/api/shift/dates').then(function (r) { return r.json(); })
       .then(function (j) {
         self.rows = j.dates || [];
@@ -91,6 +108,36 @@
       }).catch(function () {
         // Never leave the page without a day: a picker with nothing in it is
         // worse than a calendar.
+        var t = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+        self.rows = [{date: t, lists: 0, trucks: 0, companies: [], states: [],
+                      waiting: 0, amend: 0, today: true, latest: false}];
+        self.today = t;
+        return self.render(t);
+      });
+  };
+
+  DayPick.prototype.loadRun = function (want) {
+    var self = this;
+    return fetch('/api/shift/plan-day').then(function (r) { return r.json(); })
+      .then(function (j) {
+        var days = j.days || [];
+        self.today = j.today;
+        // The day being worked: the one the planner's own answer points at.
+        self.latest = j.date || null;
+        self.rows = days.map(function (d) {
+          return {date: d.date, lists: d.trucks ? 1 : 0, trucks: d.trucks,
+                  companies: [], states: d.issued ? ['issued'] : ['not issued yet'],
+                  waiting: 0, amend: 0, today: d.date === j.today,
+                  latest: d.date === j.date, issued: !!d.issued};
+        });
+        if (!self.rows.some(function (r2) { return r2.date === j.today; })) {
+          self.rows.push({date: j.today, lists: 0, trucks: 0, companies: [],
+                          states: [], waiting: 0, amend: 0, today: true,
+                          latest: false, issued: false});
+          self.rows.sort(function (x, y) { return x.date < y.date ? 1 : -1; });
+        }
+        return self.render(want);
+      }).catch(function () {
         var t = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
         self.rows = [{date: t, lists: 0, trucks: 0, companies: [], states: [],
                       waiting: 0, amend: 0, today: true, latest: false}];

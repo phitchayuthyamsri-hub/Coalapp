@@ -2087,9 +2087,15 @@ def plan_day():
             day, why = ahead[0], "next day with trucks due"
         else:
             day, why = max(days), "most recent day with trucks"
+    # Enough for a picker to label each day: how many are due, and whether the
+    # planner has issued it. These are RUN days - the day trucks reach the mine -
+    # which is not the same list as the days sheets were sent under.
+    issued = set()
+    for snap in PlanSnapshot.query.filter(PlanSnapshot.day.isnot(None)).all():
+        issued.add(snap.day)
     return jsonify(date=day, trucks=days[day], why=why, today=today,
-                   days=[{"date": d, "trucks": n}
-                         for d, n in sorted(days.items())])
+                   days=[{"date": d, "trucks": n, "issued": d in issued}
+                         for d, n in sorted(days.items(), reverse=True)])
 
 
 @bp.get("/suggest")

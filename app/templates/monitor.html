@@ -139,11 +139,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/tool">Tool</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
+<script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
 <main>
   <div class="card sticky">
     <div class="row">
       <label class="f">Day at the mine &mdash; when the trucks run
-        <input type="date" id="day"></label>
+        <select id="day"></select></label>
       <label class="f">Shift<select id="shift"></select></label>
       <label class="f">Company<select id="sub"></select></label>
       <button id="run">Refresh</button>
@@ -174,6 +175,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const jget = async u => (await fetch(u)).json();
+let PICKER = null;
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
 let TIMER = null, SUBID = '';
 
@@ -447,7 +449,7 @@ function arm(){
   if ($('#auto').checked) TIMER = setInterval(run, 60000);
 }
 
-$('#day').onchange = run;
+// #day is a DayPick now: it calls run() through onPick.
 $('#shift').onchange = run;
 $('#sub').onchange = run;
 $('#run').onclick = run;
@@ -456,9 +458,10 @@ $('#auto').onchange = arm;
 (async function(){
   $('#day').value = todayStr();
   try {
-    const l = await jget('/api/shift/plan-day');
-    if (l && l.date) $('#day').value = l.date;
-    if (l && l.subcontractor_id) SUBID = String(l.subcontractor_id);
+    // Run days, not sheet days: this page watches what happened at the mine.
+    PICKER = new DayPick({select: $('#day'), detail: true, source: 'run',
+                          onPick: () => run()});
+    await PICKER.load(null);
   } catch (e) { /* fall back to today */ }
   await loadConfig();
   await run();

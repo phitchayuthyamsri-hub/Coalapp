@@ -257,6 +257,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/tool">Tool</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
+<script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
 <main>
 
 <section id="tab-revision">
@@ -268,8 +269,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
            the field the rest of the page reads and writes, now hidden - the
            "trucks are due on other days" chips still move the view, which is
            navigation rather than a date to be picked. -->
-      <input type="date" id="day" hidden>
-      <div class="f">Day at the mine<div id="dayLabel" class="dayLabel">&mdash;</div></div>
+      <label class="f">Day at the mine<select id="day"></select></label>
       <label class="f">Company<select id="sub"></select></label>
       <button id="run">Recalculate</button>
       <div class="stats" id="stats"></div>
@@ -725,7 +725,7 @@ async function run(){
           + '</div>' : '')
       + '</div>';
     document.querySelectorAll('#body .jump').forEach(b => b.onclick = () => {
-      setDay(b.dataset.d, 'chosen'); run();
+      $('#day').value = b.dataset.d; run();
     });
     measure();
     return;
@@ -1218,32 +1218,7 @@ $('#saveSet').onclick = async function(){
 // One place that writes the day, so the caption can never drift from the plan
 // on screen. `why` is what the server called this day; it is shown only when it
 // is not simply today, so the normal case stays quiet.
-let DAY_WHY = '';
-function setDay(d, why){
-  $('#day').value = d;
-  if (why !== undefined) DAY_WHY = why || '';
-  paintDay();
-}
-function paintDay(){
-  const d = $('#day').value;
-  const el = $('#dayLabel');
-  if (!el) return;
-  if (!d){ el.textContent = '—'; return; }
-  const dt = new Date(d + 'T00:00');
-  const txt = dt.toLocaleDateString('en-GB',
-      {weekday:'short', day:'2-digit', month:'short', year:'numeric'});
-  const t = todayStr();
-  // Stepped in UTC on purpose: a local-midnight Date pushed through
-  // toISOString() lands on the wrong side of the day for anyone east of
-  // Greenwich, which is everyone here.
-  const tomorrow = new Date(Date.parse(t + 'T00:00:00Z') + 86400000)
-                     .toISOString().slice(0, 10);
-  const rel = d === t ? 'today' : d === tomorrow ? 'tomorrow'
-            : (d > t ? 'ahead' : 'past');
-  el.innerHTML = esc(txt) + '<span class="when">' + esc(rel)
-               + (DAY_WHY && DAY_WHY !== 'due today' ? ' · ' + esc(DAY_WHY) : '')
-               + '</span>';
-}
+let DAY_WHY = '', PICKER = null;
 
 // A confirmed list is the planner's cue: it is the moment trucks become
 // approved, and approved is what a day is built from. Polled rather than pushed
@@ -1380,11 +1355,11 @@ $('#run').onclick = run;
   // Not /api/shift/latest: that answers "which readiness sheet is being worked",
   // which is today's, while the trucks on it reach the mine tomorrow. Opening
   // there showed an empty plan next to a full sheet.
-  setDay(todayStr(), '');
-  try {
-    const l = await jget('/api/shift/plan-day');
-    if (l && l.date) setDay(l.date, l.why);
-  } catch (e) { /* fall back to today */ }
+  // The days trucks are actually due, each saying how many and whether it has
+  // been issued. The plan is made day to day, so this is the whole of it.
+  PICKER = new DayPick({select: $('#day'), detail: true, source: 'run',
+                        onPick: () => run()});
+  await PICKER.load(null);
   $('#wStart').value = $('#day').value;   // the week the readiness date sits in
   await loadSubs();
   await loadSettings();
