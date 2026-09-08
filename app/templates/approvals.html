@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Approvals</title>
+<title>Managers · Approval page</title>
 <style>
   :root{ --bg:#0b1020; --panel:#121a2e; --panel2:#182238; --line:#243352;
          --txt:#e8ecf5; --mut:#8b97ad; --acc:#2dd4bf; --amber:#ffb020;
@@ -78,8 +78,9 @@
 if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
 </script>
 <header>
-  <div><h1>Approvals</h1>
-    <div class="sub">what the supervisor sent, and what the GPS says about it</div></div>
+  <div><h1>Managers</h1>
+    <div class="sub">approval page &mdash; what the supervisor sent, and what the GPS
+      says about it</div></div>
   <div class="spacer"></div>
   <a href="/ops">Operations</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
@@ -250,7 +251,7 @@ $('#reload').onclick = load;
   try { me = await jget('/api/me'); } catch (e) {}
   $('#who').textContent = (me.username || '') + (me.role ? ' · ' + me.role : '');
   // The sheet's own date, which is the day it was sent - the same field the
-  // Readiness board shows. Opening on tomorrow looked for a sheet that will not
+  // Supervisor page shows. Opening on tomorrow looked for a sheet that will not
   // exist until tomorrow.
   $('#day').value = todayStr();
   await load();

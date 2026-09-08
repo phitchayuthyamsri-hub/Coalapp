@@ -530,7 +530,7 @@ $('#save').onclick = async function(){
       headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Save failed');
-    m.textContent = 'Saved. The supervisor sees it on the Readiness board.';
+    m.textContent = 'Saved. The supervisor sees it on their page.';
     m.className = 'msg ok';
   } catch (e) {
     m.textContent = e.message || 'Save failed'; m.className = 'msg err';

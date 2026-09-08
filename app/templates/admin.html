@@ -185,7 +185,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const TABS = [
-  ["ops","Operations (Readiness / Planner / Monitor)"],
+  ["ops","Operations (Subcontractor / Supervisor / Managers / Planner / Monitor)"],
   ["perf","Performance"],["daily","Daily performance"],["pva","Plan vs Actual"],
   ["subfleet","Subcontractor fleet status"],["anchors","Parameter"],["data","Sequence/Route"],
   ["timeline","Timeline"],
@@ -226,9 +226,9 @@ const ROLES = [
    'Watches the day against the issued plan. <b>Receives the revision notice.</b>'],
   ['supervisor','Supervisor',
    'Builds the readiness list, <b>sets arrival times</b> and submits it. Cannot approve '
-   + 'their own submission. Sees the Subcontractor and Readiness tabs.'],
+   + 'their own submission. Sees the Subcontractor and Supervisor tabs.'],
   ['manager','Manager',
-   'Confirms or rejects a submitted list on the <b>Approvals</b> tab, where every declared '
+   'Confirms or rejects a submitted list on the <b>Managers</b> tab, where every declared '
    + 'row sits next to what the GPS says about the same truck. Confirming is what makes '
    + 'trucks plannable.'],
   ['planner','Planner',
