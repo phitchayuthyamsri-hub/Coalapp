@@ -426,7 +426,7 @@ def _duplicate_of(dl):
     return q.order_by(DailyList.list_date.desc()).first()
 
 
-def _declared_row(r, list_id, prior_state):
+def _declared_row(r, list_id, prior_state, prior=None):
     """A declaration - however it arrived - as one row.
 
     There are two ways in: the subcontractor types it on their page, or they
@@ -437,27 +437,38 @@ def _declared_row(r, list_id, prior_state):
     Keys are the parser's, because that is the shape the template defines.
     Status carries the leg while a truck is working and the reason when it is
     not, so it is what decides `ready`.
+
+    `prior` is the row as it stands. A caller that does not MENTION a field
+    keeps whatever is there - it is not saying "make it blank". The supervisor's
+    board sends ticks and timings and nothing else, and without this every save
+    from it erased the company's own answers: fifty-eight declared statuses
+    wiped by somebody ticking a box.
     """
+    def keep(key, attr, *aliases):
+        for k in (key,) + aliases:
+            if k in r:
+                return (r.get(k) or "")
+        return (getattr(prior, attr, "") or "") if prior is not None else ""
+
     plate = (r.get("plate") or "").strip()
-    status = (r.get("activity") or r.get("status_text") or "").strip()
+    status = (keep("activity", "note", "status_text") or "").strip()
     runs = readiness_import.is_running(status)
     st = prior_state if prior_state in ("pending", "applied", "approved", "denied") \
         else "pending"
     return DailyListRow(
         list_id=list_id, plate=plate, key=engine.norm_plate(plate),
         ready=bool(runs), state=st,
-        location=(r.get("location") or "")[:60],
+        location=keep("location", "location")[:60],
         # The load state, which is what this column was always documented as.
-        sheet_status=(r.get("status") or r.get("load") or "")[:30],
+        sheet_status=keep("status", "sheet_status", "load", "sheet_status")[:30],
         # Their own words for why it is not running, kept verbatim: "Maintenace"
         # is what they wrote and what they will ask about.
         reason=("" if runs else (status or "not running")[:300]),
-        arrive_date=(r.get("arrive_date") or "")[:10],
-        arrive_hhmm=(r.get("arrive_time") or r.get("arrive_hhmm")
-                     or r.get("arrive") or "")[:5],
-        back_in_service=(r.get("back_in_service") or "")[:10],
-        remark=(r.get("remark") or "")[:300],
-        note=(status or r.get("remark") or "")[:300]), runs
+        arrive_date=keep("arrive_date", "arrive_date")[:10],
+        arrive_hhmm=keep("arrive_time", "arrive_hhmm", "arrive_hhmm", "arrive")[:5],
+        back_in_service=keep("back_in_service", "back_in_service")[:10],
+        remark=keep("remark", "remark")[:300],
+        note=(status or keep("remark", "remark"))[:300]), runs
 
 
 def _list_payload(dl, day):
@@ -710,9 +721,11 @@ def upload():
              for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
     DailyListRow.query.filter_by(list_id=dl.id).delete()
 
+    before = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
     running = 0
     for r in rows:
-        row, runs = _declared_row(r, dl.id, prior.get(r["key"], "pending"))
+        row, runs = _declared_row(r, dl.id, prior.get(r["key"], "pending"),
+                                  before.get(r["key"]))
         if runs:
             running += 1
         db.session.add(row)
@@ -2433,14 +2446,17 @@ def save_list():
     # the page. The tick is intent; the state is where the row actually is.
     prior = {r.key: (r.state or "pending")
              for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    # The rows as they stand, so a field this caller never mentions survives.
+    before = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
     DailyListRow.query.filter_by(list_id=dl.id).delete()
     for r in incoming:
         # Same mapping as an uploaded sheet. The old code here read "arrive"
         # while the parser produced "arrive_time", so a time typed on the board
         # was stored and a time from a sheet was not - or the other way about,
         # depending which page you were on.
-        row, _runs = _declared_row(
-            r, dl.id, prior.get(engine.norm_plate((r.get("plate") or "").strip()), "pending"))
+        key = engine.norm_plate((r.get("plate") or "").strip())
+        row, _runs = _declared_row(r, dl.id, prior.get(key, "pending"),
+                                   before.get(key))
         if "ready" in r:
             row.ready = bool(r.get("ready"))
         db.session.add(row)

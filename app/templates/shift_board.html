@@ -823,8 +823,16 @@ function collectRows(){
     // Ticked = send it. Unticked = hold as pending; a row already rejected stays
     // rejected until someone ticks it again.
     let st = cb.checked ? 'approved' : (prev.state === 'denied' ? 'denied' : 'pending');
+    // Send the declaration back as well as the tick. The server keeps what it
+    // is not told about, so this is belt and braces - but a save that carries
+    // the whole row is one that can be read on its own, and the last time these
+    // two disagreed it cost fifty-eight declared statuses.
     rows.push({plate: prev.plate, ready: cb.checked, state: st,
-               location: prev.location || '', sheet_status: prev.sheet_status || '',
+               activity: prev.note || prev.reason || '',
+               status: prev.sheet_status || '',
+               location: prev.location || '',
+               back_in_service: prev.back_in_service || '',
+               remark: prev.remark || '',
                arrive_date: document.querySelector('.r-adate[data-i="'+i+'"]').value.trim(),
                arrive: document.querySelector('.r-arrive[data-i="'+i+'"]').value.trim(),
                reason: document.querySelector('.r-reason[data-i="'+i+'"]').value.trim()});
