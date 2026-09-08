@@ -16,17 +16,20 @@ HEADER_MAP = {
     "no": "no", "stt": "no",
     "plate": "plate", "licenseplate": "plate", "bienso": "plate", "truck": "plate",
     "location": "location", "vitri": "location",
-    # Status is the leg the truck is on - FH out, BH back. It says nothing about
-    # whether the truck is available, so it is NOT what decides that.
-    "status": "status", "trangthai": "status", "leg": "status",
-    # Availability has a column of its own: blank means the truck is running,
-    # and anything in it is the reason it is not. Kept on the activity field
-    # because that is what is_running() reads and what older free-text sheets
-    # filled in, so both shapes still work.
+    # One Status column now answers both questions: FH or BH while the truck is
+    # working, and the reason it is not when it is not. So Status is what
+    # decides availability, and it maps to the field is_running() reads.
+    "status": "activity", "trangthai": "activity", "leg": "activity",
+    "truckstatus": "activity",
+    # Still recognised, for a sheet that keeps the reason in a column of its own.
     "notrunningreason": "activity", "notrunning": "activity",
     "unavailablereason": "activity", "downtimereason": "activity",
     "reason": "activity", "lydo": "activity",
     "activity": "activity", "note": "activity", "ghichu": "activity",
+    # Which leaves the status field for the load state, which is what the column
+    # it feeds - DailyListRow.sheet_status - was always documented as holding.
+    "loadedempty": "status", "loadempty": "status", "loadedorempty": "status",
+    "loadstatus": "status", "cohang": "status",
     "timearrivemine": "arrive_time", "timearrivalmine": "arrive_time",
     "arrivetime": "arrive_time", "giodenmo": "arrive_time",
     # older BBC sheets head these columns "Arrive Mine" / "Entry Mine Date"
