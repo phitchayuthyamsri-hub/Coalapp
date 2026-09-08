@@ -1426,8 +1426,14 @@ def track():
         if aid is None or aid not in seen_anchor:
             blind.add(role)
 
+    # Only what the planner assigned. The approved list is wider than the plan -
+    # a truck with no arrival time is approved but cannot be planned, and the
+    # planner did not send it anywhere. Watching it here asks the monitoring
+    # team to chase a truck nobody dispatched, and marks it late against a time
+    # that was never promised.
+    not_planned = sorted(set(listed) - set(by_plate.keys()))
     rows = []
-    for plate in sorted(set(list(by_plate.keys()) + listed)):
+    for plate in sorted(by_plate.keys()):
         p = by_plate.get(plate)
         plan = (p or {}).get("t") or {}
         vs = sorted(by_plate_visits.get(engine.norm_plate(plate), []),
@@ -1532,6 +1538,9 @@ def track():
     running_early = [r for r in rows if (r["drift"] or 0) < -ON_TIME_MINUTES]
     return jsonify(
         date=day, subcontractor_id=only, source=source, issued=issued,
+        # Named rather than dropped: approved, not dispatched, and the reason is
+        # almost always a missing arrival time on the sheet.
+        not_planned=not_planned, not_planned_count=len(not_planned),
         locations=[{"key": k, "label": l} for k, l, _f, _r, _e in LOC_FH],
         blind=sorted(blind), rows=rows, on_time_minutes=ON_TIME_MINUTES,
         summary={
@@ -2644,11 +2653,19 @@ def board():
 
     # Only trucks actually SENT are monitored. A truck held back as pending was
     # never dispatched, so chasing it through the checkpoints would be nonsense.
-    expected = [r.plate for r in
+    approved = [r.plate for r in
                 DailyListRow.query.filter(
                     DailyListRow.list_id.in_([x.id for x in confirmed]),
                     DailyListRow.state == "approved")
                 .order_by(DailyListRow.plate).all()]
+    # The shift watches what the planner dispatched, for the same reason the
+    # table above it does: a truck the plan never included was not sent, and
+    # counting it as missed at a checkpoint blames a company for a truck nobody
+    # asked to be there. Without an issued plan there is nothing narrower to go
+    # on, so the confirmed list stands in.
+    snap = _issued_for(day, sub_id)
+    planned = {r.get("plate") for r in (snap.rows or [])} if snap else set()
+    expected = [p for p in approved if p in planned] if planned else approved
     if not expected:
         return jsonify(
             date=day, shift={"id": shift.id, "name": shift.name,

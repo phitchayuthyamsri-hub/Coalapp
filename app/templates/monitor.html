@@ -108,6 +108,45 @@
   td.tel .ph{margin-left:6px;font-size:9.5px;color:var(--warn);
         text-transform:uppercase;letter-spacing:.3px}
 
+  #trackTable th.hd{cursor:pointer;position:relative;padding-right:15px}
+  #trackTable th.hd:hover{background:#1d2a44}
+  #trackTable th.filt-on{color:var(--acc)}
+  #trackTable th.filt-on .harrow{color:var(--acc)}
+  #trackTable .harrow{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+                      font-size:9px;color:var(--mut)}
+  #trackTable .hl{display:block}
+  #trackTable .hsort{margin-left:4px;color:var(--acc);font-size:9px}
+  .col-menu{position:absolute;z-index:10000;background:var(--panel);
+            border:1px solid var(--line);border-radius:10px;width:250px;
+            box-shadow:0 12px 34px rgba(0,0,0,.55);display:flex;flex-direction:column;
+            max-height:70vh;overflow:hidden}
+  .col-menu .cm-sort{display:flex;border-bottom:1px solid var(--line)}
+  .col-menu .cm-sort button{flex:1;padding:8px 6px;border:none;background:none;
+      cursor:pointer;font-size:11.5px;color:var(--txt);font-weight:600;font-family:inherit}
+  .col-menu .cm-sort button:hover{background:var(--panel2)}
+  .col-menu .cm-sort2 button{font-size:10.5px;color:var(--mut);font-weight:500}
+  .col-menu .cm-seq-in{padding:7px 9px;border-bottom:1px solid var(--line);
+                       background:var(--panel2);line-height:1.8;font-size:10.5px}
+  .col-menu .cm-seq-tag{display:inline-block;background:#1d3350;border-radius:7px;
+                        padding:0 6px;margin-right:3px;font-weight:700;color:#5ac8fa}
+  .col-menu .cm-seq-in button{margin-top:6px;width:100%;padding:4px;font-size:10.5px;
+      border:1px solid var(--line);background:none;border-radius:5px;cursor:pointer;
+      color:var(--bad);font-weight:700;font-family:inherit}
+  .col-menu .cm-search{margin:8px 9px 5px;padding:6px 9px;background:#0b1020;
+      border:1px solid var(--line);border-radius:7px;font-size:11.5px;color:var(--txt);
+      font-family:inherit;outline:none}
+  .col-menu .cm-list{overflow-y:auto;padding:2px 5px;flex:1 1 auto;min-height:60px}
+  .col-menu .cm-item{display:flex;align-items:center;gap:8px;font-size:11.5px;
+      padding:4px 7px;border-radius:5px;cursor:pointer;color:var(--txt)}
+  .col-menu .cm-item:hover{background:var(--panel2)}
+  .col-menu .cm-item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .col-menu .cm-item i{color:var(--mut);font-style:normal;font-size:10px}
+  .col-menu .cm-actions{display:flex;gap:6px;padding:8px 9px;border-top:1px solid var(--line)}
+  .col-menu .cm-actions button{flex:1;padding:6px 0;font-size:11.5px;
+      border:1px solid var(--line);border-radius:6px;background:none;color:var(--txt);
+      cursor:pointer;font-family:inherit}
+  .col-menu .cm-actions .cm-apply{background:var(--acc);color:#04201c;
+      border-color:var(--acc);font-weight:700}
   .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .seg button{background:transparent;border:0;border-radius:0;color:var(--mut);
               padding:5px 13px;font-size:12.5px;line-height:1.25;text-align:center}
@@ -140,6 +179,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <a href="/logout" style="color:var(--mut)">Log out</a>
 </header>
 <script src="/static/daypick.js?v={{ asset_v('daypick.js') }}"></script>
+<script src="/static/tableview.js?v={{ asset_v('tableview.js') }}"></script>
 <main>
   <div class="card sticky">
     <div class="row">
@@ -177,7 +217,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
 const jget = async u => (await fetch(u)).json();
 let PICKER = null;
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
-let TIMER = null, SUBID = '', SUBS = [];
+let TIMER = null, SUBID = '', SUBS = [], TV = null;
 
 const stat = (n, l, c) =>
   '<div class="stat"><div class="n" style="color:' + (c || 'var(--txt)') + '">' + n + '</div>'
@@ -309,14 +349,37 @@ function drawTrack(){
     + '<span><b class="t-est">~14:24</b> <i>estimate, not confirmed</i></span>'
     + '<span><b style="color:var(--mut)">&mdash;</b> <i>nothing planned or seen</i></span>'
     + '</div>';
+  // Sort and filter on the columns that are one value per truck. The place
+  // columns are pairs under a shared heading - a plan and an actual - and a
+  // menu on half of a pair would sort the table by one of two times that only
+  // mean anything together.
+  const whereOf = r => r.last_seen ? r.last_seen.place
+                     : (r.enroute ? 'on the road' : 'not seen');
+  if (!TV){
+    TV = new TableView({
+      cols: [
+        {key:'plate', label:'Truck',       rowspan:2},
+        {key:'phone', label:'Phone',       rowspan:2, get: r => r.phone || ''},
+        {key:'sub',   label:'Sub',         rowspan:2, get: r => r.sub || ''},
+        {key:'where', label:'Where it is', rowspan:2, get: whereOf}
+      ],
+      onChange: () => drawTrack()
+    });
+  }
+  TV.rows = d.rows;
+  const view = TV.view(d.rows);
+  const hidden = d.rows.length - view.length;
+
   $('#track').innerHTML = key +
-    '<table class="grid"><thead>'
-    + '<tr><th rowspan="2">Truck</th><th rowspan="2">Phone</th><th rowspan="2">Sub</th>'
+    '<table class="grid" id="trackTable"><thead>'
+    + '<tr>' + TV.head(TV.cols[0]) + TV.head(TV.cols[1]) + TV.head(TV.cols[2])
     + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
-    + '<th rowspan="2">Where it is</th></tr>'
+    + TV.head(TV.cols[3]) + '</tr>'
     + '<tr>' + locs.map(() => '<th class="sub2">Plan</th><th class="sub2">Actual</th>').join('')
     + '</tr></thead><tbody>'
-    + d.rows.map(function(r){
+    + view.map(function(i){
+        const r = d.rows[i];
+        return (function(r){
         const cs = LEG === 'bh' ? r[LEG].slice().reverse() : r[LEG];
         const where = r.last_seen
           ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
@@ -332,8 +395,15 @@ function drawTrack(){
               + (c.plan ? clock(c.plan) : '<span style="color:var(--mut)">&mdash;</span>')
               + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>').join('')
           + '<td>' + where + '</td></tr>';
+        })(r);
       }).join('')
-    + '</tbody></table>';
+    + '</tbody></table>'
+    + (hidden > 0 ? '<div class="empty" style="margin-top:6px">' + hidden
+        + ' truck(s) hidden by a filter.</div>' : '')
+    + (d.not_planned_count ? '<div class="empty" style="margin-top:6px">'
+        + d.not_planned_count + ' approved truck(s) are not in the issued plan, so they '
+        + 'are not watched here: ' + esc((d.not_planned || []).join(', ')) + '</div>' : '');
+  TV.wire(document.getElementById('trackTable'));
   measure();
 }
 

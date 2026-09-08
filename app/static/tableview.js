@@ -105,8 +105,9 @@
     var badge = lv < 0 ? ''
       : '<span class="hsort">' + (this.sortSeq[lv].asc ? '▲' : '▼')
         + (this.sortSeq.length > 1 ? (lv + 1) : '') + '</span>';
-    return '<th data-col="' + esc(col.key) + '" class="hd'
-      + (this.active(col.key) ? ' filt-on' : '') + '">'
+    return '<th data-col="' + esc(col.key) + '"'
+      + (col.rowspan ? ' rowspan="' + col.rowspan + '"' : '')
+      + ' class="hd' + (this.active(col.key) ? ' filt-on' : '') + '">'
       + '<span class="hl">' + esc(col.label) + badge + '</span>'
       + (col.hint ? '<span class="hh">' + esc(col.hint) + '</span>' : '')
       + '<span class="harrow">▾</span></th>';
