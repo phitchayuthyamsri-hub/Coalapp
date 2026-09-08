@@ -98,6 +98,33 @@ def capture_page():
                            maps_key=current_app.config.get("GOOGLE_MAPS_KEY", ""))
 
 
+@bp.route("/truck-trail")
+@login_required
+def truck_trail_page():
+    """One truck, one day and a bit, on its own page.
+
+    The capture page is a control room: every provider, every truck, a pull
+    button. Somebody checking a single declaration wants none of that - they
+    want that truck, yesterday to now, and nothing else on the screen to read.
+    """
+    from .models import GpsPing
+    from . import engine as _eng
+    plate = (request.args.get("plate") or "").strip()
+    if not plate:
+        abort(404)
+    if not _in_scope(plate, _gps_scope()):
+        abort(403)
+    # Which provider last saw it, so the page does not have to ask.
+    key = _eng.norm_plate(plate)
+    src = ""
+    for g in (GpsPing.query.order_by(GpsPing.dt.desc()).limit(4000).all()):
+        if _eng.norm_plate(g.plate) == key:
+            src = g.source or ""
+            break
+    return render_template("truck_trail.html", plate=plate, source=src,
+                           maps_key=current_app.config.get("GOOGLE_MAPS_KEY", ""))
+
+
 @bp.get("/api/gps/status")
 @login_required
 def gps_status():

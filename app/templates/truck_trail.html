@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ plate }} · GPS trail</title>
+<style>
+  :root{ --bg:#0b1020; --panel:#121a2e; --panel2:#182238; --line:#243352;
+         --txt:#e8ecf5; --mut:#8b97ad; --acc:#2dd4bf; --amber:#ffb020;
+         --red:#ff6b60; --grn:#34c759; --blue:#5ac8fa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);flex-wrap:wrap}
+  h1{font-size:18px;margin:0;letter-spacing:.5px}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:14px 18px;max-width:1500px;margin:0 auto}
+  .bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:var(--panel);
+       border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:12px}
+  .f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mut)}
+  input[type=datetime-local],select{background:var(--panel2);color:var(--txt);
+      border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;
+      font-size:12px;color-scheme:dark}
+  button{background:var(--acc);color:#04201c;border:0;border-radius:8px;padding:8px 16px;
+         font-weight:700;cursor:pointer;font:inherit}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--txt);font-weight:600}
+  .stat{display:flex;gap:26px;flex-wrap:wrap;margin-left:auto}
+  .stat div{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  .stat b{display:block;font-size:19px;color:var(--txt);font-weight:700;letter-spacing:0;
+          text-transform:none}
+  #map{height:66vh;min-height:420px;border-radius:12px;border:1px solid var(--line);
+       background:var(--panel2)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;color:var(--mut);font-size:11.5px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;
+            vertical-align:-1px}
+  .note{padding:11px 14px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
+  .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
+  .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+  .msg{font-size:12.5px;color:var(--mut)}
+</style>
+{% if maps_key %}
+<script>
+  function initGMaps(){ window._gmapsReady = true;
+    if (window._afterMaps) window._afterMaps(); }
+</script>
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ maps_key }}&callback=initGMaps"></script>
+{% endif %}
+</head>
+<body>
+<header>
+  <div>
+    <h1>{{ plate }}</h1>
+    <div class="sub" id="who">where it has been</div>
+  </div>
+  <div class="spacer"></div>
+  <a href="#" onclick="window.close();return false;">Close</a>
+</header>
+<main>
+  <div class="bar">
+    <label class="f">From<input type="datetime-local" id="from"></label>
+    <label class="f">To<input type="datetime-local" id="to"></label>
+    <button id="go">Show trail</button>
+    <button class="ghost" id="reset">Yesterday &rarr; now</button>
+    <div class="stat" id="stat"></div>
+  </div>
+  <div id="notes"></div>
+  <div id="map"></div>
+  <div class="legend">
+    <span><i style="background:#1f7a4d"></i>first seen</span>
+    <span><i style="background:#c4231f"></i>last seen</span>
+    <span><i style="background:#0071e3"></i>the run</span>
+    <span><i style="background:#ffb020"></i>stopped over 30 min</span>
+    <span><i style="background:#8b97ad"></i>geofence</span>
+  </div>
+  <div class="msg" id="msg" style="margin-top:10px"></div>
+</main>
+<script>
+const PLATE = {{ plate|tojson }};
+const SOURCE = {{ source|tojson }};
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const p2 = n => (n < 10 ? '0' : '') + n;
+const localInput = d => d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate())
+  + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+
+let MAP = null, LAYER = [], INFO = null;
+
+// Yesterday 00:01 to now. Not "the last 24 hours": a whole calendar day plus
+// today is what somebody means when they ask where a truck has been, and it
+// does not slide about depending on when the page is opened.
+function defaultWindow(){
+  const now = new Date();
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 1, 0);
+  return [localInput(y), localInput(now)];
+}
+
+function dot(colour, r){
+  return {path: google.maps.SymbolPath.CIRCLE, scale: r || 5, fillColor: colour,
+          fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.4};
+}
+function clearLayer(){ LAYER.forEach(o => o.setMap(null)); LAYER = []; }
+
+function ensureMap(){
+  if (MAP || !window.google || !google.maps) return MAP;
+  MAP = new google.maps.Map($('#map'), {
+    center: {lat: 16.1, lng: 107.3}, zoom: 8, mapTypeControl: false,
+    streetViewControl: false, fullscreenControl: true
+  });
+  INFO = new google.maps.InfoWindow();
+  drawFences();
+  return MAP;
+}
+
+// The corridor drawn behind the trail, so "it was at the border" is something
+// you can see rather than something you have to take on trust.
+async function drawFences(){
+  try {
+    const list = await (await fetch('/api/anchors')).json();
+    (list || []).forEach(a => {
+      if (!a.polygon || !a.polygon.length) return;
+      const poly = new google.maps.Polygon({
+        paths: a.polygon.map(p => ({lat: +p[0], lng: +p[1]})),
+        map: MAP, strokeColor: '#8b97ad', strokeOpacity: .6, strokeWeight: 1,
+        fillColor: '#8b97ad', fillOpacity: .10, clickable: false
+      });
+      const b = new google.maps.LatLngBounds();
+      a.polygon.forEach(p => b.extend({lat: +p[0], lng: +p[1]}));
+      new google.maps.Marker({position: b.getCenter(), map: MAP, clickable: false,
+        icon: {path: google.maps.SymbolPath.CIRCLE, scale: 0},
+        label: {text: a.name || '', color: '#8b97ad', fontSize: '11px',
+                fontWeight: '600'}});
+    });
+  } catch (e) { /* the trail matters more than the scenery */ }
+}
+
+function hhmm(s){ return String(s || '').slice(11, 16); }
+
+async function load(){
+  const f = $('#from').value, t = $('#to').value;
+  if (!f || !t){ $('#msg').textContent = 'Set both dates.'; return; }
+  $('#msg').textContent = 'Loading…';
+  $('#notes').innerHTML = '';
+  let j;
+  try {
+    const q = '?plate=' + encodeURIComponent(PLATE)
+      + (SOURCE ? '&source=' + encodeURIComponent(SOURCE) : '')
+      + '&from=' + encodeURIComponent(f) + '&to=' + encodeURIComponent(t);
+    const r = await fetch('/api/gps/trail' + q);
+    j = await r.json();
+    if (!r.ok || !j || j.ok === false) throw new Error((j && j.error) || 'Could not load');
+  } catch (e) {
+    $('#msg').textContent = '';
+    $('#notes').innerHTML = '<div class="note n-warn">' + esc(e.message) + '</div>';
+    return;
+  }
+  draw(j);
+}
+
+function draw(j){
+  const pts = (j.points || []).filter(p => p.lat != null && p.lng != null);
+  $('#msg').textContent = '';
+  $('#stat').innerHTML =
+      '<div>points<b>' + (j.count != null ? j.count : pts.length) + '</b></div>'
+    + '<div>first seen<b>' + (pts.length ? hhmm(pts[0].dt) : '—') + '</b></div>'
+    + '<div>last seen<b>' + (pts.length ? hhmm(pts[pts.length-1].dt) : '—') + '</b></div>'
+    + '<div>distance<b>' + (pts.length ? runKm(pts).toFixed(0) + ' km' : '—') + '</b></div>';
+
+  if (j.note) $('#notes').innerHTML += '<div class="note n-info">' + esc(j.note) + '</div>';
+  if (!pts.length){
+    $('#notes').innerHTML += '<div class="note n-warn"><b>Nothing recorded for '
+      + esc(PLATE) + ' in this window.</b> The provider is pulled every few hours, '
+      + 'so a quiet stretch means no position was collected - not that the truck '
+      + 'stood still.</div>';
+    return;
+  }
+  if (!ensureMap()) return;
+  clearLayer();
+
+  const path = pts.map(p => ({lat: +p.lat, lng: +p.lng}));
+  LAYER.push(new google.maps.Polyline({path: path, map: MAP, strokeColor: '#0071e3',
+    strokeWeight: 3, strokeOpacity: .85}));
+
+  // Where it sat still. A gap of half an hour or more in one place is the part
+  // of a day worth asking about, so it is marked rather than left to be found
+  // by dragging along the line.
+  for (let i = 1; i < pts.length; i++){
+    const a = pts[i-1], b = pts[i];
+    const mins = (Date.parse(b.dt) - Date.parse(a.dt)) / 60000;
+    if (!(mins >= 30)) continue;
+    if (km(a.lat, a.lng, b.lat, b.lng) > 1.5) continue;   // moving, just sparse
+    const m = new google.maps.Marker({position: {lat: +a.lat, lng: +a.lng}, map: MAP,
+      icon: dot('#ffb020', 6)});
+    m.addListener('click', () => {
+      INFO.setContent('<div style="color:#111"><b>Stopped ' + Math.round(mins)
+        + ' min</b><br>' + esc(hhmm(a.dt)) + ' &rarr; ' + esc(hhmm(b.dt)) + '</div>');
+      INFO.open(MAP, m);
+    });
+    LAYER.push(m);
+  }
+
+  [[path[0], '#1f7a4d', 'First seen ' + (pts[0].dt || '')],
+   [path[path.length-1], '#c4231f', 'Last seen ' + (pts[pts.length-1].dt || '')]
+  ].forEach(e => {
+    const m = new google.maps.Marker({position: e[0], map: MAP, icon: dot(e[1], 7)});
+    m.addListener('click', () => {
+      INFO.setContent('<div style="color:#111"><b>' + esc(PLATE) + '</b><br>'
+        + esc(e[2]) + '</div>');
+      INFO.open(MAP, m);
+    });
+    LAYER.push(m);
+  });
+
+  const b = new google.maps.LatLngBounds();
+  path.forEach(p => b.extend(p));
+  MAP.fitBounds(b, 40);
+}
+
+function km(la1, lo1, la2, lo2){
+  const R = 6371, rad = x => x * Math.PI / 180;
+  const dLa = rad(la2 - la1), dLo = rad(lo2 - lo1);
+  const h = Math.sin(dLa/2)**2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(dLo/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function runKm(pts){
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += km(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng);
+  return d;
+}
+
+$('#go').onclick = load;
+$('#reset').onclick = () => { const w = defaultWindow(); $('#from').value = w[0];
+                              $('#to').value = w[1]; load(); };
+
+(function(){
+  const w = defaultWindow();
+  $('#from').value = w[0];
+  $('#to').value = w[1];
+  $('#who').textContent = 'where it has been'
+    + (SOURCE ? ' · ' + SOURCE.replace('api:', '') : '');
+  window._afterMaps = () => { ensureMap(); load(); };
+  if (window._gmapsReady) window._afterMaps();
+  else if (!{{ 'true' if maps_key else 'false' }}) {
+    $('#notes').innerHTML = '<div class="note n-warn">No Google Maps key is '
+      + 'configured, so the map cannot be drawn. The figures above still load.</div>';
+    load();
+  }
+})();
+</script>
+</body>
+</html>

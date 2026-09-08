@@ -421,7 +421,7 @@ function draw(){
     render: {
       plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>'
         + ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
-        + 'yesterday to now" href="/gps-capture?plate=' + encodeURIComponent(r.plate)
+        + 'yesterday to now" href="/truck-trail?plate=' + encodeURIComponent(r.plate)
         + '" onmousedown="event.stopPropagation()">◎</a>',
       gps: (r) => {
         const g = SUGGEST[r.plate] || {};
