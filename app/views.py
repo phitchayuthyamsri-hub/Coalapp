@@ -300,7 +300,12 @@ def _tool_html():
         path = os.path.join(os.path.dirname(__file__), "tool", "index.html")
         with open(path, encoding="utf-8") as f:
             html = f.read()
-        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD + _EVENTS, 1)
+        # A classic script tag, so it BLOCKS parsing and finishes before the
+        # tool's own loaders read localStorage. Async would race them and the
+        # page would come up empty, then silently fill in behind the operator.
+        seed = '<script src="/api/tool/seed.js"></script>'
+        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD + _EVENTS
+                                  + seed, 1)
     return _TOOL_HTML
 
 

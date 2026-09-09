@@ -70,6 +70,8 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(views_bp)
     app.register_blueprint(api_bp)
+    from .tool_link import bp as tool_link_bp
+    app.register_blueprint(tool_link_bp)
 
     # GPS capture routes — isolated; a fault here must never break the main app.
     try:
