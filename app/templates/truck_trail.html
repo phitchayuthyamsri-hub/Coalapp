@@ -163,7 +163,11 @@ async function load(){
 
 function draw(j){
   const pts = (j.points || []).filter(p => p.lat != null && p.lng != null);
-  $('#msg').textContent = '';
+  // A captured trail is thinner than a live one. Saying so is the difference
+  // between "the truck did not go there" and "we did not see it go there".
+  // Set AFTER the clear, not before it, or the clear wins.
+  $('#msg').textContent = j.stored
+    ? ('From captured positions, not a live pull. ' + (j.note || '')) : '';
   $('#stat').innerHTML =
       '<div>points<b>' + (j.count != null ? j.count : pts.length) + '</b></div>'
     + '<div>first seen<b>' + (pts.length ? hhmm(pts[0].dt) : '—') + '</b></div>'

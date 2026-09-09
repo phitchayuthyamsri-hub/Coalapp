@@ -612,18 +612,55 @@ def _trail_viettel(pcfg, plate, begin, end):
             return pts, errors, True
 
 
+def _stored_trail(plate, begin, end):
+    """The trail out of what has already been captured.
+
+    Every position this system has ever seen is in gps_ping. The live pull gives
+    a denser line when the provider answers, but when it does not, showing
+    nothing is indefensible - the answer is sitting in our own table.
+    """
+    from .models import GpsPing
+    from . import engine as _eng
+    key = _eng.norm_plate(plate)
+    rows = (GpsPing.query
+            .filter(GpsPing.dt >= begin, GpsPing.dt <= end)
+            .order_by(GpsPing.dt.asc()).all())
+    return [{"dt": r.dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": r.lat, "lng": r.lng,
+             "speed": r.speed or 0.0}
+            for r in rows if _eng.norm_plate(r.plate) == key]
+
+
 def fetch_trail(app, source, plate, begin, end):
-    """On-demand breadcrumb trail for one truck over a time range (not stored)."""
+    """On-demand breadcrumb trail for one truck over a time range.
+
+    Live from the provider when it can be had, and otherwise from what has
+    already been captured. The result says which, because a sparse stored trail
+    and a dense live one support different conclusions and the person reading
+    the map has to know which they are looking at.
+    """
     cfg = (app.config.get("_GPS_CFG") or {})
     src = source or ""
     key = ("adsun" if "adsun" in src else
            "viettel" if "viettel" in src else
            "tct" if "tct" in src else None)
+
+    def stored(reason):
+        pts = _stored_trail(plate, begin, end)
+        if not pts:
+            return {"ok": False, "error": reason,
+                    "error_detail": "and nothing has been captured for this truck "
+                                    "in that range either"}
+        return {"ok": True, "plate": plate, "source": "captured", "count": len(pts),
+                "points": pts, "stored": True,
+                "note": "%s - showing the %d position(s) already captured, which is "
+                        "every one this system has for that range."
+                        % (reason, len(pts))}
+
     if not key:
-        return {"ok": False, "error": "unknown source"}
+        return stored("no live feed is configured for this truck")
     pcfg = cfg.get(key) or {}
     if not provider_ready(pcfg, key):
-        return {"ok": False, "error": "provider not enabled / missing credentials"}
+        return stored("the live feed is not available")
     max_days = TRAIL_MAX_DAYS.get(key, 3)
     if (end - begin) > timedelta(days=max_days):
         return {"ok": False,
@@ -638,12 +675,19 @@ def fetch_trail(app, source, plate, begin, end):
             note_bits.append("%d window(s) failed: %s" % (len(errors), "; ".join(uniq[:3])))
         if truncated:
             note_bits.append("stopped early at the %ds time budget — narrow the range for the rest" % _TRAIL_DEADLINE_S)
+        if not pts:
+            # The provider answered and had nothing. What we captured earlier is
+            # still better than an empty map.
+            got = stored("the live feed returned nothing for that range")
+            if got.get("ok"):
+                return got
         out = {"ok": True, "plate": plate, "source": source, "count": len(pts), "points": pts}
         if note_bits:
             out["note"] = " · ".join(note_bits)
         return out
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": _err_str(e)}
+        got = stored("the live feed failed: %s" % _err_str(e))
+        return got if got.get("ok") else {"ok": False, "error": _err_str(e)}
 
 
 def status_summary(app):
