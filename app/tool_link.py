@@ -23,6 +23,13 @@ agreeing with us by construction.
 Seeding is synchronous for the three small stores - a classic <script> tag
 blocks parsing, so the tool's own loaders find the data already there - and
 asynchronous for pings, because IndexedDB has no synchronous API.
+
+It writes LOCALLY only. There is an older bridge in views.py that mirrors the
+tool's localStorage into a team-wide KVStore, and seeding through it would push
+whichever account opened the page last over everyone else's view - a
+subcontractor, scoped to their own trucks, would replace the shared fleet with
+their slice of it. So the writes here are wrapped in the bridge's own
+__READONLY__ flag.
 """
 import json
 from datetime import datetime, timedelta
@@ -195,6 +202,14 @@ SEED_JS = r"""
   var FILE_ID = __FILE_ID__;
 
   // ---- the three small stores, written before the app reads them ----------
+  // LOCAL ONLY. The shared-store bridge patches setItem to mirror every write
+  // into a TEAM-WIDE key-value store, so seeding through it would push one
+  // account's view over everybody else's - and a subcontractor, who is scoped
+  // to their own trucks, would replace the whole team's fleet with their slice
+  // of it. __READONLY__ is the bridge's own escape hatch; this is exactly what
+  // it is for.
+  var wasRO = window.__READONLY__;
+  window.__READONLY__ = true;
   try {
     localStorage.setItem(FLEET_KEY, JSON.stringify(SEED.fleet || {}));
     var din = {};
@@ -206,6 +221,7 @@ SEED_JS = r"""
     localStorage.setItem(DIN_KEY, JSON.stringify(din));
     window.__TOOL_SEEDED_AT = SEED.at;
   } catch (e) { console.warn('[tool-link] store seed failed', e); }
+  finally { window.__READONLY__ = wasRO; }
 
   // ---- pings: IndexedDB has no synchronous API, so this lands later -------
   function open() {
