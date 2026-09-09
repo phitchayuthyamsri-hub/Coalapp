@@ -274,7 +274,7 @@ def _ensure_snapshot_schema():
 
 
 def _ensure_truck_schema():
-    """Add Truck.driver to a database created before the column existed."""
+    """Add the Truck columns that arrived after the table first shipped."""
     from sqlalchemy import inspect, text
     insp = inspect(db.engine)
     try:
@@ -283,6 +283,9 @@ def _ensure_truck_schema():
         return
     if "driver" not in cols:
         db.session.execute(text("ALTER TABLE truck ADD COLUMN driver VARCHAR(120) DEFAULT ''"))
+        db.session.commit()
+    if "gps_last_pull" not in cols:
+        db.session.execute(text("ALTER TABLE truck ADD COLUMN gps_last_pull DATETIME"))
         db.session.commit()
 
 

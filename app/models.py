@@ -54,6 +54,11 @@ class Truck(db.Model):
     eff_from = db.Column(db.String(10), default="")  # YYYY-MM-DD
     eff_to = db.Column(db.String(10), default="")
     added = db.Column(db.DateTime, default=datetime.utcnow)
+    # When this truck was last ASKED for, which is not when it last answered.
+    # Pacing on the last ping instead would poll a silent truck hardest, which
+    # is backwards: a truck that has stopped reporting is the one where more
+    # requests achieve least.
+    gps_last_pull = db.Column(db.DateTime, index=True)
 
 
 class GpsPing(db.Model):

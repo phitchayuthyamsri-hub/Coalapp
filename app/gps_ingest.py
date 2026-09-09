@@ -329,6 +329,10 @@ def provider_ready(cfg, key):
     return False
 
 
+class _NothingDue(Exception):
+    """No truck is due this run - not an error, just nothing to ask for."""
+
+
 def _store(pings, source):
     """Insert new pings, skipping (plate, dt) duplicates already stored for this
     source (idempotent — safe to re-poll overlapping windows)."""
@@ -356,7 +360,74 @@ def _store(pings, source):
     return n
 
 
-def run_provider(app, key):
+# How often a truck is worth asking about, in minutes.
+INSIDE_MIN = 5      # in a polygon: loading, crossing, queueing - changes fast
+OUTSIDE_MIN = 30    # between them: driving a known road, position ages slowly
+
+
+def _anchor_polys():
+    from .models import Anchor
+    return [a.polygon for a in Anchor.query.all()
+            if a.polygon and len(a.polygon) >= 3]
+
+
+def due_plates(app, now=None):
+    """Which trucks are due a pull this run.
+
+    Inside a set-up polygon a truck is doing the thing the polygon exists to
+    measure - loading, crossing, queueing at the port - and five-minute detail
+    is what makes those visits detectable at all. Between polygons it is driving
+    a known road, where a position every half hour costs little in accuracy and
+    saves five sixths of the requests.
+
+    A truck with no position yet counts as outside: it gets picked up on the
+    next thirty-minute pass rather than asked for every five.
+    """
+    from .models import GpsPing, Truck
+    from . import engine
+    now = now or datetime.utcnow()
+    polys = _anchor_polys()
+
+    # Latest position per plate, in one pass rather than a query per truck.
+    last = {}
+    for plate, lat, lng, dt in db.session.query(
+            GpsPing.plate, GpsPing.lat, GpsPing.lng, GpsPing.dt
+    ).order_by(GpsPing.dt.asc()).all():
+        last[engine.norm_plate(plate)] = (lat, lng, dt)
+
+    due, inside_n, outside_n = [], 0, 0
+    for t in Truck.query.all():
+        pos = last.get(engine.norm_plate(t.plate))
+        inside = bool(pos) and any(
+            engine.point_in_polygon(pos[0], pos[1], poly) for poly in polys)
+        if inside:
+            inside_n += 1
+        else:
+            outside_n += 1
+        gap = INSIDE_MIN if inside else OUTSIDE_MIN
+        if t.gps_last_pull is None or (now - t.gps_last_pull) >= timedelta(minutes=gap):
+            due.append(t.plate)
+    return {"plates": due, "inside": inside_n, "outside": outside_n,
+            "total": inside_n + outside_n}
+
+
+def _mark_pulled(plates, now=None):
+    from .models import Truck
+    from . import engine
+    if not plates:
+        return
+    now = now or datetime.utcnow()
+    want = {engine.norm_plate(p) for p in plates}
+    for t in Truck.query.all():
+        if engine.norm_plate(t.plate) in want:
+            t.gps_last_pull = now
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def run_provider(app, key, plates=None):
     """Run one provider inside an app context. Returns a result dict and never
     raises — any failure is recorded on the GpsIngestRun row."""
     cfg = (app.config.get("_GPS_CFG") or {})
@@ -371,9 +442,20 @@ def run_provider(app, key):
         elif not provider_ready(pcfg, key):
             err = "provider not enabled / missing credentials"
         else:
+            if plates is not None:
+                # A blank plates list means "every authorised vehicle" to the
+                # adapters, so an empty due list has to stop here rather than
+                # quietly turn into a full pull.
+                if not plates:
+                    raise _NothingDue()
+                pcfg = dict(pcfg, plates=list(plates))
             pings = _CONNECTORS[key](pcfg)
             fetched = len(pings)
             inserted = _store(pings, source)
+            _mark_pulled(plates if plates is not None
+                         else [p["plate"] for p in pings])
+    except _NothingDue:
+        err = ""
     except urllib.error.URLError as e:
         err = "network: " + str(getattr(e, "reason", e))
     except Exception as e:  # noqa: BLE001 - deliberately swallow so a poll can't crash
@@ -390,12 +472,23 @@ def run_provider(app, key):
     return {"provider": key, "fetched": fetched, "inserted": inserted, "error": err}
 
 
-def run_all(app):
+def run_all(app, paced=True):
+    """Every enabled provider, asked only for the trucks that are due.
+
+    `paced=False` restores the old behaviour - ask for everything, every run -
+    which is what a manual "pull now" from the capture page should still do.
+    """
     cfg = (app.config.get("_GPS_CFG") or {})
+    due = due_plates(app) if paced else None
     results = []
     for key in _CONNECTORS:
         if (cfg.get(key) or {}).get("enabled"):
-            results.append(run_provider(app, key))
+            results.append(run_provider(
+                app, key, plates=(due["plates"] if due is not None else None)))
+    if due is not None:
+        for r in results:
+            r.update(due=len(due["plates"]), inside=due["inside"],
+                     outside=due["outside"])
     return results
 
 
