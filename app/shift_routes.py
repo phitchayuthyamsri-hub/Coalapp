@@ -2745,3 +2745,192 @@ def board():
         confirmed_by=dl.confirmed_by,
         role=_role(),
     )
+
+
+# ─── Today at the mine, by company ────────────────────────────────────────────
+# The manager's question once the chain has run: of each company's trucks, how
+# many did the plan send to the mine today, how many did it not - and why - and
+# of the ones it sent, which have not turned up.
+#
+# The day is the day AT THE MINE, not the day the sheet was sent. And a truck the
+# GPS cannot see is "cannot verify", never "did not come": silence is missing
+# evidence, not a missing truck.
+
+_RUNNING = ("FH", "BH")
+
+
+def _sheet_for_mine_day(day, sub_id):
+    """The sheet that planned `day`: the company's newest one sent BEFORE it.
+
+    A sheet goes out the day before its trucks run, so the sheet dated `day` is
+    tomorrow's and says nothing about today."""
+    return (DailyList.query
+            .filter(DailyList.subcontractor_id == sub_id, DailyList.list_date < day)
+            .order_by(DailyList.list_date.desc()).first())
+
+
+def _why_not_assigned(row, day):
+    """One short reason a fleet truck is not in the day's plan, read off its row."""
+    if row is None:
+        return "Not on the sheet"
+    status = (row.note or "").strip()
+    if status and status not in _RUNNING:
+        return status                       # Breakdown, Maintenance, No driver ...
+    if (row.state or "pending") != "approved":
+        return "Not approved"
+    if status == "FH":
+        return "FH - loaded, not due at the mine"
+    if not row.arrive_date:
+        return "No arrival time"
+    if row.arrive_date != day:
+        return "Due another day"
+    return "Approved, not planned"
+
+
+def _hhmm(dt_utc, day):
+    """A local time, with the date only when it is not `day`."""
+    if not dt_utc:
+        return None
+    loc = _local(dt_utc)
+    if loc.strftime("%Y-%m-%d") == day:
+        return loc.strftime("%H:%M")
+    return loc.strftime("%d-%m %H:%M")
+
+
+def _today_by_company(day, now):
+    lo, _hi = _day_bounds(day)
+    grace = timedelta(minutes=ON_TIME_MINUTES)
+
+    visits, roles = _visits_and_roles()
+    mine_id = roles.get("xppl")
+    mine_enters = {}
+    for v in visits:
+        if v.get("anchor_id") == mine_id and v.get("enter"):
+            mine_enters.setdefault(engine.norm_plate(v["plate"]), []).append(v["enter"])
+
+    anchors = [a for a in Anchor.query.all() if a.polygon]
+    last_ping = {}
+    for g in (GpsPing.query.filter(GpsPing.dt >= lo - timedelta(hours=12),
+                                   GpsPing.dt <= now)
+              .order_by(GpsPing.dt).all()):
+        last_ping[engine.norm_plate(g.plate)] = g
+
+    def where(g):
+        for a in anchors:
+            if engine.point_in_polygon(g.lat, g.lng, a.polygon):
+                return a
+        return None
+
+    keys = ("fleet", "assigned", "not_assigned", "arrived", "late",
+            "did_not_come", "unverified", "not_due")
+    total = dict.fromkeys(keys, 0)
+    companies, issued = [], False
+    for sub in Subcontractor.query.filter_by(active=True).order_by(Subcontractor.name).all():
+        planned = {}
+        snap = _issued_for(day, sub.id)
+        if snap:
+            issued = True
+            for r in snap.rows or []:
+                if r.get("sub_id") == sub.id and r.get("day") == day:
+                    planned.setdefault(engine.norm_plate(r["plate"]), r)
+
+        committed = {c.key: c.plate for c in FleetCommitment.query.filter_by(
+            subcontractor_id=sub.id, released_on="").all()}
+        sheet = _sheet_for_mine_day(day, sub.id)
+        rows = {}
+        if sheet:
+            for r in DailyListRow.query.filter_by(list_id=sheet.id).all():
+                rows[r.key or engine.norm_plate(r.plate)] = r
+        if committed:
+            fleet, basis = committed, "committed"
+        else:
+            # No fleet registered for this company: the trucks on its latest
+            # sheet are the best record of what it has. The page says so.
+            fleet, basis = {k: r.plate for k, r in rows.items()}, "sheet"
+        if not fleet and not planned:
+            continue
+
+        # Only the sheet sent the day before planned this day. An older sheet
+        # can size the fleet, but it cannot say why a truck is not running
+        # today - and when that sheet was never sent, that IS the reason.
+        prev = (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        planning = sheet if sheet is not None and sheet.list_date == prev else None
+        reasons = {}
+        for k in sorted(set(fleet) - set(planned), key=lambda x: fleet[x]):
+            why = (_why_not_assigned(rows.get(k), day) if planning is not None
+                   else "No sheet sent on %s" % prev)
+            reasons.setdefault(why, []).append(fleet[k])
+
+        arrived, late, gone, blind, waiting = [], [], [], [], []
+        for k in sorted(planned, key=lambda x: planned[x]["plate"]):
+            r = planned[k]
+            item = {"plate": r["plate"], "planned": None}
+            try:
+                due = datetime.strptime((r.get("t") or {}).get("arrive_mine"),
+                                        "%Y-%m-%dT%H:%M") - LOCAL_OFFSET
+            except (TypeError, ValueError):
+                waiting.append(item)          # planned without a time: nothing to judge
+                continue
+            item["planned"] = _hhmm(due, day)
+            window = (due - timedelta(hours=12), min(now, due + timedelta(hours=24)))
+            got = min((e for e in mine_enters.get(k, [])
+                       if window[0] <= e <= window[1]), default=None)
+            g = last_ping.get(k)
+            if got is None and g is not None and g.dt >= window[0]:
+                here = where(g)
+                if here is not None and here.id == mine_id:
+                    got = g.dt                # at the mine now, visit not built yet
+            if got is not None:
+                mins = int(round((got - due).total_seconds() / 60))
+                item.update(arrived=_hhmm(got, day), late_min=mins)
+                arrived.append(item)
+                if mins > ON_TIME_MINUTES:
+                    late.append(item)
+            elif now < due + grace:
+                waiting.append(item)
+            elif g is not None and g.dt >= due + grace:
+                here = where(g)
+                item.update(last_seen=_hhmm(g.dt, day),
+                            where=here.name if here else "On the road")
+                gone.append(item)
+            else:
+                item.update(last_seen=_hhmm(g.dt, day) if g else None)
+                blind.append(item)
+
+        c = {
+            "id": sub.id, "company": sub.short or sub.name,
+            "fleet": len(fleet), "fleet_basis": basis,
+            "sheet_date": sheet.list_date if sheet else None,
+            "planning_sheet": planning.list_date if planning is not None else None,
+            "assigned": len(planned), "not_assigned": len(set(fleet) - set(planned)),
+            "reasons": sorted(({"reason": k, "count": len(v), "plates": v}
+                               for k, v in reasons.items()),
+                              key=lambda x: (-x["count"], x["reason"])),
+            "outside_fleet": sorted(planned[k]["plate"] for k in set(planned) - set(fleet)),
+            "arrived": len(arrived), "arrived_rows": arrived, "late": len(late),
+            "did_not_come": len(gone), "did_not_come_rows": gone,
+            "unverified": len(blind), "unverified_rows": blind,
+            "not_due": len(waiting), "not_due_rows": waiting,
+        }
+        companies.append(c)
+        for k in keys:
+            total[k] += c[k]
+
+    return dict(date=day, now=_fmt(now), issued=issued, companies=companies,
+                total=total, on_time_minutes=ON_TIME_MINUTES)
+
+
+@bp.get("/today-by-company")
+@login_required
+def today_by_company():
+    """Per company, for one day at the mine: assigned, not assigned and why, and
+    which assigned trucks have not turned up."""
+    if "approvals" not in _views():
+        return jsonify(error="Not your view"), 403
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+    return jsonify(**_today_by_company(day, datetime.utcnow()))
