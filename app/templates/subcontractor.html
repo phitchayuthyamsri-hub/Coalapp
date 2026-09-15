@@ -131,6 +131,11 @@
   .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;
         color:var(--mut)}
   .drop.over{border-color:var(--acc);color:var(--txt)}
+  .drop.locked{opacity:.5}
+  .deliv{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;margin:0 0 12px}
+  .deliv select{min-width:280px;font-size:13px}
+  .deliv .filed{font-size:12.5px;color:var(--mut);padding-bottom:8px}
+  .deliv .filed b{color:var(--txt)}
   .msg{font-size:12.5px;margin-left:10px}
   .ok{color:var(--grn)} .err{color:var(--red)} .warn{color:var(--amber)}
   .stat{display:flex;gap:22px;flex-wrap:wrap;margin:12px 0 0}
@@ -227,9 +232,14 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <p class="lede">The same declaration, sent as the template file. Use this if you keep the
         list in Excel anyway. The sheet must keep its headers and be called Readiness - the
         template already is.</p>
-      <div class="note n-info">Uploading REPLACES the declaration for the day shown above.
+      <div class="deliv">
+        <label class="f">Delivery date &mdash; the day these trucks reach the mine
+          <select id="delivery"></select></label>
+        <div class="filed" id="filedAs">Pick the delivery date first.</div>
+      </div>
+      <div class="note n-info">Uploading REPLACES the sheet for the delivery date you pick.
         Anything typed on the other tab and not saved is lost.</div>
-      <div class="drop" id="drop">
+      <div class="drop locked" id="drop">
         <div style="font-size:15px;margin-bottom:6px">Drop the file here, or</div>
         <button class="ghost" id="pick">choose a file</button>
         <input type="file" id="file" accept=".xlsx,.xlsm" style="display:none">
@@ -600,6 +610,66 @@ $('#reapply').onclick = function(){
 };
 
 // ── upload ──────────────────────────────────────────────────────────────────
+// ── delivery date for an upload ─────────────────────────────────────────────
+// An upload used to go to whatever day the picker at the top showed, and that
+// picker can open on the LATEST sheet - so a new day's file could silently
+// replace yesterday's. The file tab now asks which delivery it is for, and
+// files it under the sheet sent the day before, as every other page reads it.
+let DELIV_EXISTING = null;
+const DAYS_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function isoShift(iso, n){
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function dayLabel(iso){
+  const d = new Date(iso + 'T00:00:00Z');
+  return DAYS_EN[d.getUTCDay()] + ' ' + iso.slice(8, 10) + '-' + iso.slice(5, 7)
+    + '-' + iso.slice(2, 4);
+}
+const sheetDateFor = delivery => isoShift(delivery, -1);
+function fillDelivery(){
+  const sel = $('#delivery');
+  if (!sel) return;
+  const t = todayStr(), keep = sel.value;
+  const tag = {'-1': 'yesterday', '0': 'today', '1': 'tomorrow'};
+  // No default on purpose: a silent default is how the wrong day got written.
+  sel.innerHTML = '<option value="">— choose the delivery date —</option>'
+    + [-1, 0, 1, 2, 3].map(n => {
+        const iso = isoShift(t, n);
+        return '<option value="' + iso + '">' + dayLabel(iso)
+          + (tag[n] ? '  (' + tag[n] + ')' : '') + '</option>';
+      }).join('');
+  if (keep) sel.value = keep;
+  paintDelivery();
+}
+async function paintDelivery(){
+  const sel = $('#delivery');
+  if (!sel) return;
+  const v = sel.value;
+  DELIV_EXISTING = null;
+  $('#drop').classList.toggle('locked', !v);
+  const um = $('#upMsg');
+  if (v && um && um.classList.contains('err')){ um.textContent = ''; um.className = 'msg'; }
+  if (!v){ $('#filedAs').textContent = 'Pick the delivery date first.'; return; }
+  const sheet = sheetDateFor(v);
+  const head = 'Filed as the sheet sent <b>' + esc(dayLabel(sheet)) + '</b>';
+  $('#filedAs').innerHTML = head;
+  try {
+    // This company's own sheet for that day, not a total across companies.
+    const l = await jget('/api/shift/list?date=' + sheet + subQ());
+    if (sel.value !== v) return;              // changed while we were asking
+    const n = ((l && l.rows) || []).filter(r => !r.absent).length;
+    DELIV_EXISTING = n ? {n: n, state: l.state} : null;
+    $('#filedAs').innerHTML = head + ' &mdash; '
+      + (!n ? 'a new sheet'
+         : l.state === 'confirmed'
+           ? '<b style="color:var(--red)">already confirmed (' + n + ' trucks) - it cannot be '
+             + 'replaced by an upload.</b> Ask for the sheet back on the Fill in here tab first.'
+           : 'replaces the ' + n + ' trucks there now (' + esc(l.state) + ')');
+  } catch (e) {}
+}
+
 $('#pick').onclick = () => $('#file').click();
 $('#file').onchange = e => { if (e.target.files[0]) send(e.target.files[0]); };
 const drop = $('#drop');
@@ -612,11 +682,34 @@ drop.addEventListener('drop', e => {
 
 async function send(f){
   const m = $('#upMsg');
+  const delivery = $('#delivery') ? $('#delivery').value : '';
+  $('#file').value = '';                    // so the same file can be picked again
+  if (!delivery){
+    m.textContent = 'Pick the delivery date first - the day these trucks reach the mine.';
+    m.className = 'msg err';
+    return;
+  }
+  const sheet = sheetDateFor(delivery);
+  const ex = DELIV_EXISTING;
+  if (ex && ex.state === 'confirmed'){
+    m.textContent = 'The sheet sent ' + dayLabel(sheet) + ' for delivery ' + dayLabel(delivery)
+      + ' is already confirmed, so it cannot be replaced by an upload. '
+      + 'Ask for the sheet back first.';
+    m.className = 'msg err';
+    return;
+  }
+  if (!confirm('Upload ' + f.name + ' for delivery ' + dayLabel(delivery) + '?'
+      + String.fromCharCode(10, 10) + 'It is filed as the sheet sent ' + dayLabel(sheet)
+      + (ex ? ', and REPLACES the ' + ex.n + ' trucks there now (' + ex.state + ').'
+            : ' - a new sheet.'))){
+    m.textContent = 'Not uploaded.'; m.className = 'msg';
+    return;
+  }
   m.textContent = 'Reading ' + f.name + '…'; m.className = 'msg';
   $('#upDetail').innerHTML = '';
   const fd = new FormData();
   fd.append('file', f);
-  fd.append('date', $('#day').value);
+  fd.append('date', sheet);
   if (SUBID) fd.append('subcontractor_id', SUBID);
   try {
     let r = await fetch('/api/shift/upload', {method:'POST', body: fd});
@@ -637,7 +730,9 @@ async function send(f){
       $('#upDetail').innerHTML = '<div class="note n-warn"><b>Read, with warnings:</b><br>'
         + j.warnings.map(esc).join('<br>') + '</div>';
     }
+    if (PICKER) await PICKER.load(sheet);
     await load();
+    paintDelivery();
     document.querySelector('.tabs button[data-pane=type]').click();
   } catch (e) {
     m.textContent = e.message || 'Upload failed'; m.className = 'msg err';
@@ -645,7 +740,7 @@ async function send(f){
 }
 
 $('#reload').onclick = load;
-$('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); };
+$('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); paintDelivery(); };
 
 // A position above this one may read the declaration and may not touch it.
 // The server refuses the write either way; this stops the page offering it.
@@ -693,6 +788,7 @@ let OWNER_LABEL = 'the company';
   PICKER = new DayPick({select: $('#day'), detail: !pinned,
     onPick: function(){ if (!pinned) followData(); load(); }});
   await PICKER.load(pinned ? todayStr() : null);
+  if ($('#delivery')){ fillDelivery(); $('#delivery').onchange = paintDelivery; }
   // Only now is the day known, so only now can the right company be chosen.
   // Picking the first one in the list showed an empty declaration for a day
   // that had a full one, and the page then filled it with GPS guesses - which
