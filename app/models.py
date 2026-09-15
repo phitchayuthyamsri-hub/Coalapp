@@ -233,6 +233,8 @@ class DailyList(db.Model):
     Once confirmed the list is locked: only a manager or an admin may change it.
     """
     id = db.Column(db.Integer, primary_key=True)
+    # The day these trucks are USED - the day they run at the mine. Not the day
+    # the sheet was sent: one date, meaning one thing, on every page.
     list_date = db.Column(db.String(10), index=True, nullable=False)   # YYYY-MM-DD
     # One list per subcontractor per day - the manager reviews each company's
     # list separately. NULL means a legacy list from before per-sub lists.
@@ -260,6 +262,10 @@ class DailyList(db.Model):
     # are the same declaration filed twice - usually yesterday's sheet sent
     # again with the date changed and nothing else looked at.
     content_hash = db.Column(db.String(40), index=True)
+    # 'use' once list_date means the day the trucks are used. Sheets filed before
+    # that carried the day they were SENT; startup moves each forward one day,
+    # exactly once, and stamps it - so no restart can move it again.
+    date_basis = db.Column(db.String(8), default="use")
 
     __table_args__ = (db.UniqueConstraint("list_date", "subcontractor_id",
                                           name="uq_daily_list"),)

@@ -50,7 +50,7 @@
     var head = dmy(r.date) + '  ' + weekday(r.date);
     if (!this.detail) {
       // The company: say what state their own sheet is in, nothing else.
-      if (!r.lists) return head + (r.today ? '  ·  new sheet' : '');
+      if (!r.lists) return head + (r.tomorrow ? '  ·  new sheet' : r.today ? '  ·  today' : '');
       var st = r.states.join('/');
       return head + '  ·  ' + r.trucks + ' trucks  ·  ' + st;
     }
@@ -65,7 +65,8 @@
     var bits = [];
     if (r.latest) bits.push('LATEST');
     if (r.today && !r.latest) bits.push('today');
-    if (!r.lists) bits.push(r.today ? 'nothing sent yet' : 'empty');
+    if (r.tomorrow && !r.latest) bits.push('tomorrow');
+    if (!r.lists) bits.push((r.today || r.tomorrow) ? 'nothing declared yet' : 'empty');
     else {
       bits.push(r.companies.length + (r.companies.length === 1 ? ' company' : ' companies'));
       bits.push(r.trucks + ' trucks');
@@ -90,7 +91,7 @@
   };
 
   /* Two kinds of day, and they are not interchangeable.
-   *   'sheet' - the day a sheet was SENT. What the declaration, the supervisor
+   *   'sheet' - the day a sheet is FOR (its trucks are used). The declaration, supervisor
    *             and the manager work on, because they work on sheets.
    *   'run'   - the day trucks reach the mine. What the planner and the monitor
    *             watch, because that is when anything happens.

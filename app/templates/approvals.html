@@ -115,7 +115,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   </div>
   <div class="card">
     <div class="row">
-      <label class="f">Readiness date &mdash; the day the sheet was sent
+      <label class="f">Date &mdash; the day these trucks are used
         <select id="day"></select></label>
       <button class="ghost" id="reload">Reload</button>
       <div class="spacer"></div>
@@ -272,8 +272,8 @@ async function act(btn){
 }
 
 // ── Today at the mine, by company ─────────────────────────────────────────────
-// Its own date, on purpose: this is the day the trucks are AT THE MINE, and the
-// picker below is the day a sheet was SENT. They are different days.
+// Its own date, so the manager can watch today while working tomorrow's sheet
+// below. Both mean the same thing: the day the trucks are at the mine.
 const OPEN = new Set();
 let TODAY = null;
 
@@ -317,7 +317,7 @@ function detail(c, grace){
     + bullets(c.not_due_rows, x => '<b>' + esc(x.plate) + '</b> — planned '
       + esc(x.planned || 'no time'));
   if (c.reasons.length) h += '<h4>Not assigned'
-    + (c.planning_sheet ? ' — from the sheet sent ' + esc(c.planning_sheet) : '') + '</h4>'
+    + (c.planning_sheet ? ' — from the sheet for ' + esc(c.planning_sheet) : '') + '</h4>'
     + bullets(c.reasons, r => '<b>' + esc(r.reason) + ' (' + r.count + ')</b>: '
       + r.plates.map(esc).join(', '));
   if (c.outside_fleet.length) h += '<h4>In the plan, not in the fleet</h4><ul><li>'

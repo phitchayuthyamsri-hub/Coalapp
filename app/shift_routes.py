@@ -770,7 +770,7 @@ def upload():
     twin = None if (request.form.get("force") or "").strip() else _duplicate_of(dl)
     if twin is not None:
         db.session.rollback()
-        return jsonify(error="This file is word for word the sheet already sent for "
+        return jsonify(error="This file is word for word the sheet already declared for "
                              "%s. Nothing in it has changed, so it has not been "
                              "imported." % twin.list_date,
                        duplicate_of=twin.list_date, code="duplicate"), 409
@@ -1738,21 +1738,20 @@ def summary():
 def latest():
     """The date the page should open on.
 
-    Today is usually empty - a list is built the day before it runs - so opening
-    on today shows nothing. Prefer the most recently submitted list, since that
-    is the day someone is actually working on; fall back to the newest list of
-    any state, then to today.
+    A sheet is dated by the day its trucks run, so the sheet being worked is
+    usually tomorrow's. Prefer tomorrow's list, then today's, then the most
+    recently submitted, then the newest of any state, then today.
     """
     today = (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     q = DailyList.query
     if _role() == "subcontractor":
         q = q.filter_by(subcontractor_id=getattr(current_user, "subcontractor_id", None))
-    # Sheets arrive daily, so today's sheet is normally the one being worked.
-    # Fall back to the most recent only when today has nothing yet.
-    t = q.filter_by(list_date=today).order_by(DailyList.id.desc()).first()
-    if t:
-        return jsonify(date=t.list_date, subcontractor_id=t.subcontractor_id,
-                       why="today", today=today)
+    tomorrow = (datetime.utcnow() + LOCAL_OFFSET + timedelta(days=1)).strftime("%Y-%m-%d")
+    for d, why in ((tomorrow, "tomorrow"), (today, "today")):
+        t = q.filter_by(list_date=d).order_by(DailyList.id.desc()).first()
+        if t:
+            return jsonify(date=t.list_date, subcontractor_id=t.subcontractor_id,
+                           why=why, today=today)
     sub = (q.filter(DailyList.submitted_at.isnot(None))
            .order_by(DailyList.submitted_at.desc()).first())
     if sub:
@@ -2410,8 +2409,10 @@ def dates():
 
     A free date field invites the one mistake nobody catches: typing a day
     nothing was ever filed under and reading the empty page as "they sent
-    nothing". Every day offered here has something behind it, except today,
-    which is always offered because that is where a new sheet starts.
+    nothing". Every day offered here has something behind it, except today and
+    tomorrow: today because it is running, tomorrow because that is the day a
+    new sheet is normally declared for. A sheet's date is the day its trucks
+    are used.
 
     A subcontractor sees only the days it has sent.
     """
@@ -2438,11 +2439,12 @@ def dates():
         if (dl.amend_state or "") == "pending":
             d["amend"] += 1
 
+    tomorrow = (datetime.utcnow() + LOCAL_OFFSET + timedelta(days=1)).strftime("%Y-%m-%d")
+    for d in (today, tomorrow):
+        if d not in by_day:
+            by_day[d] = {"date": d, "lists": 0, "trucks": 0, "companies": [],
+                         "states": [], "waiting": 0, "amend": 0}
     rows = sorted(by_day.values(), key=lambda x: x["date"], reverse=True)
-    have_today = any(r["date"] == today for r in rows)
-    if not have_today:
-        rows.insert(0, {"date": today, "lists": 0, "trucks": 0, "companies": [],
-                        "states": [], "waiting": 0, "amend": 0})
 
     # "Latest" means the newest day that has something on it, which is not
     # always today: on a quiet morning today is empty and yesterday is the day
@@ -2450,10 +2452,11 @@ def dates():
     latest = next((r["date"] for r in rows if r["lists"]), None)
     for r in rows:
         r["today"] = (r["date"] == today)
+        r["tomorrow"] = (r["date"] == tomorrow)
         r["latest"] = (r["date"] == latest)
         r["companies"] = sorted(set(r["companies"]))
         r["states"] = sorted(set(r["states"]))
-    return jsonify(dates=rows, today=today, latest=latest, role=_role(),
+    return jsonify(dates=rows, today=today, tomorrow=tomorrow, latest=latest, role=_role(),
                    scoped=(only is not None))
 
 
@@ -2519,7 +2522,7 @@ def save_list():
     twin = None if d.get("force") else _duplicate_of(dl)
     if twin is not None:
         db.session.rollback()
-        return jsonify(error="This is word for word the sheet already sent for %s. "
+        return jsonify(error="This is word for word the sheet already declared for %s. "
                              "Nothing on it has changed, so it has not been saved. "
                              "Change what is different, or send it again on purpose."
                              % twin.list_date,
@@ -2752,7 +2755,7 @@ def board():
 # many did the plan send to the mine today, how many did it not - and why - and
 # of the ones it sent, which have not turned up.
 #
-# The day is the day AT THE MINE, not the day the sheet was sent. And a truck the
+# The day is the day AT THE MINE, the same date its sheet carries. And a truck the
 # GPS cannot see is "cannot verify", never "did not come": silence is missing
 # evidence, not a missing truck.
 
@@ -2760,12 +2763,12 @@ _RUNNING = ("FH", "BH")
 
 
 def _sheet_for_mine_day(day, sub_id):
-    """The sheet that planned `day`: the company's newest one sent BEFORE it.
+    """The company's sheet for `day`, or its newest one before it.
 
-    A sheet goes out the day before its trucks run, so the sheet dated `day` is
-    tomorrow's and says nothing about today."""
+    A sheet is dated by the day its trucks run, so the sheet for `day` is the one
+    dated `day`. The newest earlier sheet stands in only to size the fleet."""
     return (DailyList.query
-            .filter(DailyList.subcontractor_id == sub_id, DailyList.list_date < day)
+            .filter(DailyList.subcontractor_id == sub_id, DailyList.list_date <= day)
             .order_by(DailyList.list_date.desc()).first())
 
 
@@ -2850,15 +2853,14 @@ def _today_by_company(day, now):
         if not fleet and not planned:
             continue
 
-        # Only the sheet sent the day before planned this day. An older sheet
-        # can size the fleet, but it cannot say why a truck is not running
-        # today - and when that sheet was never sent, that IS the reason.
-        prev = (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        planning = sheet if sheet is not None and sheet.list_date == prev else None
+        # Only the sheet for this day says why a truck is not running on it. An
+        # older sheet can size the fleet but not explain today - and when no
+        # sheet was declared for today, that IS the reason.
+        planning = sheet if sheet is not None and sheet.list_date == day else None
         reasons = {}
         for k in sorted(set(fleet) - set(planned), key=lambda x: fleet[x]):
             why = (_why_not_assigned(rows.get(k), day) if planning is not None
-                   else "No sheet sent on %s" % prev)
+                   else "No sheet declared for %s" % day)
             reasons.setdefault(why, []).append(fleet[k])
 
         arrived, late, gone, blind, waiting = [], [], [], [], []

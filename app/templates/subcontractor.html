@@ -167,7 +167,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 
   <div class="card">
     <div class="row">
-      <label class="f">Readiness date &mdash; the day you send this sheet
+      <label class="f">Date &mdash; the day these trucks are used
         <select id="day"></select></label>
       <label class="f" id="coWrap" style="display:none">Company<select id="sub"></select></label>
       <button class="ghost" id="reload">Reload</button>
@@ -188,8 +188,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <p class="lede">Every truck the GPS has seen is filled in already - which leg it is on,
         loaded or empty, where it was last, and for the empties coming back, when they should
         reach the mine. Change anything that is wrong: you are on the ground and the GPS is not.
-        The date at the top is the day you send this sheet; the date on each row is the day that
-        truck reaches the mine, which is usually the next day. They are not the same thing.
+        The date at the top is the day these trucks are used; the date on each row is when that
+        truck reaches the mine.
         Trucks the GPS has not seen are left blank and marked, because a guess dressed up as a
         fact is worse than an empty box.</p>
       <div id="amendBox"></div>
@@ -233,11 +233,11 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         list in Excel anyway. The sheet must keep its headers and be called Readiness - the
         template already is.</p>
       <div class="deliv">
-        <label class="f">Delivery date &mdash; the day these trucks reach the mine
+        <label class="f">Date &mdash; the day these trucks are used
           <select id="delivery"></select></label>
-        <div class="filed" id="filedAs">Pick the delivery date first.</div>
+        <div class="filed" id="filedAs">Pick the date first.</div>
       </div>
-      <div class="note n-info">Uploading REPLACES the sheet for the delivery date you pick.
+      <div class="note n-info">Uploading REPLACES the sheet for the date you pick.
         Anything typed on the other tab and not saved is lost.</div>
       <div class="drop locked" id="drop">
         <div style="font-size:15px;margin-bottom:6px">Drop the file here, or</div>
@@ -610,11 +610,10 @@ $('#reapply').onclick = function(){
 };
 
 // ── upload ──────────────────────────────────────────────────────────────────
-// ── delivery date for an upload ─────────────────────────────────────────────
-// An upload used to go to whatever day the picker at the top showed, and that
-// picker can open on the LATEST sheet - so a new day's file could silently
-// replace yesterday's. The file tab now asks which delivery it is for, and
-// files it under the sheet sent the day before, as every other page reads it.
+// ── the date an upload is for ────────────────────────────────────────────────
+// An upload used to go to whatever day the picker at the top showed, which can
+// open on the latest sheet - so a new day's file could silently replace another
+// day's. The file tab asks which day the trucks are used, and files it there.
 let DELIV_EXISTING = null;
 const DAYS_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function isoShift(iso, n){
@@ -627,14 +626,13 @@ function dayLabel(iso){
   return DAYS_EN[d.getUTCDay()] + ' ' + iso.slice(8, 10) + '-' + iso.slice(5, 7)
     + '-' + iso.slice(2, 4);
 }
-const sheetDateFor = delivery => isoShift(delivery, -1);
 function fillDelivery(){
   const sel = $('#delivery');
   if (!sel) return;
   const t = todayStr(), keep = sel.value;
   const tag = {'-1': 'yesterday', '0': 'today', '1': 'tomorrow'};
   // No default on purpose: a silent default is how the wrong day got written.
-  sel.innerHTML = '<option value="">— choose the delivery date —</option>'
+  sel.innerHTML = '<option value="">— choose the day these trucks are used —</option>'
     + [-1, 0, 1, 2, 3].map(n => {
         const iso = isoShift(t, n);
         return '<option value="' + iso + '">' + dayLabel(iso)
@@ -651,9 +649,9 @@ async function paintDelivery(){
   $('#drop').classList.toggle('locked', !v);
   const um = $('#upMsg');
   if (v && um && um.classList.contains('err')){ um.textContent = ''; um.className = 'msg'; }
-  if (!v){ $('#filedAs').textContent = 'Pick the delivery date first.'; return; }
-  const sheet = sheetDateFor(v);
-  const head = 'Filed as the sheet sent <b>' + esc(dayLabel(sheet)) + '</b>';
+  if (!v){ $('#filedAs').textContent = 'Pick the date first.'; return; }
+  const sheet = v;
+  const head = 'The sheet for <b>' + esc(dayLabel(sheet)) + '</b>';
   $('#filedAs').innerHTML = head;
   try {
     // This company's own sheet for that day, not a total across companies.
@@ -685,23 +683,23 @@ async function send(f){
   const delivery = $('#delivery') ? $('#delivery').value : '';
   $('#file').value = '';                    // so the same file can be picked again
   if (!delivery){
-    m.textContent = 'Pick the delivery date first - the day these trucks reach the mine.';
+    m.textContent = 'Pick the date first - the day these trucks are used.';
     m.className = 'msg err';
     return;
   }
-  const sheet = sheetDateFor(delivery);
+  const sheet = delivery;
   const ex = DELIV_EXISTING;
   if (ex && ex.state === 'confirmed'){
-    m.textContent = 'The sheet sent ' + dayLabel(sheet) + ' for delivery ' + dayLabel(delivery)
+    m.textContent = 'The sheet for ' + dayLabel(sheet)
       + ' is already confirmed, so it cannot be replaced by an upload. '
       + 'Ask for the sheet back first.';
     m.className = 'msg err';
     return;
   }
-  if (!confirm('Upload ' + f.name + ' for delivery ' + dayLabel(delivery) + '?'
-      + String.fromCharCode(10, 10) + 'It is filed as the sheet sent ' + dayLabel(sheet)
-      + (ex ? ', and REPLACES the ' + ex.n + ' trucks there now (' + ex.state + ').'
-            : ' - a new sheet.'))){
+  if (!confirm('Upload ' + f.name + ' as the sheet for ' + dayLabel(sheet) + '?'
+      + String.fromCharCode(10, 10)
+      + (ex ? 'It REPLACES the ' + ex.n + ' trucks there now (' + ex.state + ').'
+            : 'It is a new sheet.'))){
     m.textContent = 'Not uploaded.'; m.className = 'msg';
     return;
   }
@@ -787,7 +785,9 @@ let OWNER_LABEL = 'the company';
   // The days that exist, not a calendar. A subcontractor sees only its own.
   PICKER = new DayPick({select: $('#day'), detail: !pinned,
     onPick: function(){ if (!pinned) followData(); load(); }});
-  await PICKER.load(pinned ? todayStr() : null);
+  // A company declares for tomorrow, so that is where its page opens.
+  await PICKER.load(pinned
+    ? new Date(Date.now() + 31 * 3600 * 1000).toISOString().slice(0, 10) : null);
   if ($('#delivery')){ fillDelivery(); $('#delivery').onchange = paintDelivery; }
   // Only now is the day known, so only now can the right company be chosen.
   // Picking the first one in the list showed an empty declaration for a day

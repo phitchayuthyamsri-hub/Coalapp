@@ -305,13 +305,43 @@ def _ensure_daily_list_schema():
             ("amend_by_role", "VARCHAR(20) DEFAULT ''"),
             ("amend_decided_by", "VARCHAR(80) DEFAULT ''"),
             ("amend_decided_at", "DATETIME"),
-            ("amend_reason", "VARCHAR(300) DEFAULT ''")]
+            ("amend_reason", "VARCHAR(300) DEFAULT ''"),
+            ("date_basis", "VARCHAR(8) DEFAULT ''")]
     stmts = ["ALTER TABLE daily_list ADD COLUMN %s %s" % (n, t)
              for n, t in want if n not in cols]
     for st in stmts:
-        db.session.execute(text(st))
-    if stmts:
+        # Three gunicorn workers start together and all run this; the ones that
+        # lose the race find the column already there, which is not an error.
+        try:
+            db.session.execute(text(st))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    _move_sheet_dates_to_use_day()
+
+
+def _move_sheet_dates_to_use_day():
+    """Re-date sheets filed before a sheet's date meant the day it is USED.
+
+    They carry the day they were sent - the day before their trucks run - so
+    each moves forward one day, once. Every worker reaches this at the same
+    moment, so it is two single statements in one transaction rather than a
+    read and a write: park the unconverted sheets under a marked date (which
+    cannot collide with a real one, so the per-company unique rule holds
+    mid-way), then give each its new date and stamp it. Whoever runs second
+    finds nothing left to move.
+    """
+    from sqlalchemy import text
+    try:
+        db.session.execute(text(
+            "UPDATE daily_list SET list_date = '~' || date(list_date, '+1 day'), "
+            "date_basis = 'moving' WHERE COALESCE(date_basis, '') = ''"))
+        db.session.execute(text(
+            "UPDATE daily_list SET list_date = substr(list_date, 2), "
+            "date_basis = 'use' WHERE date_basis = 'moving'"))
         db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _ensure_listrow_schema():
