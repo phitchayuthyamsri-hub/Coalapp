@@ -133,11 +133,13 @@ def route_export():
     cyc = {r["key"]: r["cycle_hours"] for r in wi_rules.ROUTES}
     lbl = {r["key"]: r["label"] for r in wi_rules.ROUTES}
     for r in rows:
-        ws.append([r.plan_date, r.plate, lbl.get(r.route, r.route), cyc.get(r.route),
+        pd = r.plan_date or ""
+        pd = "%s/%s/%s" % (pd[8:10], pd[5:7], pd[0:4]) if len(pd) >= 10 else pd
+        ws.append([pd, r.plate, lbl.get(r.route, r.route), cyc.get(r.route),
                    r.cost_variance, r.note or "", r.set_by or "",
-                   r.set_at.strftime("%Y-%m-%d %H:%M") if r.set_at else "",
+                   r.set_at.strftime("%d/%m/%Y %H:%M") if r.set_at else "",
                    r.approved_by or "",
-                   r.approved_at.strftime("%Y-%m-%d %H:%M") if r.approved_at else ""])
+                   r.approved_at.strftime("%d/%m/%Y %H:%M") if r.approved_at else ""])
     for col, w in zip("ABCDEFGHIJ", (12, 14, 14, 10, 14, 30, 16, 17, 16, 17)):
         ws.column_dimensions[col].width = w
 

@@ -17,11 +17,11 @@
     });
   }
 
-  // 09-09-26, the way the sheets are written.
+  // 16/09/2026: day first, full year, as everywhere in the program.
   function dmy(iso) {
     var p = String(iso || '').split('-');
     if (p.length !== 3) return iso || '';
-    return p[2] + '-' + p[1] + '-' + p[0].slice(2);
+    return p[2] + '/' + p[1] + '/' + p[0];
   }
 
   function weekday(iso) {

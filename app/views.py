@@ -304,8 +304,11 @@ def _tool_html():
         # tool's own loaders read localStorage. Async would race them and the
         # page would come up empty, then silently fill in behind the operator.
         seed = '<script src="/api/tool/seed.js"></script>'
+        # Dates read day first here too (DD/MM/YYYY), as on every other page.
+        dfmt = os.path.join(os.path.dirname(__file__), "static", "datefmt.js")
+        dates = '<script src="/static/datefmt.js?v=%d"></script>' % int(os.path.getmtime(dfmt))
         _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD + _EVENTS
-                                  + seed, 1)
+                                  + seed + dates, 1)
     return _TOOL_HTML
 
 

@@ -39,6 +39,7 @@
   @media(max-width:560px){.evrow{grid-template-columns:1fr;gap:0}}
   .err{color:#ff6b6b}
 </style>
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body>
 <header>
@@ -68,7 +69,7 @@ const ACT = {
 };
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function dur(sec){ sec=Math.round(sec||0); if(sec<60) return sec+'s'; const m=Math.round(sec/60); if(m<60) return m+'m'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
-function fmtTs(iso){ if(!iso) return '—'; const d=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso)?iso:iso+'Z'); if(isNaN(d)) return esc(String(iso).replace('T',' ').slice(0,16)); const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d); const g=t=>(p.find(x=>x.type===t)||{}).value||'00'; return g('year')+'-'+g('month')+'-'+g('day')+' '+g('hour')+':'+g('minute'); }
+function fmtTs(iso){ if(!iso) return '—'; const d=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso)?iso:iso+'Z'); if(isNaN(d)) return esc(String(iso).replace('T',' ').slice(0,16)); const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d); const g=t=>(p.find(x=>x.type===t)||{}).value||'00'; return g('day')+'/'+g('month')+'/'+g('year')+' '+g('hour')+':'+g('minute'); }
 function flag(cc){ if(!cc||cc.length!==2) return ''; return cc.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)))+' '; }
 
 function userBlock(name, u){

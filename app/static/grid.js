@@ -31,6 +31,25 @@
     return (h < 10 ? '0' + h : '' + h) + ':' + (mi < 10 ? '0' + mi : '' + mi);
   }
 
+  // Dates are shown day first, so they are typed and pasted day first -
+  // 16/09/2026, 16-09-26, 5/9/2026 - and stored YYYY-MM-DD, which is what the
+  // planner reads. Not a real day: null, and the cell refuses it.
+  function normDate(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    var y, mo, d, m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else {
+      m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);
+      if (!m) return null;
+      d = +m[1]; mo = +m[2]; y = +m[3];
+      if (y < 100) y += 2000;
+    }
+    var t = new Date(Date.UTC(y, mo - 1, d));
+    if (t.getUTCFullYear() !== y || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d) return null;
+    return y + '-' + (mo < 10 ? '0' : '') + mo + '-' + (d < 10 ? '0' : '') + d;
+  }
+
   // Dates first, then numbers, then text; blanks always last. Copied in spirit
   // from the Logistics grid so both tables sort a column the same way.
   function cmpVal(a, b) {
@@ -344,6 +363,11 @@
     if (this.readOnly || !col || col.ro) return false;
     var row = this.rowAt(vr);
     if (!row) return false;
+    if (col.kind === 'date' && val) {
+      var dd = normDate(val);
+      if (dd === null) return false;
+      val = dd;
+    }
     if (col.kind === 'time' && val) {
       var t = normTime(val);
       if (t === null) return false;
@@ -666,4 +690,5 @@
 
   Grid.normTime = normTime;
   global.Grid = Grid;
+  Grid.normDate = normDate;
 })(window);

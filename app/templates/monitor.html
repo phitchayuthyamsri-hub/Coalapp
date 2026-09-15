@@ -177,6 +177,7 @@
   body.embed main{padding-top:12px}
   body.embed .card.sticky{top:0}
 </style>
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
 <script>
@@ -271,7 +272,7 @@ async function loadConfig(){
 // steps: a truck passes each of them twice and the pair only makes sense if it
 // stays in the same column.
 const clock = s => s ? s.slice(11, 16) : '';
-const dayOf = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7)) : '';
+const dayOf = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4)) : '';
 let LEG = 'fh', TRACK = null;
 
 // Inside the tolerance a truck is on plan and the time is left alone. Outside

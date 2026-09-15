@@ -237,6 +237,7 @@
   body.embed main{padding-top:12px}
 
 </style>
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
 <script>
@@ -890,7 +891,7 @@ window.addEventListener('scroll', () => { TIP.style.display = 'none'; }, true);
 
 const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const dayLabel = s => DOW[(new Date(s + 'T00:00').getDay() + 6) % 7]
-  + ' ' + s.slice(8, 10) + '/' + s.slice(5, 7);
+  + ' ' + s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4);
 
 function weekQuery(){
   const sub = $('#wSub').value;
@@ -920,7 +921,8 @@ const TCOLS = [
   ['Unloads', 'unload_start'], ['Leaves port', 'depart_port'],
   ['Back at mine', 'back']
 ];
-const clock = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7) + ' ' + s.slice(11, 16)) : '';
+const clock = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4)
+  + ' ' + s.slice(11, 16)) : '';
 
 function drawTable(d){
   if (!d.rows.length){ $('#wTable').innerHTML =
@@ -1249,8 +1251,8 @@ async function loadAlerts(){
 }
 function dayName(d){
   try {
-    return new Date(d + 'T00:00').toLocaleDateString('en-GB',
-      {weekday: 'short', day: '2-digit', month: 'short'});
+    return new Date(d + 'T00:00').toLocaleDateString('en-GB', {weekday: 'short'})
+      + ' ' + d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4);
   } catch (e) { return d; }
 }
 

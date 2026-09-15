@@ -4196,7 +4196,7 @@ function renderSourceList() {
     } else {
       const _2 = n => String(n).padStart(2, '0');
       const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const fmt = ms => { const d = new Date(ms); return `${_2(d.getDate())} ${MON[d.getMonth()]} ${d.getFullYear()} ${_2(d.getHours())}:${_2(d.getMinutes())}`; };
+      const fmt = ms => { const d = new Date(ms); return `${_2(d.getDate())}/${_2(d.getMonth() + 1)}/${d.getFullYear()} ${_2(d.getHours())}:${_2(d.getMinutes())}`; };
       const vList = [...new Set(sources.flatMap(s => s.vendors || (s.vendor ? [s.vendor] : ['Unknown'])))];
       const perVendor = vList.map(v => {
         const ss = sources.filter(s => (s.vendors || (s.vendor ? [s.vendor] : ['Unknown'])).includes(v));
@@ -7005,8 +7005,8 @@ let sendDate = null;
 const _SMON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const _SWD  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function _isoDay(d){ const m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return d.getFullYear()+'-'+m+'-'+day; }
-function _sDT(d){ if(!d) return '—'; return d.getDate()+' '+_SMON[d.getMonth()]+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-function _sDayHdr(iso){ const d=new Date(iso+'T00:00:00'); return _SWD[d.getDay()]+' '+d.getDate()+' '+_SMON[d.getMonth()]+' '+d.getFullYear(); }
+function _sDT(d){ if(!d) return '—'; return fmtDate(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function _sDayHdr(iso){ const d=new Date(iso+'T00:00:00'); return _SWD[d.getDay()]+' '+fmtDate(d); }
 function _sPhoneDigits(plate){ const m=fleetMeta(plate)||{}; return String(m.phone||'').replace(/[^0-9]/g,''); }
 function _sendEntries(){
   const out=[];
@@ -10374,7 +10374,7 @@ function _otShowReview(otkey,status){
   if(!_PERF||!_PERF.otRows) return;
   var ot=(_PERF.ontime&&_PERF.ontime[otkey])||{label:otkey};
   var rows=_PERF.otRows.filter(function(r){ return r.key===otkey && r.status===status; });
-  var f=function(x){ if(!x) return '\u2014'; var d=new Date(x); return isNaN(d)?'\u2014':d.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); };
+  var f=function(x){ if(!x) return '\u2014'; var d=new Date(x); return isNaN(d)?'\u2014':d.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''); };
   var body=rows.length?rows.map(function(r){ return '<tr><td>'+(r.plate||'')+'</td><td>'+(r.cyc!=null?r.cyc:'')+'</td><td>'+f(r.planIn)+'</td><td>'+f(r.timeIn)+'</td><td class="otrv-st-'+r.status+'">'+r.status+'</td></tr>'; }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted)">No trips in this group.</td></tr>';
   var old=document.getElementById('otReviewPop'); if(old) old.remove();
   var wrap=document.createElement('div'); wrap.id='otReviewPop';

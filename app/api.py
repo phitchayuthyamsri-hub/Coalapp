@@ -876,7 +876,7 @@ def admin_activity_export():
         c.font = openpyxl.styles.Font(bold=True)
     rows = ActivityEvent.query.order_by(ActivityEvent.ts.desc()).all()
     for e in rows:
-        t = (e.ts + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S") if e.ts else ""
+        t = (e.ts + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M:%S") if e.ts else ""
         ws.append([t, e.username or "", e.action or "", e.detail or ""])
     widths = [20, 18, 14, 70]
     for i, w in enumerate(widths, 1):

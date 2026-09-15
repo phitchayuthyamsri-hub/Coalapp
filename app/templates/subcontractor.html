@@ -149,6 +149,7 @@
   .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
   .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
 </style>
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
 <script>
@@ -623,8 +624,8 @@ function isoShift(iso, n){
 }
 function dayLabel(iso){
   const d = new Date(iso + 'T00:00:00Z');
-  return DAYS_EN[d.getUTCDay()] + ' ' + iso.slice(8, 10) + '-' + iso.slice(5, 7)
-    + '-' + iso.slice(2, 4);
+  return DAYS_EN[d.getUTCDay()] + ' ' + iso.slice(8, 10) + '/' + iso.slice(5, 7)
+    + '/' + iso.slice(0, 4);
 }
 function fillDelivery(){
   const sel = $('#delivery');

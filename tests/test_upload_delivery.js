@@ -25,7 +25,7 @@ vm.createContext(sandbox);
 try {
   vm.runInContext(html.slice(start, end), sandbox);
   const run = js => vm.runInContext(js, sandbox);
-  is('dates read day first, with the weekday', run("dayLabel('2026-09-16')"), 'Wed 16-09-26');
+  is('dates read day first, with the weekday', run("dayLabel('2026-09-16')"), 'Wed 16/09/2026');
   is('shifting a day crosses a month end', run("isoShift('2026-09-30', 1)"), '2026-10-01');
   is('...and a year end', run("isoShift('2026-12-31', 1)"), '2027-01-01');
 } catch (e) {

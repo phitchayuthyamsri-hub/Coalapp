@@ -115,7 +115,7 @@ async function loadTimeline() {
   const body=$('#tl_body'); body.innerHTML='';
   if (!data.visits.length) { $('#tl_note').textContent='No visits in range.'; return; }
   const min=new Date(data.min).getTime(), max=new Date(data.max).getTime(), span=Math.max(1,max-min);
-  $('#tl_note').textContent=`${data.visits.length} visits · ${new Date(min).toLocaleString()} → ${new Date(max).toLocaleString()}`;
+  $('#tl_note').textContent=`${data.visits.length} visits · ${DateFmt.dt(new Date(min))} → ${DateFmt.dt(new Date(max))}`;
   const byPlate={}; data.visits.forEach((v)=>{(byPlate[v.plate]||=[]).push(v);});
   Object.keys(byPlate).sort().forEach((plate)=>{
     const row=document.createElement('div'); row.className='tl-row';
@@ -127,7 +127,7 @@ async function loadTimeline() {
       seg.style.left=((e-min)/span*100)+'%';
       seg.style.width=Math.max(0.4,(x-e)/span*100)+'%';
       seg.style.background=ROLE_COLOR[v.role]||ROLE_COLOR[''];
-      seg.title=`${v.anchor_name}\n${new Date(v.enter).toLocaleString()} → ${new Date(v.exit).toLocaleString()}\n${fmtDur(v.dur_min)}${v.open?' (open)':''}`;
+      seg.title=`${v.anchor_name}\n${DateFmt.dt(new Date(v.enter))} → ${DateFmt.dt(new Date(v.exit))}\n${fmtDur(v.dur_min)}${v.open?' (open)':''}`;
       track.appendChild(seg);
     });
     row.appendChild(label); row.appendChild(track); body.appendChild(row);

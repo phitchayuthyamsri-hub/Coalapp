@@ -44,7 +44,7 @@ async function load() {
   const max = new Date(data.max).getTime();
   const span = Math.max(1, max - min);
   $('#tl_note').textContent =
-    `${data.visits.length} visits · ${new Date(min).toLocaleString()} → ${new Date(max).toLocaleString()}`;
+    `${data.visits.length} visits · ${DateFmt.dt(new Date(min))} → ${DateFmt.dt(new Date(max))}`;
 
   const byPlate = {};
   data.visits.forEach((v) => { (byPlate[v.plate] ||= []).push(v); });
@@ -64,7 +64,7 @@ async function load() {
       seg.style.left = ((e - min) / span * 100) + '%';
       seg.style.width = Math.max(0.4, (x - e) / span * 100) + '%';
       seg.style.background = ROLE_COLOR[v.role] || ROLE_COLOR[''];
-      seg.title = `${v.anchor_name}\n${new Date(v.enter).toLocaleString()} → ${new Date(v.exit).toLocaleString()}\n${fmtDur(v.dur_min)}${v.open ? ' (open)' : ''}`;
+      seg.title = `${v.anchor_name}\n${DateFmt.dt(new Date(v.enter))} → ${DateFmt.dt(new Date(v.exit))}\n${fmtDur(v.dur_min)}${v.open ? ' (open)' : ''}`;
       track.appendChild(seg);
     });
     row.appendChild(label);
