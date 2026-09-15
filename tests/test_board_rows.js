@@ -52,7 +52,8 @@ const ROWS = JSON.stringify([
    ready:true, reason:''},
   {plate:'20H00789', sub:'Bac Nam', note:'Maintenance', sheet_status:'Empty',
    location:'Workshop', arrive_date:'', arrive:'', state:'pending',
-   ready:false, reason:'18,000 km service'},
+   ready:false, reason:'18,000 km service',
+   back_in_service:'2026-09-18', remark:'Parts due Thursday'},
   {plate:'20H01353', sub:'Bac Nam', note:'BH', sheet_status:'Empty',
    location:'QL49', arrive_date:'', arrive:'', state:'pending',
    ready:true, reason:''},
@@ -92,6 +93,19 @@ try {
   is('an FH with no time is NOT flagged',
      (html2.match(/needtime/g) || []).length, 1);
   is('the absent row still renders', html2.indexOf('not on this sheet') >= 0, true);
+  is('the declared back-in-service date is shown',
+     html2.indexOf('18/09/2026') >= 0, true);
+  is('the company remark is shown', html2.indexOf('Parts due Thursday') >= 0, true);
+  is('the reason is a wrapping box, not a one-line input',
+     /<textarea class="r-reason"[^>]*>18,000 km service<\/textarea>/.test(html2), true);
+  is('no input carries a fixed inline width', /style="width:(150|110)px"/.test(html2), false);
+  is('the trail has its own column', /<td class="c-trail"> <a class="trail"/.test(html2), true);
+  is('...on the absent row too',
+     /20H09999<\/td><td class="c-trail"> <a class="trail"/.test(html2), true);
+  is('the truck cell no longer holds the link',
+     /<td class="plate">[^<]*<a class="trail"/.test(html2), false);
+  is('the trail header has no sort menu', html2.indexOf('<th class="c-trail">Trail</th>') >= 0, true);
+  is('the absent row still spans the table', html2.indexOf('colspan="9"') >= 0, true);
   is('row indices are the ORIGINAL ones', html2.indexOf('data-i="3"') >= 0, true);
   is('headers are sortable', html2.indexOf('data-col="status"') >= 0, true);
   // sorting must not move an edit onto another truck

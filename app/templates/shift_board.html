@@ -62,6 +62,49 @@
      frozen header is a convenience while a table you cannot read is not. It
      scrolls with its rows now, which cannot be wrong. */
   #listBody thead th{position:static;background:var(--panel2)}
+  /* ── The truck list reads like a spreadsheet ────────────────────────────
+     It is checked against a sheet the company filled in Excel, so it looks
+     like one: every cell gridded, text wrapped rather than cut, inputs flat
+     inside their cells. The page may stretch; on a narrow screen the table
+     scrolls sideways inside its own box, never the whole page. */
+  main{max-width:1800px}
+  #listBody{overflow-x:auto}
+  #listTable{margin-top:6px;background:#0d1626;font-size:12.5px;line-height:1.3}
+  #listTable th,#listTable td{border:1px solid #2a3850;padding:4px 6px;
+      white-space:normal;overflow-wrap:break-word;vertical-align:top}
+  #listTable th{background:#1a2640;color:#d5deec;font-size:11.5px;font-weight:700;
+      text-transform:none;letter-spacing:0;vertical-align:bottom;
+      border-bottom:2px solid #3b4d6b}
+  #listTable th.hd{padding-right:18px}
+  #listTable th.hd:hover{background:#22314f}
+  #listTable .hh{color:#8fa0bb}
+  #listTable tbody tr:hover td{background:#132038}
+  #listTable tr.needtime td{background:rgba(255,107,96,.08)}
+  #listTable td.plate{background:transparent;border:1px solid #2a3850;border-radius:0;
+      padding:4px 6px;font-size:12.5px}
+  #listTable td:has(> input[type=checkbox]){text-align:center;vertical-align:middle}
+  #listTable .decl,#listTable .pill{border-radius:2px;padding:0 5px}
+  #listTable input[type=date],#listTable input[type=time],#listTable textarea.r-reason{
+      width:100%;min-width:0;border:0;border-radius:0;background:transparent;
+      padding:2px 3px;margin:0;color:var(--txt);font:inherit}
+  #listTable textarea.r-reason{display:block;resize:none;overflow:hidden;
+      field-sizing:content;min-height:1.7em;white-space:pre-wrap}
+  @supports not (field-sizing: content){
+    #listTable textarea.r-reason{min-height:3.2em;overflow:auto}
+  }
+  #listTable input:focus,#listTable textarea:focus{outline:2px solid #22a35a;
+      outline-offset:-1px;background:#0b1a13}
+  #listTable input:disabled,#listTable textarea:disabled{background:transparent;
+      border:0;-webkit-text-fill-color:#cdd7e6}
+  /* Floors, not fixed widths: a column may grow, it may not be crushed. */
+  #listTable .c-plate{min-width:88px} #listTable .c-sub{min-width:60px}
+  #listTable .c-status{min-width:96px} #listTable .c-load{min-width:74px}
+  #listTable .c-loc{min-width:104px}   #listTable .c-date{min-width:124px}
+  #listTable .c-time{min-width:96px}   #listTable .c-back{min-width:92px}
+  #listTable .c-remark{min-width:130px} #listTable .c-stage{min-width:88px}
+  #listTable .c-approve{min-width:66px} #listTable .c-reason{min-width:200px}
+  #listTable .c-trail{min-width:54px;text-align:center;white-space:nowrap}
+  #listTable td.c-trail a.trail{font-size:11.5px}
   .banner{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;
           border:1px solid}
   .b-none{background:#1e293b55;border-color:var(--line);color:var(--mut)}
@@ -349,20 +392,28 @@ const badge = s =>
   : s === 'absent'   ? pill('#ef444422', '#fca5a5', 'no show')
   :                    pill('#1e293b',   '#8b9ab4', 'pending');
 
+// 2026-09-18 -> 18/09/2026: the page's own date inputs read day first.
+const dayFirst = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '')
+  ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : (s || '');
+
 function drawRows(){
   const editable = CAN.edit, timeEditable = CAN.edit_time;
   const view = TV.view(LIST.rows || []);
-  const head = '<tr>' + TV.cols.map(c => TV.head(c)).join('') + '</tr>';
+  // Trail is a link, not a value: a plain header with no sort or filter menu,
+  // straight after Truck.
+  const heads = TV.cols.map(c => TV.head(c));
+  heads.splice(1, 0, '<th class="c-trail">Trail</th>');
+  const head = '<tr>' + heads.join('') + '</tr>';
   const body = view.map(i => {
     const r = LIST.rows[i];
     if (r.absent){
       // Committed for the project and never on the sheet. No tick, no timing
       // and no reason box: there is nothing to save against it.
-      return '<tr style="opacity:.72"><td class="plate">' + esc(r.plate)
-        + trailLink(r.plate) + '</td>'
+      return '<tr style="opacity:.72"><td class="plate">' + esc(r.plate) + '</td>'
+        + '<td class="c-trail">' + trailLink(r.plate) + '</td>'
         + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
         + '<td>' + badge('absent') + '</td>'
-        + '<td colspan="7" style="color:var(--bad);font-size:12px">'
+        + '<td colspan="9" style="color:var(--bad);font-size:12px">'
         + 'Committed for the project and not on this sheet — ask the '
         + 'subcontractor for its status.</td></tr>';
     }
@@ -372,10 +423,11 @@ function drawRows(){
     const wantsTime = (declared === 'BH');
     const missing = wantsTime && !(r.arrive_date && r.arrive);
     return '<tr' + (missing ? ' class="needtime"' : '') + '>'
-      + '<td class="plate">' + esc(r.plate) + trailLink(r.plate)
+      + '<td class="plate">' + esc(r.plate)
       + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
           + 'color:#fcd34d" title="This plate is not on the committed roster '
           + 'for this company">not committed</span>' : '') + '</td>'
+      + '<td class="c-trail">' + trailLink(r.plate) + '</td>'
       + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
       + '<td>' + (declared
           ? '<span class="decl' + (running ? '' : ' decl-off') + '">'
@@ -384,11 +436,18 @@ function drawRows(){
       + '<td style="font-size:12px">' + esc(r.sheet_status||'') + '</td>'
       + '<td style="color:var(--mut);font-size:12px">' + esc(r.location||'') + '</td>'
       + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
-        + 'style="width:150px"' + (timeEditable?'':' disabled') + '></td>'
+        + '' + (timeEditable?'':' disabled') + '></td>'
       + '<td><input type="time" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
-        + 'style="width:110px"' + (timeEditable?'':' disabled') + '>'
+        + '' + (timeEditable?'':' disabled') + '>'
         + (missing ? '<div class="needwhy">BH with no arrival — cannot be planned</div>' : '')
         + '</td>'
+      // Declared by the company, read-only here: the supervisor decides from
+      // them, and collectRows() already sends both back exactly as they came.
+      + '<td style="font-size:12px;white-space:nowrap">' + (r.back_in_service
+          ? esc(dayFirst(r.back_in_service)) : '<span style="color:var(--mut)">—</span>')
+        + '</td>'
+      + '<td style="max-width:260px">'
+        + esc(r.remark || '') + '</td>'
       + '<td class="r-state" data-i="'+i+'">' + badge(r.state)
         + (canRevert(r) ? ' <button class="r-back" data-plate="'+esc(r.plate)+'" '
            + 'title="Step this truck back to '+esc(BACK_ONE[r.state])+'" '
@@ -397,9 +456,9 @@ function drawRows(){
       + '<td><input type="checkbox" class="r-ready" data-i="'+i+'"'
         + (r.ready?' checked':'')
         + ((editable && canTick(r)) ? '' : ' disabled') + '></td>'
-      + '<td><input type="text" class="r-reason" data-i="'+i+'" value="'+esc(r.reason)+'" '
-        + 'style="width:100%" placeholder="required when not applied"'
-        + (editable?'':' disabled') + '></td></tr>';
+      + '<td><textarea class="r-reason" data-i="'+i+'" rows="1" '
+        + 'placeholder="required when not applied"'
+        + (editable?'':' disabled') + '>' + esc(r.reason) + '</textarea></td></tr>';
   }).join('');
 
   const hidden = (LIST.rows || []).length - view.length;
@@ -744,18 +803,22 @@ async function loadList(){
     if (!TV){
       TV = new TableView({
         cols: [
-          {key:'plate',    label:'Truck'},
-          {key:'sub',      label:'Sub'},
-          {key:'status',   label:'Status',  hint:'FH / BH / why not',
+          {key:'plate',    label:'Truck', cls:'c-plate'},
+          {key:'sub',      label:'Sub', cls:'c-sub'},
+          {key:'status',   label:'Status',  hint:'FH / BH / why not', cls:'c-status',
            get: r => r.absent ? 'absent' : (r.note || r.reason || '')},
-          {key:'load',     label:'Loaded / Empty', get: r => r.sheet_status || ''},
-          {key:'location', label:'Location', get: r => r.location || ''},
-          {key:'adate',    label:'Date arrive Mine', hint:'day first',
+          {key:'load',     label:'Loaded / Empty', cls:'c-load', get: r => r.sheet_status || ''},
+          {key:'location', label:'Location', cls:'c-loc', get: r => r.location || ''},
+          {key:'adate',    label:'Date arrive Mine', hint:'day first', cls:'c-date',
            get: r => r.arrive_date || ''},
-          {key:'atime',    label:'Time', hint:'HH:MM, 24h', get: r => r.arrive || ''},
-          {key:'stage',    label:'Stage',  get: r => r.absent ? 'absent' : (r.state || '')},
-          {key:'approve',  label:'Approve', get: r => (r.ready ? 'yes' : 'no')},
-          {key:'reason',   label:'Reason if not applied', get: r => r.reason || ''}
+          {key:'atime',    label:'Time', hint:'HH:MM, 24h', cls:'c-time', get: r => r.arrive || ''},
+          {key:'back',     label:'Back in service', hint:'when a stopped truck returns', cls:'c-back',
+           get: r => r.back_in_service || ''},
+          {key:'remark',   label:'Remark', hint:'the company\'s own words', cls:'c-remark',
+           get: r => r.remark || ''},
+          {key:'stage',    label:'Stage', cls:'c-stage',  get: r => r.absent ? 'absent' : (r.state || '')},
+          {key:'approve',  label:'Approve', cls:'c-approve', get: r => (r.ready ? 'yes' : 'no')},
+          {key:'reason',   label:'Reason if not applied', cls:'c-reason', get: r => r.reason || ''}
         ],
         onChange: () => drawRows()
       });
