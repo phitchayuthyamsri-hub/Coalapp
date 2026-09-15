@@ -57,7 +57,8 @@ const ROWS = JSON.stringify([
    back_in_service:'2026-09-18', remark:'Parts due Thursday'},
   {plate:'20H01353', sub:'Bac Nam', note:'BH', sheet_status:'Empty',
    location:'QL49', arrive_date:'', arrive:'', state:'pending',
-   ready:true, reason:''},
+   ready:true, reason:'', gps_loc:'On the road', gps_seen:'2026-09-15 21:08',
+   gps_road:'QL49 > Chan May port', gps_km:116.9},
   {plate:'20H09999', sub:'Bac Nam', absent:true, state:'absent'}
 ]);
 vm.runInContext(`
@@ -116,6 +117,13 @@ try {
   is('...with when it was seen and km to the mine',
      html2.indexOf('2026-09-15 10:19 &middot; 116.9 km to mine') >= 0, true);
   is('GPS elsewhere than declared is flagged', html2.indexOf('gps-diff') >= 0, true);
+  is('between checkpoints the stretch of road is named',
+     html2.indexOf('<span class="gps-loc">QL49 &gt; Chan May port</span>') >= 0, true);
+  is('...and a bare On the road is never shown',
+     html2.indexOf('>On the road<') >= 0, false);
+  is('a road segment does not read as a mismatch',
+     /QL49 &gt; Chan May port[\s\S]{0,200}gps-diff/.test(html2)
+       || /gps-diff[^>]*>[^<]*<span class="gps-loc">QL49/.test(html2), false);
   is('a truck GPS never saw says so', html2.indexOf('no GPS') >= 0, true);
   is('...with no explanation beside it',
      /<span class="gps-none">no GPS<\/span><\/td>/.test(html2), true);

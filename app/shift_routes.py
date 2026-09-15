@@ -2155,6 +2155,54 @@ def suggest():
     return jsonify(**_gps_view(day, only))
 
 
+# The loop, in the order the road forces: out one way, back the same way.
+ROAD_CHAIN = ("xppl", "border", "ql49", "port")
+
+
+def _road_segment(vs, roles, by_id, at):
+    """Between geofences, which stretch of the loop the truck is on.
+
+    The last two checkpoints it passed give a direction along the chain
+    mine - border - QL49 - port, and the label names the stretch ahead:
+    "QL49 > Chan May port". A sequence that fits no direction reads
+    "Unknown" - a guess shown as a fact sends an investigation the wrong
+    way, which is worse than admitting there is nothing to go on.
+    """
+    idx = {}
+    for i, role in enumerate(ROAD_CHAIN):
+        aid = roles.get(role)
+        if aid is not None:
+            idx[aid] = i
+
+    def name(i):
+        a = by_id.get(roles.get(ROAD_CHAIN[i]))
+        return a.name if a else ROAD_CHAIN[i]
+
+    # Only changes of checkpoint carry direction, so repeats collapse.
+    path = []
+    for v in vs:
+        if v["anchor_id"] in idx and v["enter"] <= at:
+            if not path or path[-1] != v["anchor_id"]:
+                path.append(v["anchor_id"])
+    if not path:
+        return "Unknown"
+    last = idx[path[-1]]
+    if len(path) == 1:
+        # An end of the line alone still points one way; a middle stop
+        # alone could be heading either way.
+        if last == 0:
+            return "%s > %s" % (name(0), name(1))
+        if last == len(ROAD_CHAIN) - 1:
+            return "%s > %s" % (name(last), name(last - 1))
+        return "Unknown"
+    prev = idx[path[-2]]
+    step = 1 if last > prev else -1
+    nxt = last + step
+    if nxt < 0 or nxt >= len(ROAD_CHAIN):
+        nxt = last - step   # past the end of the line, the only way is back
+    return "%s > %s" % (name(last), name(nxt))
+
+
 def _gps_view(day, only):
     """The GPS answer for every truck, shared by the declaration page and the
     approval page. One computation, so what a subcontractor is offered and what
@@ -2208,7 +2256,7 @@ def _gps_view(day, only):
         k = engine.norm_plate(t.plate)
         g = last.get(k)
         row = {"plate": t.plate, "driver": t.driver or "",
-               "status": "", "load": "", "location": "",
+               "status": "", "load": "", "location": "", "road": "",
                "eta_date": "", "eta_time": "", "km_out": None,
                "seen_at": None, "why": "", "confident": False}
 
@@ -2231,6 +2279,10 @@ def _gps_view(day, only):
         # Which leg: the port splits the loop. Seen at the port since it last
         # left the mine and it is on its way home; otherwise it is running out.
         vs = sorted(per_plate.get(k, []), key=lambda x: x["enter"])
+        if here is None:
+            # Between geofences the checkpoint sequence, not the leg guess,
+            # says which stretch of road it is on.
+            row["road"] = _road_segment(vs, roles, by_id, g.dt)
         last_mine = None
         for v in vs:
             if v["anchor_id"] == mine_id:

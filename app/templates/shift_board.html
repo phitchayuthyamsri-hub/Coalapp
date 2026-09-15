@@ -388,6 +388,10 @@ function attachGps(list, gps){
     const g = by[plateKey(r.plate)];
     r.gps_seen = (g && g.seen_at) || null;
     r.gps_loc = r.gps_seen ? (g.location || 'On the road') : '';
+    // Between geofences the server names the stretch of road from the
+    // checkpoint sequence ("QL49 > Chan May port"), or "Unknown" when the
+    // sequence fits no direction.
+    r.gps_road = r.gps_seen ? (g.road || '') : '';
     r.gps_km = g ? g.km_out : null;
   });
 }
@@ -399,7 +403,7 @@ function gpsDiffers(r){
   const here = String(r.gps_loc || '').trim().toLowerCase();
   return !!(r.gps_seen && decl && decl !== 'on the road' && here !== 'on the road' && decl !== here);
 }
-function gpsShown(r){ return !r.gps_seen ? 'no GPS' : (gpsDiffers(r) ? 'Unknown' : r.gps_loc); }
+function gpsShown(r){ return !r.gps_seen ? 'no GPS' : (gpsDiffers(r) ? 'Unknown' : (r.gps_road || r.gps_loc)); }
 function gpsCell(r){
   if (!r.gps_seen) return '<td class="c-gps"><span class="gps-none">no GPS</span></td>';
   const differs = gpsDiffers(r);
