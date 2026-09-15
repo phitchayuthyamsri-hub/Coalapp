@@ -2909,7 +2909,7 @@ def _today_by_company(day, now):
         return None
 
     keys = ("fleet", "assigned", "not_assigned", "arrived", "late",
-            "did_not_come", "unverified", "not_due")
+            "did_not_come", "unverified", "not_due", "bh", "fh", "other")
     total = dict.fromkeys(keys, 0)
     companies, issued = [], False
     for sub in Subcontractor.query.filter_by(active=True).order_by(Subcontractor.name).all():
@@ -2941,6 +2941,22 @@ def _today_by_company(day, now):
         # older sheet can size the fleet but not explain today - and when no
         # sheet was declared for today, that IS the reason.
         planning = sheet if sheet is not None and sheet.list_date == day else None
+
+        # What the company declared for this day, in the terms the manager
+        # reads: backhaul, fronthaul, or some reason it is not running.
+        bh = fh = other = applied = 0
+        if planning is not None:
+            for r in rows.values():
+                s = (r.note or "").strip().upper()
+                if s == "BH":
+                    bh += 1
+                elif s == "FH":
+                    fh += 1
+                else:
+                    other += 1
+                if (r.state or "") == "applied":
+                    applied += 1
+
         reasons = {}
         for k in sorted(set(fleet) - set(planned), key=lambda x: fleet[x]):
             why = (_why_not_assigned(rows.get(k), day) if planning is not None
@@ -2989,6 +3005,11 @@ def _today_by_company(day, now):
             "sheet_date": sheet.list_date if sheet else None,
             "planning_sheet": planning.list_date if planning is not None else None,
             "assigned": len(planned), "not_assigned": len(set(fleet) - set(planned)),
+            "bh": bh, "fh": fh, "other": other,
+            "sheet_state": planning.state if planning is not None else "",
+            "waiting": applied,
+            "can_decide": bool(planning is not None
+                               and _can("confirm", planning.state)),
             "reasons": sorted(({"reason": k, "count": len(v), "plates": v}
                                for k, v in reasons.items()),
                               key=lambda x: (-x["count"], x["reason"])),

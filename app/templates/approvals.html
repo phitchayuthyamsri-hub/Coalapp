@@ -72,9 +72,8 @@
   .msg{font-size:12.5px;margin-left:10px}
   #day{min-width:340px;font-variant-numeric:tabular-nums}
   .tdy td.n,.tdy th.n{text-align:right;font-variant-numeric:tabular-nums;width:96px}
-  .tdy tr.co-row{cursor:pointer}
-  .tdy tr.co-row:hover{background:var(--panel2)}
   .tdy tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+  .tdy button{padding:5px 13px;font-size:11px}
   .tdy .z{color:var(--mut);opacity:.55}
   .tdy .hot{color:var(--red);font-weight:700}
   .tdy .warm{color:var(--amber);font-weight:700}
@@ -106,8 +105,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <div class="card" id="todayCard">
     <div class="row">
       <div><h2 style="margin:0;font-size:15px">Today at the mine &mdash; by company</h2>
-        <div class="why">Trucks the plan sent to the mine, trucks it did not, and trucks
-          that did not come.</div></div>
+        <div class="why">What each company declared for this day &mdash; and the
+          approval, right here.</div></div>
       <div class="spacer" style="flex:1"></div>
       <label class="f">Day at the mine
         <input type="date" id="tday"></label>
@@ -214,15 +213,16 @@ function draw(){
         + '<td>' + gps + '</td></tr>';
     }).join('');
 
+    // Approve moved onto the summary table at the top; the card below keeps
+    // only the decision that needs the evidence in front of it.
     const canDecide = l.can_decide && (c.applied || 0) > 0;
     const actions = '<div class="row" style="margin-top:12px">'
-      + '<button data-act="confirm" data-i="' + li + '"' + (canDecide ? '' : ' disabled')
-        + '>Confirm ' + (c.applied || 0) + ' truck' + ((c.applied || 0) === 1 ? '' : 's') + '</button>'
       + '<button class="no" data-act="reject" data-i="' + li + '"' + (canDecide ? '' : ' disabled')
         + '>Reject</button>'
       + '<span class="msg" id="m' + li + '">'
-        + (canDecide ? '' : (l.state === 'confirmed'
-            ? 'Already confirmed.'
+        + (canDecide ? 'Approve from the summary at the top of the page.'
+            : (l.state === 'confirmed'
+            ? 'Already approved.'
             : ((c.applied || 0) ? 'Your role may not decide this.'
                                 : 'Nothing has been sent for approval yet.')))
       + '</span></div>';
@@ -275,11 +275,12 @@ async function act(btn){
 // ── Today at the mine, by company ─────────────────────────────────────────────
 // Its own date, so the manager can watch today while working tomorrow's sheet
 // below. Both mean the same thing: the day the trucks are at the mine.
-const OPEN = new Set();
+// One line per company and nothing more: the manager reads counts, not truck
+// lists. The full lists stay in the per-company cards below for the days a
+// count needs explaining.
 let TODAY = null;
 
 async function loadToday(){
-  OPEN.clear();            // every load and every day change starts collapsed
   const day = $('#tday').value || todayStr();
   try { TODAY = await jget('/api/shift/today-by-company?date=' + day); }
   catch (e) {
@@ -293,37 +294,21 @@ function num(n, tone){
   return '<td class="n' + (n ? (tone ? ' ' + tone : '') : ' z') + '">' + (n || 0) + '</td>';
 }
 
-function bullets(list, fmt){
-  return '<ul>' + list.map(x => '<li>' + fmt(x) + '</li>').join('') + '</ul>';
-}
-
-function detail(c, grace){
-  let h = '';
-  if (c.did_not_come_rows.length) h += '<h4 class="hot">Did not come</h4>'
-    + bullets(c.did_not_come_rows, x => '<b>' + esc(x.plate) + '</b>' + trailLink(x.plate)
-      + ' — planned ' + esc(x.planned) + ' · last seen ' + esc(x.last_seen)
-      + (x.where === 'On the road' ? ' on the road' : ' at ' + esc(x.where)));
-  if (c.unverified_rows.length) h += '<h4>Cannot verify</h4>'
-    + bullets(c.unverified_rows, x => '<b>' + esc(x.plate) + '</b>' + trailLink(x.plate)
-      + ' — planned ' + esc(x.planned) + ' · '
-      + (x.last_seen ? 'last GPS ' + esc(x.last_seen) : 'no GPS'));
-  const late = c.arrived_rows.filter(x => x.late_min > grace);
-  if (late.length) h += '<h4>Arrived late</h4>'
-    + bullets(late, x => '<b>' + esc(x.plate) + '</b> — planned ' + esc(x.planned)
-      + ' · arrived ' + esc(x.arrived) + ' (+' + x.late_min + ' min)');
-  const onTime = c.arrived_rows.filter(x => x.late_min <= grace);
-  if (onTime.length) h += '<h4>Arrived on time</h4><ul><li>'
-    + onTime.map(x => esc(x.plate)).join(', ') + '</li></ul>';
-  if (c.not_due_rows.length) h += '<h4>Not due yet</h4>'
-    + bullets(c.not_due_rows, x => '<b>' + esc(x.plate) + '</b> — planned '
-      + esc(x.planned || 'no time'));
-  if (c.reasons.length) h += '<h4>Not assigned'
-    + (c.planning_sheet ? ' — from the sheet for ' + esc(c.planning_sheet) : '') + '</h4>'
-    + bullets(c.reasons, r => '<b>' + esc(r.reason) + ' (' + r.count + ')</b>: '
-      + r.plates.map(esc).join(', '));
-  if (c.outside_fleet.length) h += '<h4>In the plan, not in the fleet</h4><ul><li>'
-    + c.outside_fleet.map(esc).join(', ') + '</li></ul>';
-  return h || '<span class="why">Nothing to list.</span>';
+// The decision lives on the summary row. The button only exists while there
+// is something to decide; every other state says in words where things stand.
+function approveCell(c){
+  if (!c.sheet_state)
+    return '<td><span class="why">no sheet for this day</span></td>';
+  if (c.sheet_state === 'confirmed')
+    return '<td><span class="pill p-confirmed">approved</span></td>';
+  if (c.sheet_state === 'rejected')
+    return '<td><span class="pill p-rejected">rejected</span></td>';
+  if (c.waiting && c.can_decide)
+    return '<td><button data-sub="' + c.id + '" data-co="' + esc(c.company)
+      + '" data-n="' + c.waiting + '">Approve ' + c.waiting + '</button></td>';
+  if (c.waiting)
+    return '<td><span class="why">' + c.waiting + ' waiting &middot; not your role</span></td>';
+  return '<td><span class="why">nothing sent yet</span></td>';
 }
 
 function drawToday(){
@@ -340,46 +325,46 @@ function drawToday(){
     return;
   }
   const t = d.total || {};
-  const head = '<tr><th>Company</th><th class="n">Fleet</th><th class="n">Assigned</th>'
-    + '<th class="n">Not assigned</th><th class="n">Arrived</th>'
-    + '<th class="n">Did not come</th><th class="n">Cannot verify</th>'
-    + '<th class="n">Not due yet</th></tr>';
-  const body = cs.map(c => {
-    const open = OPEN.has(c.id);
-    return '<tr class="co-row" data-co="' + c.id + '">'
-      + '<td><b>' + (open ? '▾ ' : '▸ ') + esc(c.company) + '</b>'
-        + (c.fleet_basis === 'sheet'
-            ? ' <span class="why" title="No committed fleet registered for this company">'
-              + '* fleet from sheet ' + esc(c.sheet_date || '') + '</span>' : '')
-      + '</td>'
-      + num(c.fleet) + num(c.assigned) + num(c.not_assigned, 'warm')
-      + '<td class="n' + (c.arrived ? ' good' : ' z') + '">' + c.arrived
-        + (c.late ? ' <span class="why">(' + c.late + ' late)</span>' : '') + '</td>'
-      + num(c.did_not_come, 'hot') + num(c.unverified, 'warm') + num(c.not_due)
-      + '</tr>'
-      + (open ? '<tr class="more"><td colspan="8">' + detail(c, d.on_time_minutes)
-          + '</td></tr>' : '');
-  }).join('');
+  const head = '<tr><th>Company</th><th class="n">Total fleet</th>'
+    + '<th class="n">Assigned (BH)</th><th class="n">Fronthaul</th>'
+    + '<th class="n" title="Maintenance, breakdown, no driver…">Other</th>'
+    + '<th style="width:150px">Approve</th></tr>';
+  const body = cs.map(c =>
+    '<tr>'
+    + '<td><b>' + esc(c.company) + '</b>'
+      + (c.fleet_basis === 'sheet'
+          ? ' <span class="why" title="No committed fleet registered for this company">'
+            + '* fleet from sheet ' + esc(c.sheet_date || '') + '</span>' : '')
+    + '</td>'
+    + num(c.fleet) + num(c.bh) + num(c.fh) + num(c.other, 'warm')
+    + approveCell(c) + '</tr>').join('');
   const total = cs.length > 1
-    ? '<tr class="tot"><td>Total</td>' + num(t.fleet) + num(t.assigned)
-      + num(t.not_assigned, 'warm') + num(t.arrived, 'good') + num(t.did_not_come, 'hot')
-      + num(t.unverified, 'warm') + num(t.not_due) + '</tr>'
+    ? '<tr class="tot"><td>Total</td>' + num(t.fleet) + num(t.bh) + num(t.fh)
+      + num(t.other, 'warm') + '<td></td></tr>'
     : '';
-  el.innerHTML = (d.issued ? '' : '<div class="note n-warn">No plan has been issued for '
-      + esc(d.date) + '. Nothing is assigned yet.</div>')
-    + '<div class="wrap-t tdy"><table><thead>' + head + '</thead><tbody>' + body + total
-    + '</tbody></table></div>'
-    + '<ul class="why" style="margin:8px 0 0 18px;padding:0">'
-    + '<li>Click a company to see its trucks.</li>'
-    + '<li>Did not come = GPS saw the truck after its time, but not at the mine.</li>'
-    + '<li>Cannot verify = no GPS after its time. Not counted as "did not come".</li>'
-    + '<li>A truck counts as due ' + d.on_time_minutes + ' min after its planned time.</li>'
-    + '</ul>';
-  el.querySelectorAll('tr.co-row').forEach(tr => tr.onclick = () => {
-    const id = Number(tr.dataset.co);
-    if (OPEN.has(id)) OPEN.delete(id); else OPEN.add(id);
-    drawToday();
-  });
+  el.innerHTML = '<div class="wrap-t tdy"><table><thead>' + head + '</thead><tbody>'
+    + body + total + '</tbody></table></div>';
+  el.querySelectorAll('button[data-sub]').forEach(b => b.onclick = () => approveFrom(b));
+}
+
+async function approveFrom(b){
+  const day = $('#tday').value || todayStr();
+  if (!confirm('Approve ' + b.dataset.n + ' truck(s) for ' + b.dataset.co + '?\n\n'
+      + 'Approving is what makes them plannable - the planner can build the day '
+      + 'from them straight after.')) return;
+  b.disabled = true; b.textContent = 'Approving…';
+  try {
+    const r = await fetch('/api/shift/list/confirm', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: day, subcontractor_id: Number(b.dataset.sub)})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Failed');
+  } catch (e) {
+    alert(e.message || 'Failed');
+  }
+  loadToday();
+  if (PICKER) PICKER.load($('#day').value);
+  load();
 }
 
 let PICKER = null;
