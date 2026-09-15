@@ -104,6 +104,11 @@
   #listTable .c-remark{min-width:130px} #listTable .c-stage{min-width:88px}
   #listTable .c-approve{min-width:66px} #listTable .c-reason{min-width:200px}
   #listTable .c-trail{min-width:54px;text-align:center;white-space:nowrap}
+  #listTable .c-gps{min-width:124px}
+  #listTable .gps-loc{display:block}
+  #listTable .gps-when{display:block;font-size:10.5px;color:var(--mut)}
+  #listTable .gps-none{display:block;color:var(--warn);font-weight:600}
+  #listTable td.gps-diff .gps-loc{color:var(--warn);font-weight:600}
   #listTable td.c-trail a.trail{font-size:11.5px}
   .banner{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;
           border:1px solid}
@@ -372,6 +377,35 @@ function clearReport(){ $('#upReport').innerHTML = ''; $('#upMsg').textContent =
 // A link to the truck's own last day on the map. Checking a declaration means
 // asking "was it really there", and that answer lives on the GPS page - one
 // click away rather than a page, a drop-down and two date fields away.
+// What the GPS system last said about each truck, joined onto the list by
+// plate. The same answer the declaration page is offered, so the two pages
+// can never disagree about where a truck was.
+const plateKey = p => String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function attachGps(list, gps){
+  const by = {};
+  ((gps && gps.rows) || []).forEach(g => { by[plateKey(g.plate)] = g; });
+  ((list && list.rows) || []).forEach(r => {
+    const g = by[plateKey(r.plate)];
+    r.gps_seen = (g && g.seen_at) || null;
+    r.gps_loc = r.gps_seen ? (g.location || 'On the road') : '';
+    r.gps_km = g ? g.km_out : null;
+  });
+}
+// Amber when GPS puts the truck somewhere other than where it was declared.
+// 'On the road' contradicts nothing: pings are minutes to hours apart.
+function gpsCell(r){
+  if (!r.gps_seen) return '<td class="c-gps"><span class="gps-none">no GPS</span>'
+    + '<span class="gps-when">not seen in the last two days</span></td>';
+  const decl = String(r.location || '').trim().toLowerCase();
+  const here = String(r.gps_loc || '').trim().toLowerCase();
+  const differs = decl && decl !== 'on the road' && here !== 'on the road' && decl !== here;
+  return '<td class="c-gps' + (differs ? ' gps-diff' : '') + '"'
+    + (differs ? ' title="GPS last saw this truck somewhere other than the declared location"' : '')
+    + '><span class="gps-loc">' + esc(r.gps_loc) + '</span>'
+    + '<span class="gps-when">' + esc(r.gps_seen)
+    + (r.gps_km != null ? ' &middot; ' + r.gps_km + ' km to mine' : '') + '</span></td>';
+}
+
 function trailLink(plate){
   if (!plate) return '';
   return ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
@@ -413,7 +447,8 @@ function drawRows(){
         + '<td class="c-trail">' + trailLink(r.plate) + '</td>'
         + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
         + '<td>' + badge('absent') + '</td>'
-        + '<td colspan="9" style="color:var(--bad);font-size:12px">'
+        + '<td></td>' + gpsCell(r)
+        + '<td colspan="8" style="color:var(--bad);font-size:12px">'
         + 'Committed for the project and not on this sheet — ask the '
         + 'subcontractor for its status.</td></tr>';
     }
@@ -434,6 +469,7 @@ function drawRows(){
             + esc(declared) + '</span>'
           : '<span style="color:var(--mut)">—</span>') + '</td>'
       + '<td style="font-size:12px">' + esc(r.sheet_status||'') + '</td>'
+      + gpsCell(r)
       + '<td style="color:var(--mut);font-size:12px">' + esc(r.location||'') + '</td>'
       + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
         + '' + (timeEditable?'':' disabled') + '></td>'
@@ -737,7 +773,14 @@ function companiesOnDay(day){
 }
 
 async function loadList(){
-  LIST = await jget('/api/shift/list?date=' + $('#day').value + subQ());
+  // The GPS answer comes WITH the list: drawn together, so a late GPS reply can
+  // never redraw the table over a reason somebody is typing.
+  const [list, gps] = await Promise.all([
+    jget('/api/shift/list?date=' + $('#day').value + subQ()),
+    jget('/api/shift/suggest?date=' + $('#day').value).catch(() => ({rows: []}))
+  ]);
+  LIST = list;
+  attachGps(LIST, gps);
   let [cls, text] = BANNER[LIST.state] || BANNER.none;
   let extra = '';
   // "No list yet" is only true if nobody sent one. If somebody did and you are
@@ -808,6 +851,8 @@ async function loadList(){
           {key:'status',   label:'Status',  hint:'FH / BH / why not', cls:'c-status',
            get: r => r.absent ? 'absent' : (r.note || r.reason || '')},
           {key:'load',     label:'Loaded / Empty', cls:'c-load', get: r => r.sheet_status || ''},
+          {key:'gps',      label:'GPS last location', hint:'from the GPS system', cls:'c-gps',
+           get: r => r.gps_seen ? r.gps_loc : 'no GPS'},
           {key:'location', label:'Location', cls:'c-loc', get: r => r.location || ''},
           {key:'adate',    label:'Date arrive Mine', hint:'day first', cls:'c-date',
            get: r => r.arrive_date || ''},

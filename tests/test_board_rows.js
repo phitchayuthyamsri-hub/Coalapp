@@ -46,7 +46,8 @@ catch (e) { console.log('  load error (expected for boot fetches):', e.message.s
 const ROWS = JSON.stringify([
   {plate:'20C10615', sub:'Bac Nam', note:'BH', sheet_status:'Empty',
    location:'XPPL Mine', arrive_date:'2026-09-09', arrive:'05:00',
-   state:'pending', ready:true, reason:''},
+   state:'pending', ready:true, reason:'',
+   gps_loc:'Chan May port', gps_seen:'2026-09-15 10:19', gps_km:116.9},
   {plate:'20C10770', sub:'Bac Nam', note:'FH', sheet_status:'Loaded',
    location:'Lalay border', arrive_date:'', arrive:'', state:'pending',
    ready:true, reason:''},
@@ -105,7 +106,12 @@ try {
   is('the truck cell no longer holds the link',
      /<td class="plate">[^<]*<a class="trail"/.test(html2), false);
   is('the trail header has no sort menu', html2.indexOf('<th class="c-trail">Trail</th>') >= 0, true);
-  is('the absent row still spans the table', html2.indexOf('colspan="9"') >= 0, true);
+  is('the absent row still spans the table', html2.indexOf('colspan="8"') >= 0, true);
+  is('GPS last location is shown', html2.indexOf('Chan May port') >= 0, true);
+  is('...with when it was seen and km to the mine',
+     html2.indexOf('2026-09-15 10:19 &middot; 116.9 km to mine') >= 0, true);
+  is('GPS elsewhere than declared is flagged', html2.indexOf('gps-diff') >= 0, true);
+  is('a truck GPS never saw says so', html2.indexOf('no GPS') >= 0, true);
   is('row indices are the ORIGINAL ones', html2.indexOf('data-i="3"') >= 0, true);
   is('headers are sortable', html2.indexOf('data-col="status"') >= 0, true);
   // sorting must not move an edit onto another truck
