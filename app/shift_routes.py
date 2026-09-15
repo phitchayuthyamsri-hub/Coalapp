@@ -2169,7 +2169,10 @@ def _gps_view(day, only):
 
     # A position older than 24 hours is treated as no position at all: the
     # truck shows "no GPS", with no stale place offered in its stead.
-    fresh_after = max(window_start, datetime.utcnow() - GPS_MAX_AGE)
+    # GpsPing.dt is already UTC+7 (the providers report local time and it is
+    # stored unshifted - see gps_ingest), so "now" must be local too.
+    fresh_after = max(window_start,
+                      datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE)
     last = {}
     for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
               .order_by(GpsPing.dt).all()):
@@ -2214,7 +2217,8 @@ def _gps_view(day, only):
             out.append(row)
             continue
 
-        row["seen_at"] = _fmt(g.dt)
+        # Ping times are already local; _fmt would shift them 7h ahead.
+        row["seen_at"] = g.dt.strftime("%Y-%m-%d %H:%M")
 
         # Where it is: inside a geofence if it is in one, otherwise on the road.
         here = None
@@ -2252,7 +2256,7 @@ def _gps_view(day, only):
             km = engine.remaining_km_along_route(to_mine, g.lat, g.lng)
             if km is not None:
                 row["km_out"] = round(km, 1)
-                eta = _local(g.dt) + timedelta(hours=km / empty_kmh)
+                eta = g.dt + timedelta(hours=km / empty_kmh)
                 row["eta_date"] = eta.strftime("%Y-%m-%d")
                 row["eta_time"] = eta.strftime("%H:%M")
         out.append(row)
