@@ -142,6 +142,8 @@ CHECK_SPEC = {
 
 CYCLE_SPAN = timedelta(days=3)   # a loop runs 48h, 72h if the QL49 window is used
 
+GPS_MAX_AGE = timedelta(hours=24)   # a ping older than this is not a position
+
 LOCAL_OFFSET = timedelta(hours=7)   # times are shown UTC+7, as elsewhere
 
 
@@ -2165,8 +2167,11 @@ def _gps_view(day, only):
     lo, _hi = _day_bounds(day)
     window_start = lo - CYCLE_SPAN
 
+    # A position older than 24 hours is treated as no position at all: the
+    # truck shows "no GPS", with no stale place offered in its stead.
+    fresh_after = max(window_start, datetime.utcnow() - GPS_MAX_AGE)
     last = {}
-    for g in (GpsPing.query.filter(GpsPing.dt >= window_start)
+    for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
               .order_by(GpsPing.dt).all()):
         last[engine.norm_plate(g.plate)] = g
 
@@ -2205,7 +2210,7 @@ def _gps_view(day, only):
                "seen_at": None, "why": "", "confident": False}
 
         if g is None:
-            row["why"] = "no GPS position in the last two days"
+            row["why"] = "no GPS position in the last 24 hours"
             out.append(row)
             continue
 

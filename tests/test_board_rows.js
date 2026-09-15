@@ -117,6 +117,8 @@ try {
      html2.indexOf('2026-09-15 10:19 &middot; 116.9 km to mine') >= 0, true);
   is('GPS elsewhere than declared is flagged', html2.indexOf('gps-diff') >= 0, true);
   is('a truck GPS never saw says so', html2.indexOf('no GPS') >= 0, true);
+  is('...with no explanation beside it',
+     /<span class="gps-none">no GPS<\/span><\/td>/.test(html2), true);
   is('row indices are the ORIGINAL ones', html2.indexOf('data-i="3"') >= 0, true);
   is('headers are sortable', html2.indexOf('data-col="status"') >= 0, true);
   // sorting must not move an edit onto another truck

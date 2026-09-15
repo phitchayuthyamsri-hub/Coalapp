@@ -401,8 +401,7 @@ function gpsDiffers(r){
 }
 function gpsShown(r){ return !r.gps_seen ? 'no GPS' : (gpsDiffers(r) ? 'Unknown' : r.gps_loc); }
 function gpsCell(r){
-  if (!r.gps_seen) return '<td class="c-gps"><span class="gps-none">no GPS</span>'
-    + '<span class="gps-when">not seen in the last two days</span></td>';
+  if (!r.gps_seen) return '<td class="c-gps"><span class="gps-none">no GPS</span></td>';
   const differs = gpsDiffers(r);
   return '<td class="c-gps' + (differs ? ' gps-diff' : '') + '"'
     + (differs ? ' title="GPS last saw it at ' + esc(r.gps_loc) + ', not where it was declared"' : '')

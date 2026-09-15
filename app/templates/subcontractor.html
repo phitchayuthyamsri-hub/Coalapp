@@ -363,7 +363,7 @@ async function load(){
   const seen = (sug.seen || 0), unseen = (sug.unseen || 0);
   $('#gpsNote').innerHTML = unseen
     ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
-      + ' not seen by GPS</b> in the last two days, so nothing is filled in for '
+      + ' not seen by GPS</b> in the last 24 hours, so nothing is filled in for '
       + (unseen === 1 ? 'it' : 'them') + '. Type what you know.</div>'
     : '<div class="note n-info">Every truck has a recent GPS position.</div>';
   draw();
