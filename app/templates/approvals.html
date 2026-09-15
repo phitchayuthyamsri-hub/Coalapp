@@ -281,12 +281,15 @@ async function act(btn){
 let TODAY = null;
 
 async function loadToday(){
-  const day = $('#tday').value || todayStr();
-  try { TODAY = await jget('/api/shift/today-by-company?date=' + day); }
+  // No day chosen yet: the server answers for the LATEST day declared, and
+  // the picker is set to what came back. Picking a day asks for that day.
+  const day = $('#tday').value;
+  try { TODAY = await jget('/api/shift/today-by-company' + (day ? '?date=' + day : '')); }
   catch (e) {
     $('#today').innerHTML = '<div class="note n-warn">Could not load the summary.</div>';
     return;
   }
+  if (TODAY && TODAY.date) $('#tday').value = TODAY.date;
   drawToday();
 }
 
@@ -329,15 +332,22 @@ function drawToday(){
     + '<th class="n">Assigned (BH)</th><th class="n">Fronthaul</th>'
     + '<th class="n" title="Maintenance, breakdown, no driver…">Other</th>'
     + '<th style="width:150px">Approve</th></tr>';
-  const body = cs.map(c =>
-    '<tr>'
-    + '<td><b>' + esc(c.company) + '</b>'
-      + (c.fleet_basis === 'sheet'
-          ? ' <span class="why" title="No committed fleet registered for this company">'
-            + '* fleet from sheet ' + esc(c.sheet_date || '') + '</span>' : '')
-    + '</td>'
-    + num(c.fleet) + num(c.bh) + num(c.fh) + num(c.other, 'warm')
-    + approveCell(c) + '</tr>').join('');
+  const body = cs.map(c => {
+    // The reasons live on the number itself: hover the Other count for
+    // "Maintenance: 20H00789, ..." line by line, no expanding anything.
+    const det = (c.other_detail || [])
+      .map(g => g.status + ': ' + g.plates.join(', ')).join('\n');
+    const oth = '<td class="n' + (c.other ? ' warm' : ' z') + '"'
+      + (det ? ' title="' + esc(det) + '"' : '') + '>' + (c.other || 0) + '</td>';
+    return '<tr>'
+      + '<td><b>' + esc(c.company) + '</b>'
+        + (c.fleet_basis === 'sheet'
+            ? ' <span class="why" title="No committed fleet registered for this company">'
+              + '* fleet from sheet ' + esc(c.sheet_date || '') + '</span>' : '')
+      + '</td>'
+      + num(c.fleet) + num(c.bh) + num(c.fh) + oth
+      + approveCell(c) + '</tr>';
+  }).join('');
   const total = cs.length > 1
     ? '<tr class="tot"><td>Total</td>' + num(t.fleet) + num(t.bh) + num(t.fh)
       + num(t.other, 'warm') + '<td></td></tr>'
@@ -375,7 +385,8 @@ $('#reload').onclick = () => { if (PICKER) PICKER.load($('#day').value); load();
   try { me = await jget('/api/me'); } catch (e) {}
   $('#who').textContent = (me.username || '') + (me.role ? ' · ' + me.role : '');
   // The days that exist, newest first, each saying what is waiting on it.
-  $('#tday').value = todayStr();
+  // #tday starts empty on purpose: the first load answers for the latest
+  // declared day and fills the picker itself.
   $('#tday').onchange = loadToday;
   loadToday();
   PICKER = new DayPick({select: $('#day'), detail: true, onPick: load});

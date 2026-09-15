@@ -2945,6 +2945,7 @@ def _today_by_company(day, now):
         # What the company declared for this day, in the terms the manager
         # reads: backhaul, fronthaul, or some reason it is not running.
         bh = fh = other = applied = 0
+        other_groups = {}
         if planning is not None:
             for r in rows.values():
                 s = (r.note or "").strip().upper()
@@ -2954,6 +2955,8 @@ def _today_by_company(day, now):
                     fh += 1
                 else:
                     other += 1
+                    other_groups.setdefault((r.note or "").strip() or "No status",
+                                            []).append(r.plate)
                 if (r.state or "") == "applied":
                     applied += 1
 
@@ -3006,6 +3009,10 @@ def _today_by_company(day, now):
             "planning_sheet": planning.list_date if planning is not None else None,
             "assigned": len(planned), "not_assigned": len(set(fleet) - set(planned)),
             "bh": bh, "fh": fh, "other": other,
+            "other_detail": sorted(
+                ({"status": s, "plates": sorted(p)}
+                 for s, p in other_groups.items()),
+                key=lambda x: (-len(x["plates"]), x["status"])),
             "sheet_state": planning.state if planning is not None else "",
             "waiting": applied,
             "can_decide": bool(planning is not None
@@ -3034,8 +3041,13 @@ def today_by_company():
     which assigned trucks have not turned up."""
     if "approvals" not in _views():
         return jsonify(error="Not your view"), 403
-    day = request.args.get("date") or (
-        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    day = request.args.get("date")
+    if not day:
+        # No date asked for: open on the LATEST day any company has declared -
+        # usually tomorrow's sheet - because that is the one waiting on the
+        # manager, not the day already running.
+        day = (db.session.query(db.func.max(DailyList.list_date)).scalar()
+               or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d"))
     try:
         _day_bounds(day)
     except ValueError:
