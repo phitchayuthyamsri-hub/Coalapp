@@ -2156,51 +2156,58 @@ def suggest():
 
 
 # The loop, in the order the road forces: out one way, back the same way.
-ROAD_CHAIN = ("xppl", "border", "ql49", "port")
+# Each position may have several geofences on it: the Detour route sits on
+# the same stretch as the Lalay border, so passing either says the same
+# thing about where the truck is along the chain. The first role names the
+# position on screen.
+ROAD_CHAIN = (("xppl",), ("border", "detour"), ("ql49",), ("port",))
 
 
 def _road_segment(vs, roles, by_id, at):
     """Between geofences, which stretch of the loop the truck is on.
 
-    The last two checkpoints it passed give a direction along the chain
+    The last two chain positions it passed give a direction along
     mine - border - QL49 - port, and the label names the stretch ahead:
     "QL49 > Chan May port". A sequence that fits no direction reads
     "Unknown" - a guess shown as a fact sends an investigation the wrong
     way, which is worse than admitting there is nothing to go on.
+
+    Returns (label, step): step +1 is outbound (toward the port), -1 is
+    returning (toward the mine), None when the label is "Unknown".
     """
     idx = {}
-    for i, role in enumerate(ROAD_CHAIN):
-        aid = roles.get(role)
-        if aid is not None:
-            idx[aid] = i
+    for i, group in enumerate(ROAD_CHAIN):
+        for role in group:
+            aid = roles.get(role)
+            if aid is not None:
+                idx[aid] = i
 
     def name(i):
-        a = by_id.get(roles.get(ROAD_CHAIN[i]))
-        return a.name if a else ROAD_CHAIN[i]
+        a = by_id.get(roles.get(ROAD_CHAIN[i][0]))
+        return a.name if a else ROAD_CHAIN[i][0]
 
-    # Only changes of checkpoint carry direction, so repeats collapse.
+    # Only changes of position carry direction, so repeats collapse.
     path = []
     for v in vs:
         if v["anchor_id"] in idx and v["enter"] <= at:
-            if not path or path[-1] != v["anchor_id"]:
-                path.append(v["anchor_id"])
+            if not path or path[-1] != idx[v["anchor_id"]]:
+                path.append(idx[v["anchor_id"]])
     if not path:
-        return "Unknown"
-    last = idx[path[-1]]
+        return "Unknown", None
+    last = path[-1]
     if len(path) == 1:
         # An end of the line alone still points one way; a middle stop
         # alone could be heading either way.
         if last == 0:
-            return "%s > %s" % (name(0), name(1))
+            return "%s > %s" % (name(0), name(1)), 1
         if last == len(ROAD_CHAIN) - 1:
-            return "%s > %s" % (name(last), name(last - 1))
-        return "Unknown"
-    prev = idx[path[-2]]
-    step = 1 if last > prev else -1
+            return "%s > %s" % (name(last), name(last - 1)), -1
+        return "Unknown", None
+    step = 1 if last > path[-2] else -1
     nxt = last + step
     if nxt < 0 or nxt >= len(ROAD_CHAIN):
-        nxt = last - step   # past the end of the line, the only way is back
-    return "%s > %s" % (name(last), name(nxt))
+        nxt, step = last - step, -step   # past the end, the only way is back
+    return "%s > %s" % (name(last), name(nxt)), step
 
 
 def _gps_view(day, only):
@@ -2279,10 +2286,11 @@ def _gps_view(day, only):
         # Which leg: the port splits the loop. Seen at the port since it last
         # left the mine and it is on its way home; otherwise it is running out.
         vs = sorted(per_plate.get(k, []), key=lambda x: x["enter"])
+        road_step = None
         if here is None:
             # Between geofences the checkpoint sequence, not the leg guess,
             # says which stretch of road it is on.
-            row["road"] = _road_segment(vs, roles, by_id, g.dt)
+            row["road"], road_step = _road_segment(vs, roles, by_id, g.dt)
         last_mine = None
         for v in vs:
             if v["anchor_id"] == mine_id:
@@ -2303,8 +2311,10 @@ def _gps_view(day, only):
                       if passed_port else "not yet at the port on this run")
 
         # Only a returning truck gets an estimate, because only a returning
-        # truck has an arrival to estimate.
-        if passed_port and to_mine:
+        # truck has an arrival to estimate. When the road sequence says the
+        # truck is heading the other way, the leg guess lost the argument:
+        # a km-to-mine figure beside a port-bound label would be a lie.
+        if passed_port and to_mine and road_step != 1:
             km = engine.remaining_km_along_route(to_mine, g.lat, g.lng)
             if km is not None:
                 row["km_out"] = round(km, 1)
