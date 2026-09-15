@@ -50,7 +50,7 @@ const ROWS = JSON.stringify([
    gps_loc:'Chan May port', gps_seen:'2026-09-15 10:19', gps_km:116.9},
   {plate:'20C10770', sub:'Bac Nam', note:'FH', sheet_status:'Loaded',
    location:'Lalay border', arrive_date:'', arrive:'', state:'pending',
-   ready:true, reason:''},
+   ready:true, reason:'', gps_loc:'Lalay border', gps_seen:'2026-09-15 11:15'},
   {plate:'20H00789', sub:'Bac Nam', note:'Maintenance', sheet_status:'Empty',
    location:'Workshop', arrive_date:'', arrive:'', state:'pending',
    ready:false, reason:'18,000 km service',
@@ -107,7 +107,12 @@ try {
      /<td class="plate">[^<]*<a class="trail"/.test(html2), false);
   is('the trail header has no sort menu', html2.indexOf('<th class="c-trail">Trail</th>') >= 0, true);
   is('the absent row still spans the table', html2.indexOf('colspan="8"') >= 0, true);
-  is('GPS last location is shown', html2.indexOf('Chan May port') >= 0, true);
+  is('a GPS place matching the declaration is shown',
+     html2.indexOf('<span class="gps-loc">Lalay border</span>') >= 0, true);
+  is('a mismatch reads Unknown', html2.indexOf('<span class="gps-loc">Unknown</span>') >= 0, true);
+  is('...with the GPS place kept in the tooltip',
+     html2.indexOf('GPS last saw it at Chan May port') >= 0, true);
+  is('the Status header carries no hint', html.indexOf('FH / BH / why not') < 0, true);
   is('...with when it was seen and km to the mine',
      html2.indexOf('2026-09-15 10:19 &middot; 116.9 km to mine') >= 0, true);
   is('GPS elsewhere than declared is flagged', html2.indexOf('gps-diff') >= 0, true);
