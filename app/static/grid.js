@@ -466,6 +466,7 @@
     var td = this.cell(this.cur.r, this.cur.c);
     if (!td) return;
     var val = seed != null ? seed : (this.rowAt(this.cur.r)[col.key] || '');
+    this.dragging = false;          // opening a cell for editing ends any drag
     var type = col.kind === 'date' ? 'date' : 'text';
     td.innerHTML = '<input class="ed" type="' + type + '" value="' + esc(val) + '"'
       + (col.kind === 'time' ? ' placeholder="HH:MM" maxlength="5"' : '') + '>';
@@ -561,6 +562,12 @@
     t.addEventListener('mousedown', function (e) {
       var td = e.target.closest && e.target.closest('td');
       if (!td || td.dataset.r === undefined) return;
+      // A press inside the cell being edited belongs to that box - its own
+      // calendar, or placing the caret. It must not save and close the box,
+      // and must not start a drag: its release can land in the browser's
+      // calendar pop-up, and a drag nobody released stretched the selection
+      // across every row the pointer reached next.
+      if (self.editing && self.editing.input && self.editing.input.contains(e.target)) return;
       self.commit();
       var r = +td.dataset.r, c = +td.dataset.c;
       if (e.shiftKey) { self.cur = {r: r, c: c}; }
@@ -588,6 +595,10 @@
       self.paint();
     });
     document.addEventListener('mouseup', function () { self.dragging = false; });
+    // Focus leaving the page - a pop-up, another window - ends a drag as well.
+    if (global.addEventListener) {
+      global.addEventListener('blur', function () { self.dragging = false; });
+    }
     document.addEventListener('mousedown', function (e) {
       if (self.cmenu && !self.cmenu.contains(e.target)) self.closeColMenu();
       if (!self.menu) return;

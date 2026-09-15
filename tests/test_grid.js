@@ -193,6 +193,43 @@ gr.fillDown();
 is('fill-down fills only what is on screen',
    gr.rows.map(r=>r.remark||''), ['out','','out','','out']);
 
+// ── a press inside the box being edited is not a drag ─────────────────────
+// Double-click a date and press inside its date box. That press used to save
+// and close the box and start a drag whose release landed in the browser's
+// calendar pop-up - so the next row the pointer reached stretched the selection
+// from the edited row down to it, and "All BH" then changed every row in it.
+console.log('');
+{
+  const on = {};
+  const table = fakeTable();
+  table.addEventListener = (type, fn) => { on[type] = fn; };
+  const dcols = cols.concat([{key: 'adate', label: 'Date', kind: 'date'}]);
+  const dg = new Grid({table, cols: dcols, rows: mk(10)});
+  dg.draw = () => {}; dg.refreshRow = () => {}; dg.paint = () => {};
+  const at = (r, c) => ({closest: () => ({dataset: {r: String(r), c: String(c)}})});
+
+  // row 1's date box is open
+  const input = {value: '2026-09-16', closest: () => ({dataset: {r: '1', c: '4'}}),
+                 contains: el => el === input};
+  dg.cur = {r: 1, c: 4}; dg.anchor = {r: 1, c: 4};
+  dg.editing = {r: 1, c: 4, input};
+
+  on.mousedown({target: input, shiftKey: false});
+  is('a press inside the date box starts no drag', !!dg.dragging, false);
+  is('...and leaves the box open', !!dg.editing, true);
+
+  on.mouseover({target: at(9, 1), buttons: 1});
+  const b = dg.box();
+  is('the pointer reaching row 9 selects nothing more', [b.r1, b.r2, b.c1, b.c2], [1, 1, 4, 4]);
+
+  // a real press on a plain cell still drags
+  on.mousedown({target: at(2, 3), shiftKey: false});
+  is('a press on a plain cell starts a drag', !!dg.dragging, true);
+  on.mouseover({target: at(5, 3), buttons: 1});
+  const b2 = dg.box();
+  is('...and dragging to row 5 selects rows 2 to 5', [b2.r1, b2.r2], [2, 5]);
+}
+
 // ── time normalising ───────────────────────────────────────────────────────
 console.log('');
 const nt = sandbox.window.Grid.normTime;
