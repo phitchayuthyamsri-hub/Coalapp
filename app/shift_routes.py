@@ -745,7 +745,9 @@ def upload():
 
     rows = parsed.get("rows") or []
     if not rows:
-        return jsonify(error="No truck rows were found in that sheet.",
+        # A refused layout carries its own reason - which template to use -
+        # and that is what the person uploading needs to read.
+        return jsonify(error=parsed.get("error") or "No truck rows were found in that sheet.",
                        warnings=parsed.get("warnings", [])), 400
 
     roster = _roster(sub_id) if sub_id else {}

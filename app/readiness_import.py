@@ -1,48 +1,38 @@
 # -*- coding: utf-8 -*-
 """Read a subcontractor's daily readiness sheet.
 
-Tolerant on purpose: subcontractors send their own layouts. Rather than demand
-the exact template, find the header row by looking for a Plate column, then map
-whatever columns are present. A sheet that predates the template still imports -
-it just carries less information.
+One layout, the same shape as the declaration page:
 
-Two layouts are in use, and both must land in the same two fields:
+  No · Plate · Driver · Status · Location · Loaded / Empty ·
+  Date arrive Mine · Time arrive Mine · Back in service · Remark
 
-  Bac Nam template   Leg (FH/BH) · Status (Loaded/Empty) · Activity (the reason)
-  newer layout       Status (FH / BH / the reason) · Loaded / Empty
+Status carries the leg while a truck is working (FH / BH) and the reason when it
+is not (Maintenance, Breakdown ...). Loaded / Empty carries the load. Nothing
+else is read for either.
 
-The system's `activity` carries the leg while a truck is working and the reason
-when it is not; `status` carries the load state. The importer used to map Leg,
-Status and Activity all onto `activity`, the last column (usually a blank
-Activity) overwrote the other two, and a whole uploaded sheet arrived with no leg
-and no load. So columns are now collected rather than overwritten, and a column
-headed Status is read by what is IN it: a load word is the load, anything else is
-the leg or the reason.
+The earlier template split this over Leg, Status (the load) and Activity (the
+reason), and some sheets kept the reason in a column of its own. Reading all of
+those meant guessing which column meant what, and a guess that went wrong
+emptied a whole sheet of its FH/BH without a word. A sheet in any of those
+layouts is now refused, with a message saying which template to use - better a
+refusal than a truck in the workshop quietly counted as running.
+
+The header row is still found by looking for a Plate column; columns may be in
+any order and extra columns are ignored.
 """
 import re
 from datetime import datetime, time
 
 from openpyxl import load_workbook
 
-# header text -> which raw column it is. Lowercased, punctuation stripped, before
-# match. Several headers may land on the same raw column; all are kept, in order.
+# header text -> field. Lowercased, punctuation stripped, before match.
 HEADER_MAP = {
     "no": "no", "stt": "no",
     "plate": "plate", "licenseplate": "plate", "bienso": "plate", "truck": "plate",
+    "driver": "driver", "taixe": "driver",
     "location": "location", "vitri": "location",
-    # FH or BH, in a column of its own (the Bac Nam template).
-    "leg": "leg", "fhbh": "leg", "haul": "leg",
-    # A column headed Status means different things in different layouts - the
-    # load state in the Bac Nam template, the leg or reason in the newer one - so
-    # it is classified value by value, not by its header.
-    "status": "status_col", "trangthai": "status_col", "truckstatus": "status_col",
-    # The reason a truck is not running, or a free note.
-    "notrunningreason": "reason", "notrunning": "reason",
-    "unavailablereason": "reason", "downtimereason": "reason",
-    "reason": "reason", "lydo": "reason",
-    "activity": "reason", "note": "reason", "ghichu": "reason",
-    # The load state, which is what DailyListRow.sheet_status was always
-    # documented as holding.
+    # FH / BH while working, the reason when not. The one column that decides it.
+    "status": "status", "trangthai": "status", "truckstatus": "status",
     "loadedempty": "load", "loadempty": "load", "loadedorempty": "load",
     "loadstatus": "load", "cohang": "load",
     "timearrivemine": "arrive_time", "timearrivalmine": "arrive_time",
@@ -52,8 +42,15 @@ HEADER_MAP = {
     "datearrivemine": "arrive_date", "datearrivalmine": "arrive_date",
     "arrivedate": "arrive_date", "ngaydenmo": "arrive_date",
     "entryminedate": "arrive_date", "entrymine": "arrive_date",
-    "backinservice": "back_in_service", "remark": "remark", "remarks": "remark",
+    "backinservice": "back_in_service",
+    # A free note is a remark, whatever it is called.
+    "remark": "remark", "remarks": "remark", "note": "remark", "ghichu": "remark",
 }
+
+# Headers from layouts that kept the leg or the reason somewhere other than
+# Status. Their presence means the sheet cannot be read without guessing.
+OLD_LAYOUT = {"leg", "fhbh", "activity", "reason", "lydo", "notrunningreason",
+              "notrunning", "unavailablereason", "downtimereason"}
 
 PLATE_RE = re.compile(r"^\s*\d{2}\s*[A-Za-z]", re.I)
 
@@ -125,20 +122,25 @@ def _as_date(v):
 def _find_header(ws, limit=30):
     """The header row is the first one containing a recognisable Plate column.
 
-    -> (row, {raw column: [column numbers, in sheet order]})"""
+    -> (row, {field: [column numbers, in sheet order]}, [old-layout header texts])"""
     for r in range(1, min(ws.max_row, limit) + 1):
-        cols = {}
+        cols, old = {}, []
         for c in range(1, min(ws.max_column, 20) + 1):
-            f = HEADER_MAP.get(_norm_header(ws.cell(row=r, column=c).value))
+            raw = ws.cell(row=r, column=c).value
+            n = _norm_header(raw)
+            if n in OLD_LAYOUT:
+                old.append(str(raw).strip())
+            f = HEADER_MAP.get(n)
             if f:
                 cols.setdefault(f, []).append(c)
         if "plate" in cols:
-            return r, cols
-    return None, {}
+            return r, cols, old
+    return None, {}, []
 
 
 def parse(path):
-    """-> {'rows': [...], 'header_row': n, 'columns': [...], 'warnings': [...]}"""
+    """-> {'rows': [...], 'header_row': n, 'columns': [...], 'warnings': [...],
+           'error': message when the sheet is refused}"""
     wb = load_workbook(path, data_only=True)
     ws = None
     for name in ("Readiness", "Sheet1"):
@@ -147,20 +149,36 @@ def parse(path):
             break
     ws = ws or wb.worksheets[0]
 
-    hrow, cols = _find_header(ws)
-    warnings = []
+    hrow, cols, old = _find_header(ws)
     if not hrow:
         return {"rows": [], "header_row": None, "columns": [], "sheet": ws.title,
                 "warnings": ["No column headed 'Plate' was found - is this the "
                              "right sheet?"]}
+    if old:
+        return {"rows": [], "header_row": hrow, "columns": sorted(cols), "sheet": ws.title,
+                "warnings": [],
+                "error": ("This file uses the old template (it has a %s column). Use the "
+                          "new readiness template: Status holds FH, BH or the reason the "
+                          "truck is not running, and Loaded / Empty is its own column. "
+                          "Nothing was imported." % " / ".join(old))}
 
+    warnings = []
+    if "status" not in cols:
+        warnings.append("No 'Status' column - FH / BH and reasons will be blank.")
+    if "load" not in cols:
+        warnings.append("No 'Loaded / Empty' column - that information will be blank.")
     if "arrive_time" not in cols:
         warnings.append("No 'Time arrive Mine' column - that information will be blank.")
-    if not any(cols.get(f) for f in ("leg", "status_col", "reason")):
-        warnings.append("No 'Status' or 'Leg' column - FH / BH and reasons will be blank.")
+
+    def texts(r, field):
+        out = []
+        for c in cols.get(field, []):
+            v = ws.cell(row=r, column=c).value
+            if v is not None and str(v).strip() != "":
+                out.append(str(v).strip())
+        return out
 
     def first(r, field):
-        """The first non-blank cell among the columns mapped to `field`."""
         for c in cols.get(field, []):
             v = ws.cell(row=r, column=c).value
             if v is not None and str(v).strip() != "":
@@ -168,9 +186,10 @@ def parse(path):
         return None
 
     def text(r, field):
-        return str(first(r, field) or "").strip()
+        t = texts(r, field)
+        return t[0] if t else ""
 
-    rows, seen, any_load = [], {}, False
+    rows, seen, misplaced = [], {}, []
     for r in range(hrow + 1, ws.max_row + 1):
         raw = first(r, "plate")
         if raw is None or not PLATE_RE.match(str(raw)):
@@ -182,48 +201,36 @@ def parse(path):
             warnings.append("%s appears more than once - the later row was used."
                             % str(raw).strip())
 
-        leg = leg_word(first(r, "leg")) or text(r, "leg")
-        status_raw = text(r, "status_col")
-        reason = text(r, "reason")
+        status = text(r, "status")
+        if load_word(status):
+            # Loaded / Empty written where the leg or reason belongs. Not guessed
+            # into anything: left blank, and said so.
+            misplaced.append(str(raw).strip())
+            status = ""
+        activity = leg_word(status) or status
         load_raw = text(r, "load")
-        load = load_word(load_raw) or load_raw
 
-        # The Bac Nam template: a Status cell holding a load word is the load.
-        if load_word(status_raw):
-            load = load or load_word(status_raw)
-            status_raw = ""
-        if leg_word(status_raw):
-            status_raw = leg_word(status_raw)
-
-        # One field carries both answers. A reason the truck cannot run wins,
-        # wherever it was written; otherwise the leg, then a Status that was not a
-        # load word, then whatever the Activity column said.
-        blocker = next((t for t in (reason, status_raw) if t and not is_running(t)), "")
-        activity = blocker or leg or status_raw or reason
-
-        # Nothing they wrote is dropped: words that did not become the status go
-        # to the remark, after their own.
-        leftover = [t for t in (status_raw, reason) if t and t != activity]
-        remark = " · ".join([x for x in [text(r, "remark")] + leftover if x])
-
-        any_load = any_load or bool(load)
         rec = {
             "plate": str(raw).strip(),
             "key": key,
             "location": text(r, "location"),
-            "status": load,
+            "status": load_word(load_raw) or load_raw,
             "activity": activity,
             "arrive_time": _as_hhmm(first(r, "arrive_time")),
             "arrive_date": _as_date(first(r, "arrive_date")),
             "back_in_service": _as_date(first(r, "back_in_service")),
-            "remark": remark,
+            "remark": " · ".join(texts(r, "remark")),
             "row": r,
         }
         seen[key] = rec
         rows.append(rec)
 
-    if rows and not any_load:
-        warnings.append("No 'Loaded / Empty' column - that information will be blank.")
+    if misplaced:
+        warnings.append("%d truck(s) have Loaded or Empty in the Status column (%s%s). "
+                        "Status is FH, BH or the reason; Loaded / Empty has its own "
+                        "column. Their status was left blank."
+                        % (len(misplaced), ", ".join(misplaced[:5]),
+                           "..." if len(misplaced) > 5 else ""))
 
     # later row wins on duplicates
     rows = list({r["key"]: r for r in rows}.values())
