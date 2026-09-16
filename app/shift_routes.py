@@ -763,17 +763,30 @@ def upload():
         db.session.add(dl)
         db.session.flush()
 
+    # MERGE, not replace: only the trucks named in the file are touched. A
+    # 50-truck fleet fed by a 30-truck file fills those 30 and leaves the rest
+    # of the sheet exactly as it stands - so a second file with the other 20
+    # completes the day instead of wiping the first.
+    existing = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    overlap = sorted(x.plate for k, x in existing.items() if k in on_sheet)
+    if overlap and not (request.form.get("replace") or "").strip():
+        # Overwriting somebody's earlier answers is a decision, so it is asked
+        # for by name - the plates - not implied by pressing Upload.
+        return jsonify(error="%d truck(s) in this file are already on the sheet "
+                             "for %s. Uploading will REPLACE their rows with "
+                             "the file's values."
+                             % (len(overlap), _dmy(day)),
+                       code="overlap", overlap=overlap), 409
+
     # A truck already sent, or already decided, keeps where it is. Re-uploading a
     # corrected sheet must not drag a decided row back to the start.
-    prior = {r.key: (r.state or "pending")
-             for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
-    DailyListRow.query.filter_by(list_id=dl.id).delete()
-
-    before = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
     running = 0
     for r in rows:
-        row, runs = _declared_row(r, dl.id, prior.get(r["key"], "pending"),
-                                  before.get(r["key"]))
+        old = existing.get(r["key"])
+        row, runs = _declared_row(
+            r, dl.id, (old.state or "pending") if old is not None else "pending")
+        if old is not None:
+            db.session.delete(old)
         if runs:
             running += 1
         db.session.add(row)
@@ -797,6 +810,8 @@ def upload():
         subcontractor=(s.name if s else "(no company)"),
         subcontractor_id=sub_id,
         imported=len(rows), running=running, committed=len(roster),
+        added=len(rows) - len(overlap), replaced=len(overlap),
+        kept=len(existing) - len(overlap),
         missing=missing, uncommitted=uncommitted,
         warnings=parsed.get("warnings", []),
         sheet=parsed.get("sheet"), header_row=parsed.get("header_row"),

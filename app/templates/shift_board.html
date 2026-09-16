@@ -574,9 +574,13 @@ function renderReport(d){
       + '</div></div></details>';
   };
   let html = '<div class="banner b-confirmed" style="margin-top:12px">'
-    + 'Imported <b>' + d.imported + '</b> trucks for ' + esc(d.subcontractor)
+    + 'Filled <b>' + d.imported + '</b> trucks for ' + esc(d.subcontractor)
     + ' on ' + esc(d.date) + ' — ' + d.running + ' running, '
-    + (d.imported - d.running) + ' not running. Committed fleet: ' + d.committed + '.'
+    + (d.imported - d.running) + ' not running'
+    + (d.replaced ? ' (' + d.replaced + ' replaced)' : '')
+    + (d.kept ? '. ' + d.kept + ' truck(s) already on the sheet were not touched'
+              : '')
+    + '. Committed fleet: ' + d.committed + '.'
     + '</div>';
   html += box('Committed but NOT on this sheet', d.missing, 'var(--bad)',
     'These trucks are committed for the project. They must be accounted for — '
@@ -600,6 +604,22 @@ async function doUpload(){
   fd.append('subcontractor_id', SUBID);
   let r = await fetch('/api/shift/upload', {method:'POST', body:fd});
   let d = await r.json();
+  // Trucks in the file already on the sheet: replacing their rows is asked
+  // for by name, never implied by pressing Upload.
+  if (r.status === 409 && d.code === 'overlap'){
+    m.textContent = '';
+    const ov = d.overlap || [];
+    const shown = ov.slice(0, 15).join(', ')
+      + (ov.length > 15 ? ' … and ' + (ov.length - 15) + ' more' : '');
+    if (!confirm(d.error + String.fromCharCode(10,10) + shown
+        + String.fromCharCode(10,10) + 'Replace these rows with the file?')){
+      m.textContent = 'Not imported.'; m.className = 'msg';
+      $('#upReport').innerHTML = ''; return;
+    }
+    fd.append('replace', '1');
+    r = await fetch('/api/shift/upload', {method:'POST', body:fd});
+    d = await r.json();
+  }
   // Word for word the sheet already sent: almost always yesterday's file with
   // the date changed and nothing else looked at.
   if (r.status === 409 && d.code === 'duplicate'){

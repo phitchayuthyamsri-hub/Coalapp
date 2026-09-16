@@ -238,8 +238,9 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
           <select id="delivery"></select></label>
         <div class="filed" id="filedAs">Pick the date first.</div>
       </div>
-      <div class="note n-info">Uploading REPLACES the sheet for the date you pick.
-        Anything typed on the other tab and not saved is lost.</div>
+      <div class="note n-info">Uploading fills ONLY the trucks named in the file,
+        for the date you pick. Trucks already on the sheet and not in the file
+        keep what they have; trucks in both are replaced after a warning.</div>
       <div class="drop locked" id="drop">
         <div style="font-size:15px;margin-bottom:6px">Drop the file here, or</div>
         <button class="ghost" id="pick">choose a file</button>
@@ -665,7 +666,8 @@ async function paintDelivery(){
          : l.state === 'confirmed'
            ? '<b style="color:var(--red)">already confirmed (' + n + ' trucks) - it cannot be '
              + 'replaced by an upload.</b> Ask for the sheet back on the Fill in here tab first.'
-           : 'replaces the ' + n + ' trucks there now (' + esc(l.state) + ')');
+           : 'has ' + n + ' trucks now (' + esc(l.state) + ') - the file fills only '
+             + 'the trucks it names');
   } catch (e) {}
 }
 
@@ -697,9 +699,11 @@ async function send(f){
     m.className = 'msg err';
     return;
   }
-  if (!confirm('Upload ' + f.name + ' as the sheet for ' + dayLabel(sheet) + '?'
+  if (!confirm('Upload ' + f.name + ' into the sheet for ' + dayLabel(sheet) + '?'
       + String.fromCharCode(10, 10)
-      + (ex ? 'It REPLACES the ' + ex.n + ' trucks there now (' + ex.state + ').'
+      + (ex ? 'The sheet has ' + ex.n + ' trucks now (' + ex.state + '). Only the '
+              + 'trucks named in the file are filled; if any of them are already '
+              + 'on the sheet, you will be asked before they are replaced.'
             : 'It is a new sheet.'))){
     m.textContent = 'Not uploaded.'; m.className = 'msg';
     return;
@@ -713,6 +717,21 @@ async function send(f){
   try {
     let r = await fetch('/api/shift/upload', {method:'POST', body: fd});
     let j = await r.json();
+    // Trucks in the file that are already on the sheet: replacing their rows
+    // is asked for by name, never implied by pressing Upload.
+    if (r.status === 409 && j.code === 'overlap'){
+      m.textContent = '';
+      const ov = j.overlap || [];
+      const shown = ov.slice(0, 15).join(', ')
+        + (ov.length > 15 ? ' … and ' + (ov.length - 15) + ' more' : '');
+      if (!confirm(j.error + String.fromCharCode(10, 10) + shown
+          + String.fromCharCode(10, 10) + 'Replace these rows with the file?')){
+        m.textContent = 'Not imported.'; m.className = 'msg'; return;
+      }
+      fd.append('replace', '1');
+      r = await fetch('/api/shift/upload', {method:'POST', body: fd});
+      j = await r.json();
+    }
     if (r.status === 409 && j.code === 'duplicate'){
       m.textContent = '';
       if (!confirm(j.error + String.fromCharCode(10,10) + 'Import it anyway?')){
@@ -723,7 +742,9 @@ async function send(f){
       j = await r.json();
     }
     if (!r.ok) throw new Error(j.error || 'Upload failed');
-    m.textContent = 'Read ' + (j.rows != null ? j.rows : '') + ' truck(s) from ' + f.name + '.';
+    m.textContent = 'Filled ' + j.imported + ' truck(s) from ' + f.name
+      + (j.replaced ? ' (' + j.replaced + ' replaced)' : '')
+      + (j.kept ? ' · ' + j.kept + ' already on the sheet, untouched' : '') + '.';
     m.className = 'msg ok';
     if (j.warnings && j.warnings.length){
       $('#upDetail').innerHTML = '<div class="note n-warn"><b>Read, with warnings:</b><br>'

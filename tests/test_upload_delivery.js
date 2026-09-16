@@ -45,6 +45,17 @@ is('a confirmed sheet is called locked, not replaced',
 is('...and an upload onto it stops before any dialog',
    /if \(ex && ex.state === 'confirmed'\)\{[\s\S]{0,400}?return;[\s\S]{0,120}?confirm\(/.test(html), true);
 
+// An upload MERGES: it fills only the trucks named in the file, and replacing
+// a truck already on the sheet is asked for, never implied.
+is('the note says the upload fills, not replaces',
+   html.indexOf('fills ONLY the trucks named in the file') >= 0, true);
+is('an overlap asks before replacing', html.indexOf("j.code === 'overlap'") >= 0, true);
+is("...and only replaces when told to", html.indexOf("fd.append('replace', '1')") >= 0, true);
+is('no whole-sheet REPLACES warning is left', html.indexOf('It REPLACES the') >= 0, false);
+const board = read('app/templates/shift_board.html');
+is('the board upload asks on overlap too', board.indexOf("d.code === 'overlap'") >= 0, true);
+is("...and only replaces when told to", board.indexOf("fd.append('replace', '1')") >= 0, true);
+
 // One date, meaning one thing, on every page that picks a sheet.
 for (const page of ['subcontractor', 'shift_board', 'approvals']) {
   const t = read('app/templates/' + page + '.html');
