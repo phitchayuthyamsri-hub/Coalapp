@@ -314,6 +314,10 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <input type="checkbox" id="wRoll" checked>loops issued by the plan</label>
       <button id="wXls" title="The plan, the day totals and the figures behind them">
         &#8681; Excel</button>
+      <label class="f">Day for XPPL<input type="date" id="xpplDay"></label>
+      <button id="xpplXls" title="One ISSUED day for the XPPL team: mine arrivals and
+loading slots, full corridor timing on a second sheet. No internal figures.">
+        &#8681; XPPL Excel</button>
       <button id="wIssue" title="Freeze this week as issued. The subcontractor works
 to these times, and the revision is measured against them.">Issue this week</button>
       <span class="msg" id="wIssued"></span>
@@ -913,6 +917,25 @@ async function loadWeek(){
 // The export is the same query as the screen, so the file and the page can
 // never be two different plans.
 $('#wXls').onclick = () => { location.href = '/api/shift/week.xlsx?' + weekQuery(); };
+
+// XPPL gets one ISSUED day, fetched rather than linked so a refusal - no
+// plan issued for that day - arrives as a readable message, not a JSON page.
+$('#xpplDay').value = new Date(Date.now() + 7*3600*1000 + 86400000)
+  .toISOString().slice(0, 10);
+$('#xpplXls').onclick = async () => {
+  const d = $('#xpplDay').value;
+  if (!d){ alert('Pick the day to send to XPPL.'); return; }
+  const r = await fetch('/api/shift/xppl.xlsx?date=' + d);
+  if (!r.ok){
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    alert(j.error || 'Export failed'); return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = 'XPPL_plan_' + d + '.xlsx';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 const TCOLS = [
   ['At mine', 'arrive_mine'], ['Load', 'load_start'], ['Leaves mine', 'load_end'],

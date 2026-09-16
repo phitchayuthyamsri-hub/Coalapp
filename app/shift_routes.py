@@ -1741,6 +1741,125 @@ def week_export():
                     headers={"Content-Disposition": 'attachment; filename="%s"' % name})
 
 
+def _road_plate(p):
+    """The plate as it reads on the truck: 20H01378 -> 20H-013.78."""
+    m = re.match(r"^(\d{2}[A-Z]{1,2})(\d{3})(\d{2})$", str(p or ""))
+    return "%s-%s.%s" % m.groups() if m else p
+
+
+@bp.get("/xppl.xlsx")
+@login_required
+def xppl_export():
+    """One issued day, packaged for the XPPL team.
+
+    Sheet 1 is what the mine acts on: who arrives when, and the loading slots.
+    Sheet 2 carries the full corridor timing per truck, for reference. None of
+    the planner's internal figures travel - waits, speeds and assumptions are
+    ours, and this file leaves the building. Only the ISSUED plan exports:
+    XPPL must never receive a draft that is still moving.
+    """
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+
+    if "planner" not in _views():
+        return jsonify(error="Not your view"), 403
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET + timedelta(days=1)).strftime("%Y-%m-%d")
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+    snap = _issued_for(day, None)
+    if snap is None:
+        return jsonify(error="No issued plan covers %s. Issue the plan first - "
+                             "XPPL should only receive the committed one."
+                             % _dmy(day)), 404
+    rows = [r for r in (snap.rows or []) if r.get("day") == day]
+    if not rows:
+        return jsonify(error="The issued plan has no trucks for %s." % _dmy(day)), 404
+
+    drivers = {engine.norm_plate(t.plate): (t.driver or "")
+               for t in Truck.query.all()}
+    dt = lambda v: datetime.strptime(v, "%Y-%m-%dT%H:%M") if v else None
+    rows.sort(key=lambda r: (r.get("t") or {}).get("arrive_mine") or "9999")
+    head = Font(bold=True)
+    title = Font(bold=True, size=13)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Mine arrivals"
+    ws.append(["XPPL Mine — truck arrivals — %s" % _dmy(day)])
+    ws["A1"].font = title
+    ws.append([])
+    cols1 = ["No", "Truck", "Driver", "Company", "Arrive mine", "Load start",
+             "Load end", "Departs mine", "Back at mine (return)"]
+    ws.append(cols1)
+    for c in ws[3]:
+        c.font = head
+    for i, r in enumerate(rows, 1):
+        t = r.get("t") or {}
+        ws.append([i, _road_plate(r["plate"]),
+                   drivers.get(engine.norm_plate(r["plate"]), ""),
+                   r.get("sub") or "",
+                   dt(t.get("arrive_mine")), dt(t.get("load_start")),
+                   dt(t.get("load_end")), dt(t.get("load_end")),
+                   dt(t.get("back"))])
+    for col, w in zip("ABCDEFGHI", (5, 13, 22, 12, 17, 17, 17, 17, 19)):
+        ws.column_dimensions[col].width = w
+        if col in "EFGHI":
+            for cell in ws[col][3:]:
+                cell.number_format = "dd/mm/yyyy hh:mm"
+    ws.freeze_panes = "A4"
+    ws.auto_filter.ref = "A3:I%d" % (3 + len(rows))
+
+    ws2 = wb.create_sheet("Full timing")
+    ws2.append(["Full corridor timing — %s" % _dmy(day)])
+    ws2["A1"].font = title
+    ws2.append([])
+    cols2 = [("No", None), ("Truck", None), ("Company", None),
+             ("Arrive mine", "arrive_mine"), ("Load start", "load_start"),
+             ("Load end", "load_end"), ("Arrive border", "arrive_border"),
+             ("Cross border", "cross_border"), ("Enter QL49", "ql49_in"),
+             ("Arrive port", "arrive_port"), ("Unload start", "unload_start"),
+             ("Unload end", "unload_end"), ("Depart port", "depart_port"),
+             ("Back at mine", "back"), ("Road home", None)]
+    ws2.append([c[0] for c in cols2])
+    for c in ws2[3]:
+        c.font = head
+    for i, r in enumerate(rows, 1):
+        t = r.get("t") or {}
+        ws2.append([i, _road_plate(r["plate"]), r.get("sub") or ""]
+                   + [dt(t.get(k)) for _lbl, k in cols2[3:14]]
+                   + [(r.get("route") or "").upper()])
+    for i, (_lbl, k) in enumerate(cols2, 1):
+        col = openpyxl.utils.get_column_letter(i)
+        ws2.column_dimensions[col].width = 13 if i > 3 else (5, 13, 12)[i - 1]
+        if k:
+            for cell in ws2[col][3:]:
+                cell.number_format = "dd/mm hh:mm"
+    ws2.freeze_panes = "A4"
+    ws2.auto_filter.ref = "A3:O%d" % (3 + len(rows))
+
+    for sheet in (ws, ws2):
+        sheet.append([])
+        sheet.append(["Issued %s%s · exported %s by %s" % (
+            _fmt(snap.issued_at) or "",
+            (" by " + snap.issued_by) if getattr(snap, "issued_by", "") else "",
+            (datetime.utcnow() + LOCAL_OFFSET).strftime("%d/%m/%Y %H:%M"),
+            current_user.username)])
+        sheet.cell(row=sheet.max_row, column=1).font = Font(italic=True, size=9)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(buf.read(),
+                    mimetype="application/vnd.openxmlformats-officedocument."
+                             "spreadsheetml.sheet",
+                    headers={"Content-Disposition":
+                             'attachment; filename="XPPL_plan_%s.xlsx"' % day})
+
+
 @bp.get("/summary")
 @login_required
 def summary():
