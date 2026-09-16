@@ -586,7 +586,12 @@ $('#save').onclick = async function(){
       j = await res.json();
     }
     if (!res.ok) throw new Error(j.error || 'Save failed');
-    m.textContent = 'Saved. The supervisor sees it on their page.';
+    const gaps = j.missing_fleet || [];
+    m.textContent = 'Saved. The supervisor sees it on their page.'
+      + (gaps.length ? ' ' + gaps.length + ' truck(s) still have no update ('
+          + gaps.slice(0, 8).join(', ') + (gaps.length > 8 ? '…' : '') + ') - '
+          + 'the list cannot be sent to the manager until every truck has one.'
+        : '');
     if (PICKER) PICKER.load($('#day').value);
     m.className = 'msg ok';
   } catch (e) {

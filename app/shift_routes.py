@@ -2627,7 +2627,28 @@ def save_list():
                              % _dmy(twin.list_date),
                        duplicate_of=twin.list_date, code="duplicate"), 409
     db.session.commit()
-    return jsonify(_list_payload(dl, day))
+    out = _list_payload(dl, day)
+    # Saving stays free - a half-filled sheet is normal while answers are being
+    # chased - but the gap is named NOW, to the person who can fill it, rather
+    # than surfacing later as a refusal on the supervisor's submit.
+    out["missing_fleet"] = _fleet_gaps(dl, sub_id)
+    return jsonify(out)
+
+
+def _fleet_gaps(dl, sub_id):
+    """Fleet trucks with no update on this list - no row at all, or a row with
+    a blank status. Judged against the committed roster when one is registered,
+    else against the whole active truck table."""
+    roster = _roster(sub_id) if sub_id else {}
+    if roster:
+        fleet = {k: c.plate for k, c in roster.items()}
+    else:
+        fleet = {engine.norm_plate(t.plate): t.plate
+                 for t in Truck.query.all()
+                 if (t.status or "") != "deactivated"}
+    have = {(r.key or engine.norm_plate(r.plate)): (r.note or "").strip()
+            for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    return sorted(fleet[k] for k in fleet if not have.get(k))
 
 
 @bp.post("/list/<action>")
@@ -2649,6 +2670,21 @@ def act_list(action):
         return jsonify(error="no list for %s" % _dmy(day)), 404
     if action == "submit":
         rows = DailyListRow.query.filter_by(list_id=dl.id).all()
+
+        # The whole fleet answers before the list moves on: a truck missing
+        # from the sheet is NOT a truck reported unavailable - it is a truck
+        # nobody has asked about, and submitting around it hides the gap. The
+        # company declares every truck (FH, BH, or the reason it is not
+        # running); until then the declaration stays where it can be fixed.
+        gaps = _fleet_gaps(dl, sub_id)
+        if gaps:
+            return jsonify(error="%d truck(s) have no update on this sheet: %s. "
+                                 "Every truck needs a status (FH, BH, or the "
+                                 "reason it is not running) before the list "
+                                 "can be sent on."
+                                 % (len(gaps), ", ".join(gaps)),
+                           code="incomplete", missing=gaps), 400
+
         # Only the ticked rows go. Trucks still being chased stay with the
         # supervisor and can be sent later - one unresolved truck must not hold
         # up the thirty that are ready.
