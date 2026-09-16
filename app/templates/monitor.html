@@ -202,8 +202,6 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     <div class="row">
       <label class="f">Day at the mine &mdash; when the trucks run
         <select id="day"></select></label>
-      <label class="f">Shift<select id="shift"></select></label>
-      <label class="f">Company<select id="sub"></select></label>
       <button id="run">Refresh</button>
       <label class="f" style="flex-direction:row;gap:6px;align-items:center;
              align-self:center">
@@ -234,38 +232,24 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
 const jget = async u => (await fetch(u)).json();
 let PICKER = null;
 const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
-let TIMER = null, SUBID = '', SUBS = [], TV = null;
+let TIMER = null, SUBID = '', SUBS = [], TV = null, SHIFTS = [];
 
 const stat = (n, l, c) =>
   '<div class="stat"><div class="n" style="color:' + (c || 'var(--txt)') + '">' + n + '</div>'
   + '<div class="l">' + esc(l) + '</div></div>';
 
 async function loadConfig(){
+  // The Shift and Company pickers are gone: the corridor is one day, not one
+  // company's day, so the page watches every company; and the checks card
+  // reports the shift covering the clock RIGHT NOW - its own heading still
+  // names which shift that is.
   const c = await jget('/api/shift/config');
-  $('#shift').innerHTML = (c.shifts || []).map(s =>
-    '<option value="' + s.id + '">' + esc(s.name) + ' &middot; ' + esc(s.start)
-    + '-' + esc(s.end) + '</option>').join('');
-  // One company at a time, deliberately: monitoring follows the CONFIRMED LIST,
-  // and a list belongs to one company. An "all companies" option here would
-  // quietly fall back to the legacy list and report two trucks where there are
-  // thirty-three.
+  SHIFTS = c.shifts || [];
   const j = await jget('/api/shift/subcontractors');
   SUBS = j.subcontractors || [];
   const canSeeAll = (j.role !== 'subcontractor');
-  // The corridor is one day, not one company's day: a monitor watching the mine
-  // wants everything arriving there, and picking through companies one at a
-  // time to find which one is running is not watching, it is hunting.
-  $('#sub').innerHTML = (canSeeAll ? '<option value="all">All companies</option>' : '')
-    + SUBS.map(s => '<option value="' + s.id + '">' + esc(s.short) + '</option>').join('')
-    // Lists made before per-company lists existed still belong to somebody's
-    // shift. Named for what it is rather than hidden behind "all".
-    + (canSeeAll ? '<option value="none">(no company &mdash; legacy list)</option>' : '');
-  if (j.role === 'subcontractor' && j.mine){ SUBID = String(j.mine); $('#sub').disabled = true; }
-  // Land on something with trucks on it. Defaulting to the first company
-  // alphabetically showed an empty page on a day that is not empty - which on
-  // this page reads as "nothing ran".
+  if (j.role === 'subcontractor' && j.mine) SUBID = String(j.mine);
   if (!SUBID) SUBID = canSeeAll ? 'all' : (SUBS[0] ? String(SUBS[0].id) : 'none');
-  $('#sub').value = SUBID;
 }
 
 // -- every truck: plan against actual, by place -------------------------------
@@ -476,7 +460,7 @@ function drawTrack(){
 }
 
 async function loadTrack(){
-  const sub = $('#sub').value;
+  const sub = SUBID;
   TRACK = await jget('/api/shift/track?date=' + $('#day').value
     + (sub && sub !== 'none' ? '&subcontractor_id=' + encodeURIComponent(sub) : ''));
   drawTrack();
@@ -524,10 +508,20 @@ function checkCard(ch, total){
     + '</div>';
 }
 
+// Re-picked on every refresh, so a page left open overnight follows the
+// shift change instead of reporting the one it opened on.
+function currentShiftId(){
+  const hm = new Date(Date.now() + 7*3600*1000).toISOString().slice(11, 16);
+  const cur = SHIFTS.find(s => (s.start <= s.end)
+    ? (hm >= s.start && hm < s.end)       // a day shift
+    : (hm >= s.start || hm < s.end));     // one that wraps midnight
+  return String((cur || SHIFTS[0] || {}).id || '');
+}
+
 async function run(){
-  const sub = $('#sub').value;
+  const sub = SUBID;
   const d = await jget('/api/shift/board?date=' + $('#day').value
-    + '&shift_id=' + $('#shift').value
+    + '&shift_id=' + currentShiftId()
     + (sub && sub !== 'none' ? '&subcontractor_id=' + encodeURIComponent(sub) : ''));
   $('#stamp').textContent = 'read ' + new Date().toTimeString().slice(0, 8);
   loadTrack();
@@ -596,8 +590,6 @@ function arm(){
 }
 
 // #day is a DayPick now: it calls run() through onPick.
-$('#shift').onchange = run;
-$('#sub').onchange = run;
 $('#run').onclick = run;
 $('#auto').onchange = arm;
 
