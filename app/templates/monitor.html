@@ -103,10 +103,11 @@
   .t-ok{color:var(--ok)}
   .t-early{color:var(--warn)}
   .t-late{color:var(--bad)}
+  .t-dm{color:var(--mut);font-size:10px}
   /* An estimate is the one time on this table nobody measured. Pale grey,
      neutral where every confirmed time is tinted, so the eye passes over
      it and lands on what was actually seen. */
-  .t-est{color:#a6aab2}
+  .t-est{color:#D9D9D9}
   td.tel{white-space:nowrap}
   td.tel a{color:var(--acc);text-decoration:none;font-size:12px}
   td.tel a:hover{text-decoration:underline}
@@ -273,6 +274,7 @@ async function loadConfig(){
 // stays in the same column.
 const clock = s => s ? s.slice(11, 16) : '';
 const dayOf = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4)) : '';
+const dm = s => s ? (s.slice(8, 10) + '/' + s.slice(5, 7)) : '';   // 16/09, day first
 let LEG = 'fh', TRACK = null;
 
 // Inside the tolerance a truck is on plan and the time is left alone. Outside
@@ -304,9 +306,8 @@ function cellHtml(c, planDay){
       + (d < 0 ? '&minus;' : '+') + gap(d) + '</span>';
   }
   if (c.estimate)
-    return '<span class="t-est" title="estimate">~' + clock(c.estimate)
-      + '</span>' + (dayOf(c.estimate) !== planDay
-        ? ' <span style="color:var(--mut);font-size:10px">' + dayOf(c.estimate) + '</span>' : '');
+    return '<span class="t-est" title="estimate">~' + dm(c.estimate) + ' '
+      + clock(c.estimate) + '</span>';
   return '<span style="color:var(--mut)">&mdash;</span>';
 }
 
@@ -458,7 +459,8 @@ function drawTrack(){
           + '<td class="tel">' + phoneCell(r) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
           + cs.map(c => '<td class="pl">'
-              + (c.plan ? clock(c.plan) : '<span style="color:var(--mut)">&mdash;</span>')
+              + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
+                        : '<span style="color:var(--mut)">&mdash;</span>')
               + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>').join('')
           + '</tr>';
         })(r);
