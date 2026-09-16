@@ -7109,11 +7109,25 @@ function _sendInjectCss(){
 function renderSend(){
   _sendInjectCss();
   const el=document.getElementById('sendBody'); if(!el) return;
+  // The plan can be older than the fleet: a plan issued before a fleet change
+  // still names trucks that no longer exist, and a row for a truck the company
+  // no longer runs is only noise. The server's truck table says who is real.
+  if(!window._sendFleet){
+    window._sendFleet={};
+    fetch('/api/fleet').then(function(r){return r.json();}).then(function(l){
+      window._sendFleet.set=new Set((l||[]).map(function(t){return normPlate(t.plate);}));
+      renderSend();
+    }).catch(function(){});
+  }
+  const inFleet=window._sendFleet.set;
   const ents=_sendEntries();
   if(!ents.length){ el.innerHTML='<div class="help-text">No dispatch plan loaded. Import a plan on <b>Data input ▾ → Dispatch Plan</b> first.</div>'; return; }
   const dates=Array.from(new Set(ents.map(function(e){return e.iso;}))).sort();
   if(!sendDate || dates.indexOf(sendDate)<0) sendDate=dates[dates.length-1];
-  const day=ents.filter(function(e){return e.iso===sendDate;}).sort(function(a,b){return a.plate<b.plate?-1:1;});
+  const allDay=ents.filter(function(e){return e.iso===sendDate;});
+  const day=(inFleet? allDay.filter(function(e){return inFleet.has(normPlate(e.plate));})
+                    : allDay).sort(function(a,b){return a.plate<b.plate?-1:1;});
+  const notFleet=allDay.length-day.length;
   const opts=dates.map(function(d){return '<option value="'+d+'"'+(d===sendDate?' selected':'')+'>'+_sDayHdr(d)+'</option>';}).join('');
   let withPhone=0, noPhone=0;
   const rows=day.map(function(e){
@@ -7129,7 +7143,9 @@ function renderSend(){
     + '<span class="pcl">Plan date</span>'
     + '<select id="sendDateSel" class="send-date">'+opts+'</select>'
     + '<button class="send-all-btn" id="sendAllBtn"'+(withPhone?'':' disabled')+'>📲 Send all ('+withPhone+')</button>'
-    + '<span class="help-text">'+day.length+' trucks planned · '+withPhone+' with phone'+(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')+'</span>'
+    + '<span class="help-text">'+day.length+' trucks planned · '+withPhone+' with phone'
+      +(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')
+      +(notFleet?(' · '+notFleet+' planned truck(s) no longer in the fleet (hidden)'):'')+'</span>'
     + '</div>'
     + '<div style="overflow:auto"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Border → Port (plan)</th><th></th></tr></thead><tbody>'
     + (rows || '<tr><td colspan="4">No trucks planned this date.</td></tr>')
