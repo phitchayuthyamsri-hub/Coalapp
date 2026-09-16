@@ -832,8 +832,10 @@ def upload():
         columns=parsed.get("columns"), state=dl.state)
 
 
-# One stage back, never two. The step back is an undo, not a reset.
-BACK_ONE = {"approved": "applied", "denied": "applied", "applied": "pending"}
+# One stage back, never two. The step back is an undo, not a reset. With the
+# supervisor as the end approval there is no manager stage between approved
+# and pending any more, so back-one lands on pending from everywhere.
+BACK_ONE = {"approved": "pending", "denied": "pending", "applied": "pending"}
 
 
 @bp.post("/rows/revert")
@@ -869,8 +871,10 @@ def rows_revert():
         if not nxt:
             refused.append("%s is already pending" % row.plate)
             continue
-        if cur in ("approved", "denied") and r not in ("manager", "admin"):
-            refused.append("%s was decided by the manager" % row.plate)
+        if cur in ("approved", "denied") and r not in ("supervisor", "manager",
+                                                       "admin"):
+            refused.append("%s was already decided; only the supervisor or a "
+                           "manager may step it back" % row.plate)
             continue
         if cur == "applied" and r not in ("supervisor", "manager", "admin"):
             refused.append("%s may only be withdrawn by the supervisor"
@@ -2606,19 +2610,17 @@ def amend_decide():
     reason = (d.get("reason") or "").strip()[:300]
 
     if allow:
-        # A confirmed list is the manager's, not the supervisor's, so it cannot
-        # be handed back from here. Saying which door to knock on beats a
-        # refusal that explains nothing.
-        if dl.state == "confirmed":
-            return jsonify(error="This list is already confirmed, so it is the "
-                                 "manager's. They reject the rows that need "
-                                 "changing and it comes back on its own."), 400
+        # The supervisor is the end approval, so a confirmed list is theirs to
+        # hand back too: everything decided steps back to pending and the
+        # sheet returns to the company as a draft.
         moved = 0
-        for r in DailyListRow.query.filter_by(list_id=dl.id, state="applied").all():
-            r.state = "pending"          # back out of the supervisor's tray
-            moved += 1
+        for r in DailyListRow.query.filter_by(list_id=dl.id).all():
+            if (r.state or "pending") != "pending":
+                r.state = "pending"
+                moved += 1
         dl.state = "draft"
         dl.submitted_by, dl.submitted_at = "", None
+        dl.confirmed_by, dl.confirmed_at = "", None
         dl.reject_reason = ""
         dl.amend_state = "allowed"
     else:
@@ -2938,10 +2940,15 @@ def act_list(action):
     who, now = current_user.username, datetime.utcnow()
     moved = 0
     if action == "submit":
+        # The supervisor is the END approval (2026-09-16): submitting IS
+        # approving. Rows go straight to approved - the state the planner can
+        # build from - and the list confirms itself, which is also what raises
+        # the planner's alert. The manager watches; nothing waits on them.
         for r in moving:
-            r.state = "applied"
+            r.state = "approved"
             moved += 1
         dl.submitted_by, dl.submitted_at = who, now
+        dl.confirmed_by, dl.confirmed_at = who, now
         dl.reject_reason = ""
     elif action == "confirm":
         # Decide every row currently sitting with the manager: ticked is
