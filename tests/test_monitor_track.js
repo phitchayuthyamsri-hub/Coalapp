@@ -111,7 +111,7 @@ try {
      out.indexOf('<span class="t-dm">09/09</span> 05:00') >= 0, true);
   is('an estimate carries its day the same way',
      out.indexOf('<span class="t-est" title="estimate">~10/09 00:40</span>') >= 0, true);
-  is('estimates are the agreed grey', html.indexOf('.t-est{color:#D9D9D9}') >= 0, true);
+  is('estimates are the agreed grey', html.indexOf('.t-est{color:#A6A6A6}') >= 0, true);
 
   // Sorting by the mine's actual: on time (05:10), late (12:00), the estimate
   // that lands after midnight (00:40 on the 10th) and then the blank.
