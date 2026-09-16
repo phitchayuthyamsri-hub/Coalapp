@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Process &middot; where the day stands</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111a2b;--line:#233149;--txt:#e7ecf5;--mut:#8b9ab4;
+        --acc:#2dd4bf;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+  body.embed > header{padding:4px 0 10px;background:var(--bg);border-bottom:0}
+  body.embed > header > div:first-child, body.embed > header > a{display:none}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:16px;max-width:1200px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px 18px;margin-bottom:14px}
+  .day{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 4px}
+  .day h2{margin:0;font-size:15px}
+  .chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+        padding:2px 9px;border-radius:999px;background:#16233a;border:1px solid var(--line);
+        color:var(--acc)}
+  .co{color:var(--mut);font-size:12px;margin:10px 0 6px;font-weight:600}
+
+  /* The chain: five steps joined by a rail. The colour is the answer - green
+     is behind us, amber is where the day is stuck, grey has not been reached. */
+  .steps{display:flex;align-items:flex-start;gap:0;flex-wrap:wrap;margin:8px 0 2px}
+  .step{display:flex;flex-direction:column;align-items:center;min-width:120px;flex:1;
+        position:relative;text-align:center;padding:0 6px}
+  .step::before{content:'';position:absolute;top:13px;left:-50%;width:100%;height:2px;
+        background:var(--line);z-index:0}
+  .step:first-child::before{display:none}
+  .step.p-done::before{background:var(--ok)}
+  .dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+       justify-content:center;font-size:13px;font-weight:800;z-index:1;
+       background:#16233a;border:2px solid var(--line);color:var(--mut)}
+  .s-done .dot{background:#12301f;border-color:var(--ok);color:#5fd97e}
+  .s-waiting .dot,.s-doing .dot{background:#3a2a10;border-color:var(--warn);color:#fcd34d;
+       box-shadow:0 0 0 4px rgba(245,158,11,.15)}
+  .who{font-size:11.5px;font-weight:700;margin-top:6px}
+  .s-idle .who{color:var(--mut);font-weight:400}
+  .s-waiting .who,.s-doing .who{color:var(--warn)}
+  .s-done .who{color:#5fd97e}
+  .note{font-size:10.5px;color:var(--mut);margin-top:2px;max-width:180px;line-height:1.4}
+
+  .now{margin-top:12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
+       background:#2a1f10;border:1px solid #5a4020;color:#fcd34d}
+  .now.ok{background:#12301f;border-color:#1e5a34;color:#86efac}
+  .now b{text-transform:uppercase;letter-spacing:.4px;font-size:11px}
+  .msg{color:var(--mut);font-size:12px}
+</style>
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+<header>
+  <div><h1>Process</h1>
+    <div class="sub">where each day stands, and whose desk it is on</div></div>
+  <div class="spacer"></div>
+  <span class="msg" id="stamp"></span>
+  <a href="/ops">Operations</a>
+  <a href="/logout" style="color:var(--mut)">Log out</a>
+</header>
+<main id="body"><div class="card msg">Loading&hellip;</div></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jget = async u => (await fetch(u)).json();
+const dmy = iso => iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4);
+const MARK = {done:'✓', waiting:'⏳', doing:'⏳', idle:'·'};
+
+function stepHtml(s){
+  return '<div class="step s-' + s.state + (s.state === 'done' ? ' p-done' : '') + '">'
+    + '<div class="dot">' + (MARK[s.state] || '·') + '</div>'
+    + '<div class="who">' + esc(s.who) + '</div>'
+    + (s.note ? '<div class="note">' + esc(s.note) + '</div>' : '')
+    + '</div>';
+}
+
+function draw(d){
+  const days = d.days || [];
+  if (!days.length){
+    $('#body').innerHTML = '<div class="card msg">Nothing declared yet.</div>';
+    return;
+  }
+  $('#body').innerHTML = days.map(day => {
+    const chips = (day.tomorrow ? '<span class="chip">tomorrow</span>' : '')
+      + (day.today ? '<span class="chip">today</span>' : '');
+    const cos = day.companies.map(c => {
+      const done = !c.now.who;
+      const now = done
+        ? '<div class="now ok"><b>Complete</b> &mdash; ' + esc(c.now.note) + '</div>'
+        : '<div class="now"><b>Pending at: ' + esc(c.now.who) + '</b> &mdash; '
+          + esc(c.now.note) + '</div>';
+      return (c.company ? '<div class="co">' + esc(c.company) + '</div>' : '')
+        + '<div class="steps">' + c.stages.map(stepHtml).join('') + '</div>' + now;
+    }).join('');
+    return '<div class="card"><div class="day"><h2>' + dmy(day.date) + '</h2>'
+      + chips + '</div>' + cos + '</div>';
+  }).join('');
+}
+
+async function load(){
+  try {
+    draw(await jget('/api/shift/flow'));
+    $('#stamp').textContent = 'read ' + new Date().toTimeString().slice(0, 8);
+  } catch (e) {
+    $('#body').innerHTML = '<div class="card msg">Could not load.</div>';
+  }
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

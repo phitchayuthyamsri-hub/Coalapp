@@ -77,6 +77,16 @@ def views():
                    owner=dict((v, VIEW_OWNER.get(v)) for v in vs))
 
 
+@page_bp.route("/flow")
+@login_required
+def flow_page():
+    """Where each day stands in the chain, and whose desk it is on."""
+    from flask import render_template
+    if "flow" not in _views():
+        abort(403)
+    return render_template("flow.html")
+
+
 @page_bp.route("/approvals")
 @login_required
 def approvals_page():
@@ -159,7 +169,8 @@ def _role():
 TIERS = ["subcontractor", "supervisor", "manager", "planner"]
 OFF_LADDER = {"monitor": ["monitor"], "mine": ["monitor"], "spectator": ["monitor"]}
 
-VIEW_ORDER = ["subcontractor", "readiness", "approvals", "planner", "monitor"]
+VIEW_ORDER = ["subcontractor", "readiness", "approvals", "planner", "monitor",
+              "flow"]
 VIEW_TIER = {"subcontractor": 0, "readiness": 1, "approvals": 2, "planner": 3}
 
 # Seeing a step below yours is how the chain is checked; changing it is not.
@@ -192,7 +203,9 @@ def _views(role=None):
     if r == "admin":
         return list(VIEW_ORDER)
     if r in OFF_LADDER:
-        return list(OFF_LADDER[r])
+        # Everyone in or around the chain may see WHERE the day stands - the
+        # flow page acts on nothing, it only says whose desk the day is on.
+        return list(OFF_LADDER[r]) + ["flow"]
     t = _tier(r)
     if t < 0:
         return []
@@ -200,6 +213,7 @@ def _views(role=None):
     # The planner also watches: whoever issues a day has to see how it went.
     if r == "planner":
         out.append("monitor")
+    out.append("flow")
     return out
 
 
@@ -2649,6 +2663,115 @@ def _fleet_gaps(dl, sub_id):
     have = {(r.key or engine.norm_plate(r.plate)): (r.note or "").strip()
             for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
     return sorted(fleet[k] for k in fleet if not have.get(k))
+
+
+def _flow_entry(day, dl, subs):
+    """One company's day, as five stages: declare, submit, approve, plan,
+    watch. Each stage is done, doing (started but unfinished), waiting (the
+    chain is stuck on it), or idle (not reached). `now` names the first stage
+    that is not done - whose desk the day is sitting on."""
+    st = {"pending": 0, "applied": 0, "approved": 0, "denied": 0}
+    rows = []
+    if dl is not None:
+        rows = DailyListRow.query.filter_by(list_id=dl.id).all()
+        for r in rows:
+            k = r.state or "pending"
+            st[k] = st.get(k, 0) + 1
+    sub_id = dl.subcontractor_id if dl is not None else None
+    gaps = _fleet_gaps(dl, sub_id) if dl is not None else []
+    snap = _issued_for(day, sub_id)
+
+    stages = []
+    if dl is None:
+        stages.append({"key": "declare", "who": "Subcontractor",
+                       "state": "waiting", "note": "no sheet declared for this day"})
+    elif gaps:
+        stages.append({"key": "declare", "who": "Subcontractor", "state": "doing",
+                       "note": "%d of %d trucks updated - %d missing: %s"
+                               % (len(rows), len(rows) + len(gaps), len(gaps),
+                                  ", ".join(gaps[:6])
+                                  + ("…" if len(gaps) > 6 else ""))})
+    else:
+        stages.append({"key": "declare", "who": "Subcontractor", "state": "done",
+                       "note": "%d trucks declared" % len(rows)})
+
+    sent = st["applied"] + st["approved"] + st["denied"]
+    if dl is None:
+        sup = {"state": "idle", "note": ""}
+    elif dl.state == "rejected":
+        sup = {"state": "doing",
+               "note": "rejected by the manager, back with the supervisor"
+                       + ((": " + dl.reject_reason) if dl.reject_reason else "")}
+    elif sent:
+        sup = {"state": "done",
+               "note": "%d sent%s%s" % (sent,
+                       (", %d held back" % st["pending"]) if st["pending"] else "",
+                       (" by " + dl.submitted_by) if dl.submitted_by else "")}
+    else:
+        sup = {"state": "waiting" if stages[-1]["state"] == "done" else "idle",
+               "note": "nothing sent to the manager yet"}
+    stages.append(dict({"key": "submit", "who": "Supervisor"}, **sup))
+
+    if dl is None:
+        man = {"state": "idle", "note": ""}
+    elif st["applied"]:
+        man = {"state": "waiting",
+               "note": "%d truck(s) awaiting approval" % st["applied"]}
+    elif dl.state == "confirmed" or st["approved"] or st["denied"]:
+        man = {"state": "done",
+               "note": "%d approved, %d denied%s" % (st["approved"], st["denied"],
+                       (" by " + dl.confirmed_by) if dl.confirmed_by else "")}
+    else:
+        man = {"state": "idle", "note": ""}
+    stages.append(dict({"key": "approve", "who": "Manager"}, **man))
+
+    if snap is not None:
+        stages.append({"key": "plan", "who": "Planner", "state": "done",
+                       "note": "plan issued"
+                               + ((" " + _fmt(snap.issued_at)) if snap.issued_at else "")
+                               + ((" by " + snap.issued_by)
+                                  if getattr(snap, "issued_by", "") else "")})
+    elif st["approved"]:
+        stages.append({"key": "plan", "who": "Planner", "state": "waiting",
+                       "note": "%d approved truck(s), no plan issued yet"
+                               % st["approved"]})
+    else:
+        stages.append({"key": "plan", "who": "Planner", "state": "idle", "note": ""})
+
+    stages.append({"key": "watch", "who": "Monitor",
+                   "state": "done" if snap is not None else "idle",
+                   "note": "the day is live on Monitor" if snap is not None else ""})
+
+    now = next((s for s in stages if s["state"] in ("waiting", "doing")), None)
+    return {"company": (subs.get(sub_id, "(no company)") if dl is not None else None),
+            "sheet_state": dl.state if dl is not None else "",
+            "stages": stages,
+            "now": ({"who": now["who"], "note": now["note"]} if now
+                    else {"who": "", "note": "the whole chain has run"})}
+
+
+@bp.get("/flow")
+@login_required
+def flow():
+    """The chain per day: where each day stands and whose desk it is on."""
+    if "flow" not in _views():
+        return jsonify(error="Not your view"), 403
+    now_local = datetime.utcnow() + LOCAL_OFFSET
+    today = now_local.strftime("%Y-%m-%d")
+    tomorrow = (now_local + timedelta(days=1)).strftime("%Y-%m-%d")
+    back = min(int(request.args.get("days") or 7), 31)
+    days = sorted({(now_local - timedelta(days=i)).strftime("%Y-%m-%d")
+                   for i in range(back)} | {today, tomorrow}, reverse=True)
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
+    out = []
+    for day in days:
+        lists = DailyList.query.filter_by(list_date=day).order_by(DailyList.id).all()
+        if not lists and day not in (today, tomorrow):
+            continue    # a quiet past day earns no card
+        out.append({"date": day, "today": day == today, "tomorrow": day == tomorrow,
+                    "companies": [_flow_entry(day, dl, subs)
+                                  for dl in (lists or [None])]})
+    return jsonify(days=out, today=today)
 
 
 @bp.post("/list/<action>")
