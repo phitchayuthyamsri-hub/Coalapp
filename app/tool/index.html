@@ -4557,6 +4557,19 @@ function setFleetField(plate, key, val) {
   const m = fleetMeta(plate);
   m[key] = val || '';
   saveFleetToStorage();
+  // The server's truck table is the authority: a cron rewrites this page's
+  // fleet blob from it every few minutes, so an edit kept only here was
+  // silently wiped. Fields the truck table owns are written through to it.
+  const api = {phone: 'phone', gps: 'gps_provider', driver: 'driver',
+               effFrom: 'eff_from', effTo: 'eff_to', status: 'status'}[key];
+  if (api) {
+    const body = {plate: plate}; body[api] = val || '';
+    try {
+      fetch('/api/fleet', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)});
+    } catch (e) {}
+  }
 }
 // Is a plate within its effective period on date d (YYYY-MM-DD)? Blank bounds = open.
 function fleetInEffect(plate, d) {
@@ -7032,18 +7045,31 @@ function _sendEntries(){
   });
   return out;
 }
+// The driver's message is Vietnamese - it goes to the driver, not the office.
+// Dates read day first without padding (16/9/2026), the way the team writes
+// them, and the plate carries its road form (20C-106.15).
+function _vnPlate(p){
+  const m=String(p||'').match(/^(\d{2}[A-Z]{1,2})(\d{3})(\d{2})$/);
+  return m ? m[1]+'-'+m[2]+'.'+m[3] : p;
+}
+function _vnDay(d){ return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
+function _vnDT(d){
+  return _vnDay(d)+' '+String(d.getHours()).padStart(2,'0')
+    +':'+String(d.getMinutes()).padStart(2,'0');
+}
 function planMsg(plate, iso, e){
   const L=[];
-  const add=function(lbl,d){ if(d) L.push(lbl+': '+_sDT(d)); };
-  add('Load start',     e.loadStart);
-  add('Arrive mine',    e.mineArrive);
-  add('Depart mine',    e.depMine);
-  add('Arrive border',  e.borderArrive);
-  add('Arrive port',    e.portArrive);
-  add('Border (return)',e.borderBack);
-  add('Mine (return)',  e.mineReturn);
-  let m = '*Dispatch Plan*\n'+'Truck: '+plate+'\n'+'Date: '+_sDayHdr(iso);
+  const add=function(lbl,d){ if(d) L.push(lbl+': '+_vnDT(d)); };
+  add('Bắt đầu bốc hàng', e.loadStart);
+  add('Đến mỏ',           e.mineArrive);
+  add('Rời mỏ',           e.depMine);
+  add('Đến cửa khẩu',     e.borderArrive);
+  add('Đến cảng',         e.portArrive);
+  add('Mỏ (Quay lại)',    e.mineReturn);
+  let m = '*Kế hoạch điều xe*\n'+'Xe: '+_vnPlate(plate)
+    +'\n'+'Ngày: '+_vnDay(new Date(iso+'T00:00:00'));
   if(L.length) m += '\n\n'+L.join('\n');
+  m += '\n\nĐề nghị tài xế xác nhận thông tin trên.';
   return m;
 }
 function _waUrl(e){ return 'https://wa.me/'+_sPhoneDigits(e.plate)+'?text='+encodeURIComponent(planMsg(e.plate, sendDate, e)); }
