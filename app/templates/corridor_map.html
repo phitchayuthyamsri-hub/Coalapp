@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corridor map &middot; every truck now</title>
+<style>
+  :root{ --bg:#0b1020; --panel:#121a2e; --panel2:#182238; --line:#243352;
+         --txt:#e8ecf5; --mut:#8b97ad; --acc:#2dd4bf; --amber:#ffb020;
+         --red:#ff6b60; --grn:#34c759; --blue:#5ac8fa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);flex-wrap:wrap}
+  body.embed > header{padding:4px 0 10px;background:var(--bg);border-bottom:0}
+  body.embed > header > div:first-child, body.embed > header > a{display:none}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  .spacer{margin-left:auto}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:14px 18px;max-width:1500px;margin:0 auto}
+  .bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:var(--panel);
+       border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-bottom:12px}
+  .f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mut)}
+  input[type=date]{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+      border-radius:7px;padding:6px 9px;font:inherit;font-size:12px;color-scheme:dark}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{background:none;border:0;color:var(--mut);padding:7px 15px;font:inherit;
+      font-size:12px;cursor:pointer;font-weight:600}
+  .seg button.on{background:#16233a;color:var(--txt)}
+  .stat{display:flex;gap:22px;flex-wrap:wrap;margin-left:auto}
+  .stat div{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  .stat b{display:block;font-size:18px;color:var(--txt);font-weight:700;text-transform:none}
+  #map{height:72vh;min-height:440px;border-radius:12px;border:1px solid var(--line);
+       background:var(--panel2)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;color:var(--mut);font-size:11.5px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;
+            vertical-align:-1px}
+  .legend i.hollow{background:none !important;border:2px solid var(--mut);width:9px;height:9px}
+  .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 10px;line-height:1.55}
+  .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+  .n-none{background:var(--panel2);border:1px solid var(--line);color:var(--mut)}
+  .msg{font-size:12px;color:var(--mut)}
+</style>
+{% if maps_key %}
+<script>
+  function initGMaps(){ window._gmapsReady = true;
+    if (window._afterMaps) window._afterMaps(); }
+</script>
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ maps_key }}&callback=initGMaps"></script>
+{% endif %}
+<script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
+</head>
+<body class="">
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+</script>
+<header>
+  <div><h1>Corridor map</h1>
+    <div class="sub">every truck's last position &mdash; one window, the corridor</div></div>
+  <div class="spacer"></div>
+  <span class="msg" id="stamp"></span>
+  <a href="/ops">Operations</a>
+  <a href="/logout" style="color:var(--mut)">Log out</a>
+</header>
+<main>
+  <div class="bar">
+    <label class="f">Plan date<input type="date" id="day"></label>
+    <div class="f"><span>Show</span>
+      <div class="seg" id="filt">
+        <button data-f="all" class="on">All</button>
+        <button data-f="plan">Plan</button>
+        <button data-f="off">Off plan</button>
+      </div>
+    </div>
+    <div class="stat" id="stat"></div>
+  </div>
+  <div id="notes"></div>
+  <div id="map"></div>
+  <div class="legend">
+    <span><i style="background:#34c759"></i>plan start</span>
+    <span><i style="background:#ff6b60"></i>pending start</span>
+    <span><i style="background:#5ac8fa"></i>off plan</span>
+    <span><i class="hollow"></i>outside the corridor &mdash; hanging on the edge</span>
+    <span><i style="background:#8b97ad"></i>geofence</span>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const todayStr = () => new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
+
+let MAP = null, INFO = null, MARKERS = [], DATA = null, FILT = 'all';
+
+function colourOf(t){
+  if (!t.planned) return '#5ac8fa';
+  return t.started ? '#34c759' : '#ff6b60';
+}
+
+function ensureMap(box){
+  if (MAP || !window.google || !google.maps) return MAP;
+  // The window is the corridor and nothing else: panning is restricted to it,
+  // which is also why an outside truck is clamped to the edge rather than
+  // dragging the view away from the road.
+  const bounds = {north: box.n, south: box.s, east: box.e, west: box.w};
+  MAP = new google.maps.Map($('#map'), {
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+    restriction: {latLngBounds: bounds, strictBounds: false}
+  });
+  MAP.fitBounds(bounds);
+  INFO = new google.maps.InfoWindow();
+  drawFences();
+  return MAP;
+}
+
+async function drawFences(){
+  try {
+    const list = await (await fetch('/api/anchors')).json();
+    (list || []).forEach(a => {
+      if (!a.polygon || !a.polygon.length) return;
+      new google.maps.Polygon({
+        paths: a.polygon.map(p => ({lat: +p[0], lng: +p[1]})),
+        map: MAP, strokeColor: '#8b97ad', strokeOpacity: .6, strokeWeight: 1,
+        fillColor: '#8b97ad', fillOpacity: .10, clickable: false
+      });
+      const b = new google.maps.LatLngBounds();
+      a.polygon.forEach(p => b.extend({lat: +p[0], lng: +p[1]}));
+      new google.maps.Marker({position: b.getCenter(), map: MAP, clickable: false,
+        icon: {path: google.maps.SymbolPath.CIRCLE, scale: 0},
+        label: {text: a.name || '', color: '#8b97ad', fontSize: '11px',
+                fontWeight: '600'}});
+    });
+  } catch (e) { /* the trucks matter more than the scenery */ }
+}
+
+function clearMarkers(){ MARKERS.forEach(m => m.setMap(null)); MARKERS = []; }
+
+function draw(){
+  const d = DATA;
+  if (!d || !MAP) return;
+  clearMarkers();
+  const shown = (d.trucks || []).filter(t =>
+    FILT === 'all' ? true : (FILT === 'plan' ? t.planned : !t.planned));
+  shown.forEach(t => {
+    const m = new google.maps.Marker({
+      position: {lat: t.lat, lng: t.lng}, map: MAP,
+      icon: {path: google.maps.SymbolPath.CIRCLE, scale: t.outside ? 6 : 7,
+             fillColor: colourOf(t), fillOpacity: t.outside ? 0.25 : 1,
+             strokeColor: colourOf(t), strokeWeight: t.outside ? 2.5 : 1.2},
+      title: t.plate
+    });
+    m.addListener('click', () => {
+      INFO.setContent('<div style="color:#111;min-width:170px"><b>' + esc(t.plate) + '</b>'
+        + (t.driver ? '<br>' + esc(t.driver) : '')
+        + (t.sub ? '<br>' + esc(t.sub) : '')
+        + '<br>' + (t.planned ? (t.started ? 'plan started' : 'pending start')
+                              : 'not in this day\'s plan')
+        + '<br>seen ' + esc(t.seen_at)
+        + (t.outside ? '<br><b>outside the corridor</b> — shown at the edge' : '')
+        + '<br><a target="_blank" rel="noopener" href="/truck-trail?plate='
+        + encodeURIComponent(t.plate) + '">◎ trail</a></div>');
+      INFO.open(MAP, m);
+    });
+    MARKERS.push(m);
+  });
+  const out = shown.filter(t => t.outside).length;
+  $('#stat').innerHTML =
+      '<div>on the map<b>' + shown.length + '</b></div>'
+    + '<div>plan started<b style="color:var(--grn)">'
+      + shown.filter(t => t.planned && t.started).length + '</b></div>'
+    + '<div>pending start<b style="color:var(--red)">'
+      + shown.filter(t => t.planned && !t.started).length + '</b></div>'
+    + '<div>off plan<b style="color:var(--blue)">'
+      + shown.filter(t => !t.planned).length + '</b></div>'
+    + (out ? '<div>outside<b>' + out + '</b></div>' : '');
+  const un = d.unseen || [];
+  $('#notes').innerHTML =
+    (d.issued ? '' : '<div class="note n-warn">No plan is issued for this day, '
+      + 'so every truck reads off plan.</div>')
+    + (un.length ? '<div class="note n-none">Not seen by GPS in the last 24 h: '
+      + un.map(u => esc(u.plate)).join(', ') + '</div>' : '');
+}
+
+async function load(){
+  try {
+    DATA = await (await fetch('/api/shift/map?date=' + ($('#day').value || todayStr()))).json();
+  } catch (e) {
+    $('#notes').innerHTML = '<div class="note n-warn">Could not load.</div>';
+    return;
+  }
+  if (DATA && DATA.error){
+    $('#notes').innerHTML = '<div class="note n-warn">' + esc(DATA.error) + '</div>';
+    return;
+  }
+  if (!MAP && DATA.box) ensureMap(DATA.box);
+  draw();
+  $('#stamp').textContent = 'read ' + new Date().toTimeString().slice(0, 8);
+}
+
+document.querySelectorAll('#filt button').forEach(b => b.onclick = () => {
+  FILT = b.dataset.f;
+  document.querySelectorAll('#filt button').forEach(x =>
+    x.classList.toggle('on', x === b));
+  draw();
+});
+$('#day').onchange = load;
+
+(function(){
+  $('#day').value = todayStr();
+  window._afterMaps = load;
+  if (window._gmapsReady) load();
+  else if (!{{ 'true' if maps_key else 'false' }}) {
+    $('#notes').innerHTML = '<div class="note n-warn">No Google Maps key is '
+      + 'configured, so the map cannot be drawn.</div>';
+  }
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>

@@ -78,6 +78,17 @@ def views():
                    owner=dict((v, VIEW_OWNER.get(v)) for v in vs))
 
 
+@page_bp.route("/map")
+@login_required
+def map_page():
+    """The corridor map: every truck's last position inside the one window."""
+    from flask import render_template, current_app
+    if "map" not in _views():
+        abort(403)
+    return render_template("corridor_map.html",
+                           maps_key=current_app.config.get("GOOGLE_MAPS_KEY", ""))
+
+
 @page_bp.route("/flow")
 @login_required
 def flow_page():
@@ -171,7 +182,7 @@ TIERS = ["subcontractor", "supervisor", "manager", "planner"]
 OFF_LADDER = {"monitor": ["monitor"], "mine": ["monitor"], "spectator": ["monitor"]}
 
 VIEW_ORDER = ["subcontractor", "readiness", "approvals", "planner", "monitor",
-              "flow"]
+              "map", "flow"]
 VIEW_TIER = {"subcontractor": 0, "readiness": 1, "approvals": 2, "planner": 3}
 
 # Seeing a step below yours is how the chain is checked; changing it is not.
@@ -206,14 +217,18 @@ def _views(role=None):
     if r in OFF_LADDER:
         # Everyone in or around the chain may see WHERE the day stands - the
         # flow page acts on nothing, it only says whose desk the day is on.
-        return list(OFF_LADDER[r]) + ["flow"]
+        # The map travels with the monitor view: same audience, same evidence.
+        out = list(OFF_LADDER[r])
+        if "monitor" in out:
+            out.append("map")
+        return out + ["flow"]
     t = _tier(r)
     if t < 0:
         return []
     out = [v for v in VIEW_ORDER if v in VIEW_TIER and VIEW_TIER[v] <= t]
     # The planner also watches: whoever issues a day has to see how it went.
     if r == "planner":
-        out.append("monitor")
+        out += ["monitor", "map"]
     out.append("flow")
     return out
 
@@ -1391,6 +1406,103 @@ LOC_BH = [
     ("border", "Border", None,          "border", "enter"),
     ("mine",   "Mine",   "back",        "xppl",   "enter"),
 ]
+
+
+@bp.get("/map")
+@login_required
+def map_data():
+    """Every truck's last position, for the corridor map.
+
+    The window is the corridor itself - geofences and route legs with a
+    margin - and it is all anybody sees: a truck beyond it is CLAMPED to the
+    nearest edge and marked as outside, so the picture never pans away from
+    the road to chase one stray. Green is a truck whose plan has started
+    (seen at a checkpoint since its planned mine arrival), red is planned
+    but pending start, and off-plan trucks carry their own colour.
+    """
+    if "monitor" not in _views():
+        return jsonify(error="Not your view"), 403
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+
+    lats, lngs = [], []
+    for a in Anchor.query.all():
+        for p in (a.polygon or []):
+            lats.append(float(p[0]))
+            lngs.append(float(p[1]))
+    for leg in RouteLeg.query.all():
+        for p in (leg.points or []):
+            lats.append(float(p[0]))
+            lngs.append(float(p[1]))
+    if not lats:
+        return jsonify(error="No corridor is configured yet"), 500
+    pad = 0.12
+    box = {"s": min(lats) - pad, "n": max(lats) + pad,
+           "w": min(lngs) - pad, "e": max(lngs) + pad}
+
+    snap = _issued_for(day, None)
+    plan = {}
+    if snap is not None:
+        for r in (snap.rows or []):
+            if r.get("day") == day:
+                plan.setdefault(engine.norm_plate(r["plate"]), r)
+
+    visits, _r = _visits_and_roles()
+    last_visit = {}
+    for v in visits:
+        if not v.get("enter"):
+            continue
+        k = engine.norm_plate(v["plate"])
+        if k not in last_visit or v["enter"] > last_visit[k]:
+            last_visit[k] = v["enter"]
+
+    # Ping times are local (see gps_ingest), so the freshness clock is too.
+    fresh_after = datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE
+    last = {}
+    for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
+              .order_by(GpsPing.dt).all()):
+        last[engine.norm_plate(g.plate)] = g
+
+    trucks, unseen = [], []
+    for t in Truck.query.order_by(Truck.plate).all():
+        if (t.status or "") == "deactivated":
+            continue
+        k = engine.norm_plate(t.plate)
+        p = plan.get(k)
+        started = False
+        if p is not None:
+            try:
+                am = datetime.strptime((p.get("t") or {}).get("arrive_mine"),
+                                       "%Y-%m-%dT%H:%M")
+                lv = last_visit.get(k)
+                # Seen at any corridor checkpoint since shortly before its
+                # planned mine arrival = the run has started.
+                started = bool(lv and lv >= am - timedelta(hours=6))
+            except (TypeError, ValueError):
+                started = False
+        g = last.get(k)
+        if g is None:
+            unseen.append({"plate": t.plate, "planned": p is not None,
+                           "started": started})
+            continue
+        lat, lng = float(g.lat), float(g.lng)
+        outside = not (box["s"] <= lat <= box["n"]
+                       and box["w"] <= lng <= box["e"])
+        trucks.append({
+            "plate": t.plate, "driver": t.driver or "",
+            "sub": (p or {}).get("sub") or "",
+            "lat": min(max(lat, box["s"]), box["n"]),
+            "lng": min(max(lng, box["w"]), box["e"]),
+            "outside": outside,
+            "seen_at": g.dt.strftime("%Y-%m-%d %H:%M"),
+            "planned": p is not None, "started": started,
+        })
+    return jsonify(date=day, box=box, trucks=trucks, unseen=unseen,
+                   issued=snap is not None)
 
 
 @bp.post("/track/remark")
