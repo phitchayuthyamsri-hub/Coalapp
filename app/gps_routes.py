@@ -8,7 +8,8 @@ All routes are admin-gated and side-effect-free until a provider is configured.
 """
 from datetime import datetime
 
-from flask import Blueprint, render_template, jsonify, abort, current_app, request
+from flask import (Blueprint, render_template, jsonify, abort, current_app,
+                   request, Response)
 from flask_login import login_required, current_user
 
 from . import gps_ingest
@@ -165,6 +166,89 @@ def gps_debug(provider):
     if provider not in _PROVIDERS:
         abort(404)
     return jsonify(gps_ingest.debug_provider(current_app._get_current_object(), provider))
+
+
+@bp.get("/api/gps/export.xlsx")
+@login_required
+def gps_export():
+    """The STORED positions as a workbook - what this system has captured,
+    not a live pull. One truck, or every truck this login may see, over a
+    window. The same scoping as the rest of the GPS pages holds: a company
+    exports its own trucks and nobody else's."""
+    _require_gps_read()
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+    from .models import GpsPing
+    from . import engine as _eng
+
+    plate = (request.args.get("plate") or "").strip()
+    scope = _gps_scope()
+    if plate and not _in_scope(plate, scope):
+        return jsonify(ok=False, error="That truck is not on your fleet."), 403
+    f = _parse_arg_dt(request.args.get("from"))
+    t = _parse_arg_dt(request.args.get("to"))
+    if not f or not t:
+        return jsonify(ok=False, error="from and to are required"), 400
+    if t <= f:
+        return jsonify(ok=False, error="'to' must be after 'from'"), 400
+
+    key = _eng.norm_plate(plate) if plate else None
+    out = []
+    for g in (GpsPing.query.filter(GpsPing.dt >= f, GpsPing.dt <= t)
+              .order_by(GpsPing.plate, GpsPing.dt).all()):
+        if key is not None and _eng.norm_plate(g.plate) != key:
+            continue
+        if key is None and scope is not None \
+                and _eng.norm_plate(g.plate) not in scope:
+            continue
+        out.append(g)
+        if len(out) > 100000:
+            return jsonify(ok=False,
+                           error="Over 100,000 positions in that window. "
+                                 "Narrow the dates or pick one truck."), 400
+    if not out:
+        return jsonify(ok=False, error="No stored positions in that window. "
+                       "The provider is pulled every few minutes - a quiet "
+                       "stretch means nothing was collected."), 404
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "GPS positions"
+    ws.append(["Captured GPS positions — %s — %s to %s"
+               % (plate or "all trucks", f.strftime("%d/%m/%Y %H:%M"),
+                  t.strftime("%d/%m/%Y %H:%M"))])
+    ws["A1"].font = Font(bold=True, size=12)
+    ws.append(["Times are local (UTC+7), as the providers report them. These "
+               "are the positions this system captured, not a live pull."])
+    ws["A2"].font = Font(italic=True, size=9)
+    ws.append([])
+    ws.append(["No", "Plate", "Time", "Latitude", "Longitude",
+               "Speed (km/h)", "Status", "Source"])
+    head = Font(bold=True)
+    for c in ws[4]:
+        c.font = head
+    for i, g in enumerate(out, 1):
+        ws.append([i, g.plate, g.dt, g.lat, g.lng, g.speed,
+                   g.status or "", (g.source or "").replace("api:", "")])
+    for col, w in zip("ABCDEFGH", (7, 12, 19, 11, 11, 12, 14, 10)):
+        ws.column_dimensions[col].width = w
+    for cell in ws["C"][4:]:
+        cell.number_format = "dd/mm/yyyy hh:mm:ss"
+    ws.freeze_panes = "A5"
+    ws.auto_filter.ref = "A4:H%d" % (4 + len(out))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    name = "gps_%s_%s_%s.xlsx" % ((plate or "all").replace(" ", ""),
+                                  f.strftime("%Y%m%d%H%M"),
+                                  t.strftime("%Y%m%d%H%M"))
+    return Response(buf.read(),
+                    mimetype="application/vnd.openxmlformats-officedocument."
+                             "spreadsheetml.sheet",
+                    headers={"Content-Disposition":
+                             'attachment; filename="%s"' % name})
 
 
 @bp.get("/api/gps/trail")

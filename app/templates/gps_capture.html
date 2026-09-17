@@ -104,6 +104,7 @@
     To <input type="datetime-local" id="trailTo" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12.5px;color-scheme:dark">
     <button id="trailBtn" style="background:#0071e3;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer">Load trail</button>
     <button id="trailClear" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:12.5px;cursor:pointer">Clear</button>
+    <button id="gpsXls" title="Download the STORED positions for this truck and window as an Excel file. Pick All trucks to export everything you may see." style="background:#1f7a4d;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer">&#8681; Excel</button>
     <span id="trailMsg"></span>
     <span style="color:var(--muted)">max range: TCT 14 days · Viettel 7 days · Adsun 3 days (provider limits)</span>
   </div>
@@ -268,7 +269,8 @@ function _localInput(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_p
 function populateTrailTrucks(trucks){
   const sel=document.getElementById('trailTruck'); if(!sel) return;
   const cur=sel.value;
-  sel.innerHTML=(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
+  sel.innerHTML='<option value="">All trucks (Excel export)</option>'
+    +(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
   if(cur) sel.value=cur;
   _autoTrail();
 }
@@ -334,6 +336,28 @@ function wireTrail(){
   if(f && !f.value) f.value=_localInput(yest);
   if(t && !t.value) t.value=_localInput(now);
   const btn=document.getElementById('trailBtn'), clr=document.getElementById('trailClear');
+  // The stored positions as a file: the same truck-and-window bar, but the
+  // answer is a workbook of what this system captured, not a drawn trail.
+  const xls=document.getElementById('gpsXls');
+  if(xls) xls.addEventListener('click', function(){
+    const sel=document.getElementById('trailTruck');
+    const plate=(sel&&sel.value)?sel.value.split('|')[0]:'';
+    if(!f.value||!t.value){ msg.textContent='Set From and To'; return; }
+    msg.textContent='Building the file…';
+    fetch('/api/gps/export.xlsx?plate='+encodeURIComponent(plate)
+        +'&from='+encodeURIComponent(f.value)+'&to='+encodeURIComponent(t.value))
+      .then(function(r){
+        if(!r.ok) return r.json().then(function(j){ throw new Error((j&&j.error)||'Export failed'); });
+        return r.blob();
+      }).then(function(b){
+        if(!b) return;
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(b);
+        a.download='gps_'+(plate||'all')+'.xlsx';
+        a.click(); URL.revokeObjectURL(a.href);
+        msg.textContent='Downloaded.';
+      }).catch(function(e){ msg.textContent=e.message||'Export failed'; });
+  });
   if(btn) btn.addEventListener('click', function(){
     const sel=document.getElementById('trailTruck'); if(!sel || !sel.value){ msg.textContent='Pick a truck'; return; }
     const parts=sel.value.split('|'); const plate=parts[0], source=parts[1]||'';
