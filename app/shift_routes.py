@@ -2971,6 +2971,27 @@ def _fleet_gaps(dl, sub_id):
     return sorted(fleet[k] for k in fleet if not have.get(k))
 
 
+# The day's rhythm: when each desk is supposed to hold the day, local time,
+# anchored to the RUN day (-1 = the day before the trucks run). The manager
+# has no window on purpose - nothing waits on them - and the monitor's window
+# is the run day itself. One constant, so changing the rhythm is one edit.
+FLOW_WINDOWS = {
+    "declare": (-1, "08:00", "15:00"),
+    "submit":  (-1, "15:00", "17:00"),
+    "plan":    (-1, "17:00", "18:00"),
+}
+
+
+def _stage_window(day, key):
+    w = FLOW_WINDOWS.get(key)
+    if not w:
+        return None
+    off, a, b = w
+    d = datetime.strptime(day, "%Y-%m-%d") + timedelta(days=off)
+    iso = d.strftime("%Y-%m-%d")
+    return {"label": "%s–%s · %s" % (a, b, _dmy(iso)), "ends": iso + "T" + b}
+
+
 def _flow_entry(day, dl, subs):
     """One company's day, as five stages: declare, submit, approve, plan,
     watch. Each stage is done, doing (started but unfinished), waiting (the
@@ -3024,9 +3045,19 @@ def _flow_entry(day, dl, subs):
         man = {"state": "waiting",
                "note": "%d truck(s) awaiting approval" % st["applied"]}
     elif dl.state == "confirmed" or st["approved"] or st["denied"]:
-        man = {"state": "done",
-               "note": "%d approved, %d denied%s" % (st["approved"], st["denied"],
-                       (" by " + dl.confirmed_by) if dl.confirmed_by else "")}
+        # The supervisor is the end approval: when the same name submitted
+        # and confirmed, the manager step was passed through, not acted on -
+        # and the card must not read as if a manager decided something.
+        if dl.confirmed_by and dl.confirmed_by == dl.submitted_by:
+            man = {"state": "done",
+                   "note": "approved on submit — the supervisor is the "
+                           "end approval"}
+        else:
+            man = {"state": "done",
+                   "note": "%d approved, %d denied%s"
+                           % (st["approved"], st["denied"],
+                              (" by " + dl.confirmed_by) if dl.confirmed_by
+                              else "")}
     else:
         man = {"state": "idle", "note": ""}
     stages.append(dict({"key": "approve", "who": "Manager"}, **man))
@@ -3048,11 +3079,29 @@ def _flow_entry(day, dl, subs):
                    "state": "done" if snap is not None else "idle",
                    "note": "the day is live on Monitor" if snap is not None else ""})
 
+    # Each stage carries its window, and a stage still open past its window
+    # says so - "pending" and "pending, and late" are different situations.
+    now_local = datetime.utcnow() + LOCAL_OFFSET
+    for s in stages:
+        w = _stage_window(day, s["key"])
+        if w:
+            s["window"] = w["label"]
+            if s["state"] in ("waiting", "doing"):
+                try:
+                    s["overdue"] = now_local > datetime.strptime(
+                        w["ends"], "%Y-%m-%dT%H:%M")
+                except ValueError:
+                    pass
+        elif s["key"] == "watch":
+            s["window"] = "run day · " + _dmy(day)
+
     now = next((s for s in stages if s["state"] in ("waiting", "doing")), None)
     return {"company": (subs.get(sub_id, "(no company)") if dl is not None else None),
             "sheet_state": dl.state if dl is not None else "",
             "stages": stages,
-            "now": ({"who": now["who"], "note": now["note"]} if now
+            "now": ({"who": now["who"], "note": now["note"],
+                     "overdue": bool(now.get("overdue")),
+                     "window": now.get("window", "")} if now
                     else {"who": "", "note": "the whole chain has run"})}
 
 

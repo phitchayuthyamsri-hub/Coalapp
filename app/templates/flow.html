@@ -48,6 +48,8 @@
   .s-waiting .who,.s-doing .who{color:var(--warn)}
   .s-done .who{color:#5fd97e}
   .note{font-size:10.5px;color:var(--mut);margin-top:2px;max-width:180px;line-height:1.4}
+  .win{font-size:9.5px;color:#5a6a85;margin-top:2px;letter-spacing:.2px}
+  .win.late{color:var(--bad);font-weight:700}
 
   .now{margin-top:12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
        background:#2a1f10;border:1px solid #5a4020;color:#fcd34d}
@@ -82,6 +84,8 @@ function stepHtml(s){
   return '<div class="step s-' + s.state + (s.state === 'done' ? ' p-done' : '') + '">'
     + '<div class="dot">' + (MARK[s.state] || '·') + '</div>'
     + '<div class="who">' + esc(s.who) + '</div>'
+    + (s.window ? '<div class="win' + (s.overdue ? ' late' : '') + '">'
+        + esc(s.window) + (s.overdue ? ' — passed' : '') + '</div>' : '')
     + (s.note ? '<div class="note">' + esc(s.note) + '</div>' : '')
     + '</div>';
 }
@@ -100,7 +104,9 @@ function draw(d){
       const now = done
         ? '<div class="now ok"><b>Complete</b> &mdash; ' + esc(c.now.note) + '</div>'
         : '<div class="now"><b>Pending at: ' + esc(c.now.who) + '</b> &mdash; '
-          + esc(c.now.note) + '</div>';
+          + esc(c.now.note)
+          + (c.now.overdue ? ' &middot; <b style="color:var(--bad)">its window ('
+              + esc(c.now.window) + ') has passed</b>' : '') + '</div>';
       return (c.company ? '<div class="co">' + esc(c.company) + '</div>' : '')
         + '<div class="steps">' + c.stages.map(stepHtml).join('') + '</div>' + now;
     }).join('');
