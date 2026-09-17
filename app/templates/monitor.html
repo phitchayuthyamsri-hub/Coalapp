@@ -208,6 +208,9 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <label class="f">Day at the mine &mdash; when the trucks run
         <select id="day"></select></label>
       <button id="run">Refresh</button>
+      <button id="sendPlan" title="Each driver's dispatch message over WhatsApp,
+prefilled from the issued plan - the same page as Plan &rarr; Send Plan.">
+        &#128228; Send plan</button>
       <label class="f" style="flex-direction:row;gap:6px;align-items:center;
              align-self:center">
         <input type="checkbox" id="auto" checked>every 60 s</label>
@@ -647,6 +650,10 @@ function arm(){
 
 // #day is a DayPick now: it calls run() through onPick.
 $('#run').onclick = run;
+// The monitor is often the one chasing drivers, so Send Plan is one press
+// away instead of a trip through the Plan menu. Opens in its own tab - the
+// board keeps watching while messages go out.
+$('#sendPlan').onclick = () => window.open('/tool#send', '_blank');
 $('#auto').onchange = arm;
 
 (async function(){
