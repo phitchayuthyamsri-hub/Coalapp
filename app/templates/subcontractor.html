@@ -319,6 +319,14 @@ async function load(){
 
   // What is already declared wins; the GPS fills the gaps. A declaration is a
   // statement somebody made, and it is not this page's place to overwrite it.
+  // Short buckets, not the whole why-sentence: a filter menu of fifty
+  // distinct sentences answers nothing.
+  function gpsCat(g){
+    if (!g || !g.seen_at) return 'no GPS';
+    if (g.status === 'BH') return 'BH — returning';
+    if (g.status === 'FH') return 'FH — running out';
+    return 'seen — leg unknown';
+  }
   const byPlate = {};
   (list.rows || []).forEach(r => { byPlate[r.plate] = r; });
   const plates = Object.keys(byPlate).length
@@ -343,7 +351,11 @@ async function load(){
       date: d.arrive_date || (declared ? '' : g.eta_date || ''),
       time: d.arrive || (declared ? '' : g.eta_time || ''),
       back: d.back_in_service || '',
-      remark: d.remark || ''
+      remark: d.remark || '',
+      // A value the grid can actually sort and filter on. The pretty cell is
+      // drawn by the renderer, but sort and the filter menu read row.gps -
+      // and with nothing here every truck counted as (blank).
+      gps: gpsCat(g)
     };
   });
 
