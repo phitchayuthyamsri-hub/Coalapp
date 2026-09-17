@@ -1783,6 +1783,103 @@ WEEK_COLS = [
 ]
 
 
+@bp.get("/revision.xlsx")
+@login_required
+def revision_export():
+    """One revised day as a workbook - the revision as it stands RIGHT NOW,
+    issued or not. The title says which, because a working revision and a
+    commitment support different conversations."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, Alignment
+
+    only = _req_sub_id()
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+    d = _revision_data(day, only)
+    if not d["rows"]:
+        return jsonify(error="There is no revised plan for %s to export."
+                             % _dmy(day)), 404
+    who = "All companies"
+    if only:
+        s = db.session.get(Subcontractor, only)
+        who = (s.short or s.name) if s else str(only)
+    snap = _issued_for(day, only)
+    issued_line = (("Issued %s%s" % (_fmt(snap.issued_at) or "",
+                    (" by " + snap.issued_by)
+                    if getattr(snap, "issued_by", "") else ""))
+                   if snap is not None else
+                   "NOT ISSUED YET — a working revision, not a commitment")
+
+    dt = lambda v: datetime.strptime(v, "%Y-%m-%dT%H:%M") if v else None
+    head = Font(bold=True)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Revision"
+    ws.append(["Revised plan for %s — %s — local time (UTC+7)"
+               % (_dmy(day), who)])
+    ws["A1"].font = Font(bold=True, size=13)
+    ws.append([issued_line + " · exported %s by %s"
+               % ((datetime.utcnow() + LOCAL_OFFSET).strftime("%d/%m/%Y %H:%M"),
+                  current_user.username)])
+    ws["A2"].font = Font(italic=True, size=9)
+    ws.append([c[0] for c in WEEK_COLS])
+    for c in ws[3]:
+        c.font = head
+        c.alignment = Alignment(horizontal="center")
+    for r in d["rows"]:
+        line = []
+        for _, key, _w in WEEK_COLS:
+            if key == "source":
+                line.append("plan" if r["from_plan"] else "readiness")
+            elif key == "route":
+                line.append("Hue" if r["route"] == "hue" else "QL49")
+            elif key in r:
+                line.append(r[key])
+            elif key in r["t"]:
+                line.append(dt(r["t"][key]))
+            else:
+                line.append(round(r["waits"].get(key, 0.0), 2))
+        ws.append(line)
+    for i, (_lbl, key, w) in enumerate(WEEK_COLS, 1):
+        col = openpyxl.utils.get_column_letter(i)
+        ws.column_dimensions[col].width = w
+        if key in ("arrive_mine", "load_start", "load_end", "arrive_border",
+                   "cross_border", "ql49_arrive", "ql49_in", "arrive_port",
+                   "unload_start", "unload_end", "depart_port", "back"):
+            for cell in ws[col][3:]:
+                cell.number_format = "ddd dd/mm/yyyy hh:mm"
+    ws.freeze_panes = "E4"
+    ws.auto_filter.ref = "A3:%s%d" % (
+        openpyxl.utils.get_column_letter(len(WEEK_COLS)), 3 + len(d["rows"]))
+
+    ws2 = wb.create_sheet("Figures used")
+    ws2.append(["Every number below is in force NOW - what this revision was "
+                "computed from."])
+    ws2["A1"].font = Font(italic=True)
+    ws2.append([])
+    ws2.append(["Figure", "Value", "Unit", "Group"])
+    for c in ws2[3]:
+        c.font = head
+    for p in PlanSetting.query.order_by(PlanSetting.ordering).all():
+        ws2.append([p.label, p.value, p.unit, p.group])
+    for col, w in zip("ABCD", (42, 14, 10, 12)):
+        ws2.column_dimensions[col].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(buf.read(),
+                    mimetype="application/vnd.openxmlformats-officedocument."
+                             "spreadsheetml.sheet",
+                    headers={"Content-Disposition":
+                             'attachment; filename="revision_%s.xlsx"' % day})
+
+
 @bp.get("/week.xlsx")
 @login_required
 def week_export():

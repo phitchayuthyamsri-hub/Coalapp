@@ -273,6 +273,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <label class="f">Day at the mine<select id="day"></select></label>
       <label class="f">Company<select id="sub"></select></label>
       <button id="run">Recalculate</button>
+      <button id="rXls" title="This day's revision as it stands right now, as an
+Excel file - the title inside says whether it has been issued.">&#8681; Excel</button>
       <div class="stats" id="stats"></div>
     </div>
   </div>
@@ -1379,6 +1381,22 @@ async function doIssue(){
 
 $('#day').onchange = run;
 $('#run').onclick = run;
+
+// The revision as a file. Fetched rather than linked, so "nothing to export"
+// arrives as a readable message instead of a JSON page.
+$('#rXls').onclick = async () => {
+  const d = $('#day').value;
+  const r = await fetch('/api/shift/revision.xlsx?date=' + d + subQ());
+  if (!r.ok){
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    alert(j.error || 'Export failed'); return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = 'revision_' + d + '.xlsx';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 (async function(){
   // Not /api/shift/latest: that answers "which readiness sheet is being worked",

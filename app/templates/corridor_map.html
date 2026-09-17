@@ -102,13 +102,14 @@ function colourOf(t){
 
 function ensureMap(box){
   if (MAP || !window.google || !google.maps) return MAP;
-  // The window is the corridor and nothing else: panning is restricted to it,
-  // which is also why an outside truck is clamped to the edge rather than
-  // dragging the view away from the road.
+  // The window is the corridor and NOTHING else: strictBounds means the
+  // visible frame itself can never leave the box - no zooming out into half
+  // of Laos - which is also why an outside truck is clamped to the edge
+  // rather than dragging the view away from the road.
   const bounds = {north: box.n, south: box.s, east: box.e, west: box.w};
   MAP = new google.maps.Map($('#map'), {
     mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
-    restriction: {latLngBounds: bounds, strictBounds: false}
+    restriction: {latLngBounds: bounds, strictBounds: true}
   });
   MAP.fitBounds(bounds);
   INFO = new google.maps.InfoWindow();
