@@ -67,6 +67,10 @@ const ROWS = [
   truck('20H00715','NT',      cell('2026-09-09T06:15', null, null, '2026-09-10T00:40')),
   truck('20H00717','NT',      cell('', null)),
 ];
+// One truck seen at QL49, one at the Mine: the default order must follow the
+// corridor (Mine first), not the alphabet (QL49 first is the reported bug).
+ROWS[1].last_seen = {place:'QL49', leg:'fh', at:'2026-09-09T10:00'};
+ROWS[3].last_seen = {place:'Mine', leg:'fh', at:'2026-09-09T05:05'};
 
 vm.runInContext(`
   TOL = 60; LEG = 'fh'; TV = null;
@@ -106,7 +110,17 @@ try {
   is('so is Actual', out.indexOf('data-col="fh:port:act"') >= 0, true);
   is('sub-headers keep their own class', /class="hd sub2"/.test(out), true);
   is('the id columns still span both header rows',
-     (out.match(/rowspan="2"/g) || []).length, 4);
+     (out.match(/rowspan="2"/g) || []).length, 5);
+  is('the default order follows the corridor, mine first',
+     plates(), ['20H00717','20C10770','20C10615','20H00715']);
+  is('every truck carries a team-remark box',
+     (out.match(/class="rmk-in"/g) || []).length, 4);
+  vm.runInContext(`TRACK.remarks = {'20C10770': {text:'border queue, driver called',
+    by:'monitorA', at:'2026-09-09 12:00'}}; drawTrack();`, sandbox);
+  is("a saved remark shows in its truck's box",
+     store['track'].innerHTML.indexOf('value="border queue, driver called"') >= 0, true);
+  is('...with who wrote it on hover',
+     store['track'].innerHTML.indexOf('title="monitorA · 2026-09-09 12:00"') >= 0, true);
   is('a plan carries its day, dd/mm first',
      out.indexOf('<span class="t-dm">09/09</span> 05:00') >= 0, true);
   is('an estimate carries its day the same way',

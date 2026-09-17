@@ -104,6 +104,11 @@
   .t-early{color:var(--warn)}
   .t-late{color:var(--bad)}
   .t-dm{color:var(--mut);font-size:10px}
+  td.rmk{width:200px}
+  .rmk-in{width:192px;background:#0c1523;border:1px solid var(--line);border-radius:6px;
+          color:var(--txt);padding:4px 7px;font:inherit;font-size:12px}
+  .rmk-in:focus{border-color:var(--acc);outline:none}
+  .rmk-in::placeholder{color:#5a6a85}
   /* An estimate is the one time on this table nobody measured. Pale grey,
      neutral where every confirmed time is tinted, so the eye passes over
      it and lands on what was actually seen. */
@@ -319,6 +324,11 @@ function phoneCell(r){
 function drawTrack(){
   const d = TRACK;
   if (!d) return;
+  // Somebody mid-sentence in a remark must not have the row rebuilt under
+  // their cursor by the 60-second refresh. Their save lands on change; the
+  // next refresh paints it.
+  const ae = document.activeElement;
+  if (ae && ae.classList && ae.classList.contains('rmk-in')) return;
   const s = d.summary;
   TOL = d.on_time_minutes || 60;
   // Nothing is issued: there is no promise for the day, so there is nothing
@@ -366,6 +376,20 @@ function drawTrack(){
   const cellsOf = r => LEG === 'bh' ? r.bh.slice().reverse() : r.fh;
   const whereOf = r => r.last_seen ? r.last_seen.place
                      : (r.enroute ? 'on the road' : 'not seen');
+  // Places order along the corridor, mine first - not alphabetically, where
+  // QL49 lands ahead of the mine. The default row order and the column's own
+  // sort both follow the road.
+  const RANK = {};
+  locs.forEach(function(l, i){ RANK[l.label] = i; });
+  const wherePos = r => r.last_seen
+    ? (RANK[r.last_seen.place] !== undefined ? RANK[r.last_seen.place] : 6)
+    : (r.enroute ? 8 : 9);
+  d.rows.sort(function(a, b){
+    return (wherePos(a) - wherePos(b))
+      || String(a.plate).localeCompare(String(b.plate));
+  });
+  const rkey = p => String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const remarkOf = r => (d.remarks || {})[rkey(r.plate)] || {};
   // What a time cell IS, in the words the key at the top of the table uses.
   // The clock sorts; this is what the filter menu offers, because "show me the
   // late ones" is the question, and a menu of fifty-eight distinct times is
@@ -387,10 +411,17 @@ function drawTrack(){
   // this truck now - and it was sitting past eight columns of times on the far
   // right, which is the last place anybody looks.
   const idCols = [
-    {key:'where', label:'Last location', rowspan:2, get: whereOf},
+    // The sort value leads with the corridor position, so sorting this column
+    // reads mine -> border -> QL49 -> port; the filter menu still offers the
+    // plain place names.
+    {key:'where', label:'Last location', rowspan:2,
+     get: r => wherePos(r) + ' ' + whereOf(r), fget: whereOf},
     {key:'plate', label:'Truck',         rowspan:2},
     {key:'phone', label:'Phone',         rowspan:2, get: r => r.phone || ''},
-    {key:'sub',   label:'Sub',           rowspan:2, get: r => r.sub || ''}
+    {key:'sub',   label:'Sub',           rowspan:2, get: r => r.sub || ''},
+    {key:'remark', label:'Team remark',  rowspan:2,
+     get: r => remarkOf(r).text || '',
+     fget: r => (remarkOf(r).text ? 'has remark' : 'blank')}
   ];
   const placeCols = [];
   locs.forEach(function(l, j){
@@ -438,10 +469,16 @@ function drawTrack(){
              ? '<span style="color:var(--blind)">on the road</span> '
                + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
              : '<span style="color:var(--mut)">not seen</span>');
+        const rm = remarkOf(r);
         return '<tr><td class="where">' + where + trailLink(r.plate) + '</td>'
           + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td class="tel">' + phoneCell(r) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
+          + '<td class="rmk"><input class="rmk-in" maxlength="300"'
+            + ' data-plate="' + esc(r.plate) + '"'
+            + ' value="' + esc(rm.text || '') + '"'
+            + (rm.by ? ' title="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
+            + ' placeholder="note for the team…"></td>'
           + cs.map(c => '<td class="pl">'
               + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
                         : '<span style="color:var(--mut)">&mdash;</span>')
@@ -456,6 +493,25 @@ function drawTrack(){
         + d.not_planned_count + ' approved truck(s) are not in the issued plan, so they '
         + 'are not watched here: ' + esc((d.not_planned || []).join(', ')) + '</div>' : '');
   TV.wire(document.getElementById('trackTable'));
+  // A remark saves when the writer leaves the box; the answer comes back with
+  // the writer's name on it so the next shift knows who to ask.
+  document.querySelectorAll('#trackTable .rmk-in').forEach(function(inp){
+    inp.addEventListener('change', async function(){
+      try {
+        const r = await fetch('/api/shift/track/remark', {method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({date: $('#day').value, plate: inp.dataset.plate,
+                                text: inp.value})});
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Could not save');
+        (TRACK.remarks = TRACK.remarks || {})[j.key] =
+          {text: j.text, by: j.by, at: j.at};
+        inp.title = j.by + ' · ' + j.at;
+        inp.style.borderColor = 'var(--ok)';
+        setTimeout(function(){ inp.style.borderColor = ''; }, 1200);
+      } catch (e) { alert(e.message || 'Could not save the remark'); }
+    });
+  });
   measure();
 }
 

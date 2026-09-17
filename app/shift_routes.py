@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 
 from . import engine
 from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
+                     MonitorRemark,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
                      PlanSetting, RouteLeg, PlanSnapshot, Notice)
 from . import readiness_import
@@ -1392,6 +1393,34 @@ LOC_BH = [
 ]
 
 
+@bp.post("/track/remark")
+@login_required
+def track_remark():
+    """The monitor team's note on one truck for one day - the handover lives
+    in the row, not in a chat. One note per (day, truck); newest writer wins
+    and is named on it."""
+    if "monitor" not in _views():
+        return jsonify(error="Not your view"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    day = (d.get("date") or "").strip()
+    key = engine.norm_plate((d.get("plate") or "").strip())
+    if not day or not key:
+        return jsonify(error="date and plate are required"), 400
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+    m = MonitorRemark.query.filter_by(day=day, key=key).first()
+    if m is None:
+        m = MonitorRemark(day=day, key=key)
+        db.session.add(m)
+    m.text = (d.get("text") or "").strip()[:300]
+    m.by = current_user.username
+    m.at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(ok=True, key=key, text=m.text, by=m.by, at=_fmt(m.at))
+
+
 @bp.get("/track")
 @login_required
 def track():
@@ -1582,8 +1611,12 @@ def track():
     moving = [r for r in rows if r["last_seen"] or r["enroute"]]
     running_late = [r for r in rows if (r["drift"] or 0) > ON_TIME_MINUTES]
     running_early = [r for r in rows if (r["drift"] or 0) < -ON_TIME_MINUTES]
+    remarks = {m.key: {"text": m.text or "", "by": m.by or "",
+                       "at": _fmt(m.at) if m.at else ""}
+               for m in MonitorRemark.query.filter_by(day=day).all()}
     return jsonify(
         date=day, subcontractor_id=only, source=source, issued=issued,
+        remarks=remarks,
         # Named rather than dropped: approved, not dispatched, and the reason is
         # almost always a missing arrival time on the sheet.
         not_planned=not_planned, not_planned_count=len(not_planned),

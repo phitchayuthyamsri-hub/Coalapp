@@ -303,6 +303,21 @@ class DailyListRow(db.Model):
     note = db.Column(db.String(300), default="")
 
 
+class MonitorRemark(db.Model):
+    """The monitor team's own note on one truck for one day.
+
+    Shift handover written in the row itself - "driver called, border queue,
+    resumes 14:00" - rather than in a chat the next shift never rereads. One
+    note per (day, truck); the newest writer wins and is named.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.String(10), index=True, nullable=False)
+    key = db.Column(db.String(40), index=True, nullable=False)   # normalised plate
+    text = db.Column(db.String(300), default="")
+    by = db.Column(db.String(80), default="")
+    at = db.Column(db.DateTime)
+
+
 class GpsIngestRun(db.Model):
     """One row per GPS ingestion poll (audit trail + status for /gps-capture)."""
     id = db.Column(db.Integer, primary_key=True)
