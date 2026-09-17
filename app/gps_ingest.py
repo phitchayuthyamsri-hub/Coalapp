@@ -151,7 +151,13 @@ def _fetch_tct(cfg):
     want = set(cfg.get("plates") or [])
     out = []
     for v in vehicles:
-        plate = v.get("VehiclePlate")
+        plate = str(v.get("VehiclePlate") or "").strip()
+        # TCT's portal renames a vehicle with a suffix when its package
+        # changes ("20H01393_C", the camera tag, 2026-09-11). The truck is
+        # the part before the underscore; keeping the suffix would store its
+        # positions under a plate no page ever looks up.
+        if "_" in plate:
+            plate = plate.split("_")[0].strip()
         if want and _norm_plate(plate) not in want:
             continue
         dt = _parse_dt(v.get(tsf) or v.get("LocalTime") or v.get("UTCTime"))
@@ -160,7 +166,7 @@ def _fetch_tct(cfg):
         if dt is None or lat is None or lng is None:
             continue
         out.append({
-            "plate": str(plate).strip(),
+            "plate": plate,
             "dt": dt, "lat": lat, "lng": lng,
             "speed": _num(v.get("Speed")) or 0.0,
             "status": str(v.get("State", "")),
