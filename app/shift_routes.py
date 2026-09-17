@@ -3030,31 +3030,37 @@ def _flow_entry(day, dl, subs):
                "note": "rejected by the manager, back with the supervisor"
                        + ((": " + dl.reject_reason) if dl.reject_reason else "")}
     elif sent:
-        # The approval is named here: the supervisor IS the end approval, so
-        # "who approved it" is this step's answer, not a later one's.
-        note = "%d sent%s" % (sent, (", %d held back" % st["pending"])
-                              if st["pending"] else "")
-        who, appr = dl.submitted_by or "", dl.confirmed_by or ""
-        if appr and appr == who:
-            note += " · approved by %s" % appr
-        else:
-            if who:
-                note += " by %s" % who
-            if appr:
-                note += " · approved by %s" % appr
-        if dl.confirmed_at:
-            note += " at %s" % _fmt(dl.confirmed_at)
-        if st["applied"]:
-            note += " · %d not yet approved — submit again" % st["applied"]
-        sup = {"state": "waiting" if st["applied"] else "done", "note": note}
+        sup = {"state": "done",
+               "note": "%d sent%s%s" % (sent,
+                       (", %d held back" % st["pending"]) if st["pending"] else "",
+                       (" by " + dl.submitted_by) if dl.submitted_by else "")}
     else:
         sup = {"state": "waiting" if stages[-1]["state"] == "done" else "idle",
                "note": "nothing sent to the manager yet"}
     stages.append(dict({"key": "submit", "who": "Supervisor"}, **sup))
 
-    # No Manager stage: the supervisor is the end approval, so nothing ever
-    # waits on that desk, and a step that can never be pending is noise. The
-    # approval - and WHOSE it was - lives on the supervisor's step instead.
+    if dl is None:
+        man = {"state": "idle", "note": ""}
+    elif st["applied"]:
+        man = {"state": "waiting",
+               "note": "%d truck(s) awaiting approval" % st["applied"]}
+    elif dl.state == "confirmed" or st["approved"] or st["denied"]:
+        # The supervisor is the end approval: when the same name submitted
+        # and confirmed, the manager step was passed through, not acted on -
+        # and the card must not read as if a manager decided something.
+        if dl.confirmed_by and dl.confirmed_by == dl.submitted_by:
+            man = {"state": "done",
+                   "note": "approved on submit — the supervisor is the "
+                           "end approval"}
+        else:
+            man = {"state": "done",
+                   "note": "%d approved, %d denied%s"
+                           % (st["approved"], st["denied"],
+                              (" by " + dl.confirmed_by) if dl.confirmed_by
+                              else "")}
+    else:
+        man = {"state": "idle", "note": ""}
+    stages.append(dict({"key": "approve", "who": "Manager"}, **man))
 
     if snap is not None:
         stages.append({"key": "plan", "who": "Planner", "state": "done",
