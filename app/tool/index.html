@@ -6355,15 +6355,16 @@ setupMultiselect('msTruckBtn', 'msTruckDropdown');
 setupMultiselect('msAnchorBtn', 'msAnchorDropdown');
 
 // Date filters
+// refreshAllTables, not the two-table pair: the Timeline reads the same date
+// range, and re-rendering only the tables left the Gantt on the old window -
+// the filter looked dead on that tab.
 document.getElementById('dateFrom').addEventListener('change', (e) => {
   STATE.filters.dateFrom = e.target.value ? new Date(e.target.value + 'T00:00:00') : null;
-  renderTable();
-  renderSequenceTable();
+  refreshAllTables();
 });
 document.getElementById('dateTo').addEventListener('change', (e) => {
   STATE.filters.dateTo = e.target.value ? new Date(e.target.value + 'T23:59:59') : null;
-  renderTable();
-  renderSequenceTable();
+  refreshAllTables();
 });
 document.getElementById('cycleStatus').addEventListener('change', (e) => {
   STATE.filters.cycleStatus = e.target.value;
