@@ -354,6 +354,8 @@ def _store(pings, source):
         existing.add((r.plate, r.dt))
     n = 0
     for p in pings:
+        if not _sane_point(p.get("lat"), p.get("lng")):
+            continue                      # a glitch fix never enters the table
         key = (p["plate"], p["dt"])
         if key in existing:
             continue
@@ -711,6 +713,18 @@ def _trail_viettel(pcfg, plate, begin, end):
             return pts, errors, True
 
 
+# Providers occasionally emit a garbage fix - (0, 0), or the axes swapped -
+# and a single such point drags the whole trail map to the Gulf of Guinea.
+# Anything outside the wide operating region (Indochina, generously) is a
+# glitch, not a journey, and is dropped at every door: ingest, stored trail,
+# live trail.
+def _sane_point(lat, lng):
+    try:
+        return 5.0 <= float(lat) <= 25.0 and 97.0 <= float(lng) <= 112.0
+    except (TypeError, ValueError):
+        return False
+
+
 def _stored_trail(plate, begin, end):
     """The trail out of what has already been captured.
 
@@ -726,7 +740,8 @@ def _stored_trail(plate, begin, end):
             .order_by(GpsPing.dt.asc()).all())
     return [{"dt": r.dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": r.lat, "lng": r.lng,
              "speed": r.speed or 0.0}
-            for r in rows if _eng.norm_plate(r.plate) == key]
+            for r in rows
+            if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)]
 
 
 def fetch_trail(app, source, plate, begin, end):
@@ -768,7 +783,13 @@ def fetch_trail(app, source, plate, begin, end):
         fn = {"tct": _trail_tct, "adsun": _trail_adsun,
               "viettel": _trail_viettel}[key]
         pts, errors, truncated = fn(pcfg, plate, begin, end)
+        bad = sum(1 for p in pts if not _sane_point(p.get("lat"), p.get("lng")))
+        if bad:
+            pts = [p for p in pts if _sane_point(p.get("lat"), p.get("lng"))]
         note_bits = []
+        if bad:
+            note_bits.append("%d impossible position(s) dropped "
+                             "(provider glitch)" % bad)
         if errors:
             uniq = sorted(set(errors))
             note_bits.append("%d window(s) failed: %s" % (len(errors), "; ".join(uniq[:3])))
