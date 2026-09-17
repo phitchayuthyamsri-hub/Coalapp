@@ -7060,16 +7060,17 @@ function _vnDT(d){
 function planMsg(plate, iso, e){
   const L=[];
   const add=function(lbl,d){ if(d) L.push(lbl+': '+_vnDT(d)); };
-  add('Bắt đầu bốc hàng', e.loadStart);
-  add('Đến mỏ',           e.mineArrive);
-  add('Rời mỏ',           e.depMine);
-  add('Đến cửa khẩu',     e.borderArrive);
-  add('Đến cảng',         e.portArrive);
-  add('Mỏ (Quay lại)',    e.mineReturn);
-  let m = '*Kế hoạch điều xe*\n'+'Xe: '+_vnPlate(plate)
-    +'\n'+'Ngày: '+_vnDay(new Date(iso+'T00:00:00'));
+  add('Bắt đầu bốc hàng/Load start', e.loadStart);
+  add('Đến mỏ/Arrive mine',          e.mineArrive);
+  add('Rời mỏ/Depart mine',          e.depMine);
+  add('Đến cửa khẩu/Arrive border',  e.borderArrive);
+  add('Đến cảng/Arrive port',        e.portArrive);
+  add('Mỏ (Quay lại)/Mine (return)', e.mineReturn);
+  let m = '*Kế hoạch điều xe / Dispatch Plan*\n'+'Xe/Truck: '+_vnPlate(plate)
+    +'\n'+'Ngày/Date: '+_vnDay(new Date(iso+'T00:00:00'));
   if(L.length) m += '\n\n'+L.join('\n');
-  m += '\n\nĐề nghị tài xế xác nhận thông tin trên.';
+  m += '\n\nĐề nghị tài xế xác nhận thông tin trên'
+    +'/Please reply "confirm" for acknowledge';
   return m;
 }
 function _waUrl(e){ return 'https://wa.me/'+_sPhoneDigits(e.plate)+'?text='+encodeURIComponent(planMsg(e.plate, sendDate, e)); }
