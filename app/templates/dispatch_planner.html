@@ -718,6 +718,10 @@ const stat = (n, l, c) =>
   + '<div class="l">' + esc(l) + '</div></div>';
 
 async function run(){
+  // The standing cards answer for the SAME day as the headline stats. They
+  // used to load once, on page open - pick another day and "Loading on this
+  // day" kept describing the old one, which read as 16 trucks against 18.
+  loadStanding();
   const d = await jget('/api/shift/revision?date=' + $('#day').value + subQ());
   if (d.dormant){
     const away = d.elsewhere || [];
@@ -1391,7 +1395,6 @@ $('#run').onclick = run;
   await run();
   loadAlerts();
   setInterval(loadAlerts, 60000);
-  loadStanding();
   paintIssue();
   try { BASE = localStorage.getItem('plannerBase') || 'dark'; } catch (e) {}
   buildBaseButtons();
