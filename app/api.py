@@ -658,6 +658,24 @@ def me():
                    apps=_apps_of(current_user))
 
 
+# The operations positions an admin can grant per login. Kept in step with
+# VIEW_ORDER in shift_routes; imported rather than retyped so the two lists
+# cannot drift apart.
+from .shift_routes import VIEW_ORDER as OPS_VIEW_KEYS
+
+
+def _views_of(u):
+    """The login's own position list, or None meaning 'follow the role'."""
+    raw = getattr(u, "allowed_views", None)
+    if not raw:
+        return None
+    try:
+        want = json.loads(raw)
+        return [v for v in OPS_VIEW_KEYS if v in want]
+    except ValueError:
+        return None
+
+
 @bp.get("/admin/users")
 @admin_required
 def admin_users():
@@ -668,7 +686,8 @@ def admin_users():
                     "lang": (u.lang or "en"), "default_page": (u.default_page or ""),
                     "can_edit": bool(u.can_edit), "apps": _apps_of(u),
                     "role": (u.role or "monitor"),
-                    "subcontractor_id": u.subcontractor_id})
+                    "subcontractor_id": u.subcontractor_id,
+                    "views": _views_of(u)})
     return jsonify(out)
 
 
@@ -710,6 +729,11 @@ def admin_update(uid):
     if "apps" in d:
         a = d["apps"]
         u.allowed_apps = None if a is None else json.dumps([str(x) for x in a if str(x) in APP_KEYS])
+    if "views" in d:
+        v = d["views"]
+        u.allowed_views = (None if v is None else
+                           json.dumps([str(x) for x in v
+                                       if str(x) in OPS_VIEW_KEYS]))
     if d.get("password"):
         u.set_password(str(d["password"]))
     db.session.commit()

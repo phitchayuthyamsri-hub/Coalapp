@@ -143,6 +143,8 @@ def _ensure_user_schema():
         stmts.append('ALTER TABLE "user" ADD COLUMN subcontractor_id INTEGER')
     if "alerts_seen_at" not in cols:
         stmts.append('ALTER TABLE "user" ADD COLUMN alerts_seen_at DATETIME')
+    if "allowed_views" not in cols:
+        stmts.append('ALTER TABLE "user" ADD COLUMN allowed_views TEXT')
     added_role = "role" not in cols
     if added_role:
         stmts.append('ALTER TABLE "user" ADD COLUMN role VARCHAR(20) DEFAULT \'monitor\'')

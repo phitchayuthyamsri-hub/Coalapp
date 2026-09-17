@@ -402,6 +402,15 @@ function drawPerms(){
           + '</label>').join('')
       + '</div>'
     + '<div class="perm-group" style="grid-column:1/-1">'
+      + '<div class="perm-group-title">Operations positions<span class="sp"></span></div>'
+      + '<label class="perm-item"><input type="checkbox" class="p-vfollow"'
+        + (u.views === null ? ' checked' : '') + '> <b>Follow the role</b> — the ticks below '
+        + 'then just show what the role grants</label>'
+      + '<div class="perm-grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 12px">'
+      + OPS_VIEWS.map(v => '<label class="perm-item"><input type="checkbox" class="p-view" value="'
+          + v[0] + '">' + esc(v[1]) + '</label>').join('')
+      + '</div></div>'
+    + '<div class="perm-group" style="grid-column:1/-1">'
       + '<div class="perm-group-title">Tabs inside the tool<span class="sp"></span></div>'
       + '<div class="perm-grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 12px">'
       + TABS.map(t => '<label class="perm-item"><input type="checkbox" class="p-tab" value="'
@@ -414,9 +423,52 @@ function drawPerms(){
       + '<span class="msg" id="pMsg"></span></div>';
 
   const role = box.querySelector('.p-role');
-  const sync = () => { $('#pCoWrap').style.display = role.value === 'subcontractor' ? '' : 'none'; };
-  role.addEventListener('change', sync); sync();
+  // The positions ticks: while "follow the role" is on they are a read-only
+  // PREVIEW of what the role grants (and they track the role dropdown); the
+  // moment it is off they become this login's own list, seeded from what was
+  // in force so unticking one thing does not silently drop the rest.
+  const vfollow = box.querySelector('.p-vfollow');
+  const vboxes = Array.prototype.slice.call(box.querySelectorAll('.p-view'));
+  const syncViews = () => {
+    const follow = vfollow.checked;
+    const eff = follow ? roleViews(role.value) : (u.views || roleViews(u.role));
+    vboxes.forEach(b => {
+      if (follow) b.checked = roleViews(role.value).indexOf(b.value) >= 0;
+      else if (b.disabled) b.checked = eff.indexOf(b.value) >= 0;
+      b.disabled = follow;
+    });
+  };
+  vboxes.forEach(b => { b.disabled = true; });
+  vfollow.addEventListener('change', syncViews);
+  const sync = () => { $('#pCoWrap').style.display = role.value === 'subcontractor' ? '' : 'none';
+                       if (vfollow.checked) syncViews(); };
+  role.addEventListener('change', sync); sync(); syncViews();
   $('#pSave').onclick = () => save(u.id);
+}
+
+// The seven operations positions, and what each role's ladder grants - a
+// mirror of _views() in shift_routes.py, for the preview only. The server
+// remains the authority.
+const OPS_VIEWS = [
+  ['subcontractor', 'Subcontractor — what the company declares'],
+  ['readiness',     'Supervisor — recheck & confirm'],
+  ['approvals',     'Managers — approval page'],
+  ['planner',       'Planner — what the plan says'],
+  ['monitor',       'Monitor — what happened'],
+  ['map',           'Map — the corridor, live'],
+  ['flow',          'Process — where the day stands']
+];
+function roleViews(r){
+  if (r === 'admin') return OPS_VIEWS.map(v => v[0]);
+  if (r === 'monitor' || r === 'mine' || r === 'spectator')
+    return ['monitor', 'map', 'flow'];
+  const tiers = ['subcontractor', 'supervisor', 'manager', 'planner'];
+  const t = tiers.indexOf(r);
+  if (t < 0) return [];
+  const out = ['subcontractor', 'readiness', 'approvals', 'planner'].slice(0, t + 1);
+  if (r === 'planner') out.push('monitor', 'map');
+  out.push('flow');
+  return out;
 }
 
 function collect(sel){
@@ -436,7 +488,12 @@ function save(id){
     is_admin: box.querySelector('.p-admin').checked,
     subcontractor_id: role === 'subcontractor'
       ? (Number(box.querySelector('.p-sub').value) || null) : null,
-    tabs: collect('.p-tab'), apps: collect('.p-app')
+    tabs: collect('.p-tab'), apps: collect('.p-app'),
+    // null = follow the role; a list = this login's own positions.
+    views: box.querySelector('.p-vfollow').checked
+      ? null
+      : Array.prototype.slice.call(box.querySelectorAll('.p-view'))
+          .filter(b => b.checked).map(b => b.value)
   };
   const pw = box.querySelector('.p-pass').value;
   if (pw) body.password = pw;

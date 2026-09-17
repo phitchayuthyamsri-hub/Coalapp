@@ -27,6 +27,10 @@ class User(UserMixin, db.Model):
     # Set only for role='subcontractor': which company this login belongs to.
     # It scopes everything they can see to their own trucks.
     subcontractor_id = db.Column(db.Integer, index=True)
+    # Which OPERATIONS positions this login may open (JSON list of view keys:
+    # subcontractor, readiness, approvals, planner, monitor, map, flow).
+    # NULL = follow the role's ladder, which is the default for everyone.
+    allowed_views = db.Column(db.Text)
     # When this person last cleared their alerts. A confirmed list newer than
     # this is still waiting to be looked at. Held per user rather than per list
     # because the same list is news to the planner and old to the manager who

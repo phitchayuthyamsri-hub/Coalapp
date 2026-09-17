@@ -5,6 +5,7 @@ every corridor event, so a check is a lookup on one sequence field. Shifts and
 their checks are rows in the database, so NT can retime or drop a shift without
 a code change.
 """
+import json as _json
 import re
 from datetime import datetime, timedelta
 
@@ -210,10 +211,22 @@ def _tier(role=None):
 
 
 def _views(role=None):
-    """Which operations views a role may open, in the order they are shown."""
+    """Which operations views a role may open, in the order they are shown.
+
+    An admin can hand a login its own list (User.allowed_views); when set it
+    REPLACES the role's ladder for that person. An admin login always sees
+    everything - the page that grants access must stay reachable."""
     r = (role or _role()).lower()
     if r == "admin":
         return list(VIEW_ORDER)
+    if role is None:
+        raw = getattr(current_user, "allowed_views", None)
+        if raw:
+            try:
+                want = set(_json.loads(raw))
+                return [v for v in VIEW_ORDER if v in want]
+            except ValueError:
+                pass
     if r in OFF_LADDER:
         # Everyone in or around the chain may see WHERE the day stands - the
         # flow page acts on nothing, it only says whose desk the day is on.
