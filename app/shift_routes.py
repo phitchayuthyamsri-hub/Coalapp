@@ -2974,11 +2974,16 @@ def _fleet_gaps(dl, sub_id):
 # anchored to the RUN day (-1 = the day before the trucks run). The manager
 # has no window on purpose - nothing waits on them - and the monitor's window
 # is the run day itself. One constant, so changing the rhythm is one edit.
+# From the WI "The day in one page": readiness declared by 12:00; the
+# supervisor validates 12:00-13:30 and gaps are re-sent by 14:00 (that whole
+# stretch is the supervisor's desk here); the manager approves by 15:00; the
+# plan is issued by 16:30 (standing to the control tower from 15:30) and is
+# visible to all at 17:00. All the day before; the monitor holds the run day.
 FLOW_WINDOWS = {
-    "declare": (-1, "08:00", "15:00"),
-    "submit":  (-1, "15:00", "16:30"),
-    "approve": (-1, "16:30", "17:00"),
-    "plan":    (-1, "17:00", "18:00"),
+    "declare": (-1, "08:00", "12:00"),
+    "submit":  (-1, "12:00", "14:00"),
+    "approve": (-1, "14:00", "15:00"),
+    "plan":    (-1, "15:30", "16:30"),
 }
 
 
