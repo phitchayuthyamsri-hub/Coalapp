@@ -59,7 +59,11 @@
 const LABEL = {
   perf:'Performance', daily:'Daily performance', pva:'Plan vs Actual', subfleet:'Subcontractor fleet status',
   anchors:'Parameter', data:'Sequence/Route', 'data:sequence':'Sequence', 'data:route':'Route', 'data:timeline':'Timeline',
-  gps:'GPS Data', plan:'Dispatch Plan', truckstatus:'Truck Status', weigh:'Weighbridge', fleet:'Fleet', guide:'Guide'
+  gps:'GPS Data', plan:'Dispatch Plan', truckstatus:'Truck Status', weigh:'Weighbridge', fleet:'Fleet', guide:'Guide',
+  ops:'Operations',
+  'ops:subcontractor':'Ops › Subcontractor', 'ops:readiness':'Ops › Supervisor',
+  'ops:approvals':'Ops › Managers', 'ops:planner':'Ops › Planner',
+  'ops:monitor':'Ops › Monitor', 'ops:map':'Ops › Map', 'ops:flow':'Ops › Process'
 };
 const lab = p => LABEL[p] || p;
 const ACT = {

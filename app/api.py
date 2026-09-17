@@ -139,6 +139,12 @@ def fleet_upsert():
     t.eff_from = d.get("eff_from", t.eff_from or "")
     t.eff_to = d.get("eff_to", t.eff_to or "")
     db.session.add(t)
+    changed = [k for k in ("status", "driver", "phone", "gps_provider",
+                           "eff_from", "eff_to") if k in d]
+    db.session.add(ActivityEvent(user_id=current_user.id,
+                                 username=current_user.username, action="edit",
+                                 detail="Fleet %s: %s changed"
+                                        % (plate, ", ".join(changed) or "row")))
     db.session.commit()
     return jsonify(ok=True)
 

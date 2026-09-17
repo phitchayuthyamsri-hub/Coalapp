@@ -217,7 +217,9 @@ document.addEventListener('DOMContentLoaded', function(){
   function cur(){ var nav=document.getElementById('pageNav'); if(!nav) return null;
     var b=nav.querySelector('button[data-page].active'); if(!b) return null;
     var a=b.getAttribute('data-page'), sub=b.getAttribute('data-subtab'); return sub? a+':'+sub : a; }
-  function send(a,sec){ if(!a||sec<1) return; try{ fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:a,seconds:sec}),keepalive:true}); }catch(e){} }
+  // Operations reports its own positions (ops:readiness, ...), finer than the
+  // tool can see from out here - counting it again here would double it.
+  function send(a,sec){ if(!a||sec<1||a==='ops') return; try{ fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:a,seconds:sec}),keepalive:true}); }catch(e){} }
   function flush(){ var now=Date.now(), sec=Math.round((now-since)/1000); if(area) send(area,sec); since=now; }
   function setArea(){ flush(); area=cur(); }
   setTimeout(function(){ area=cur(); since=Date.now(); }, 1200);

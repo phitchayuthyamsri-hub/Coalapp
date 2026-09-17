@@ -108,9 +108,33 @@ function buildTabs(list){
 // Each view is built once, on first visit, and then kept. Switching tabs after
 // that is instant and nothing is reloaded - a monitor left on a shift does not
 // lose it because somebody looked at the plan.
+// Which position is open, and for how long. The activity page used to say
+// only "Operations", which answers nothing: the positions are the areas.
+let _area = null, _since = Date.now();
+function _areaSend(a, sec){
+  if (!a || sec < 1) return;
+  try { fetch('/api/track', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({page: a, seconds: sec}), keepalive: true}); } catch (e) {}
+}
+function _areaFlush(){
+  const now = Date.now(), sec = Math.round((now - _since) / 1000);
+  if (_area) _areaSend(_area, sec);
+  _since = now;
+}
+setInterval(_areaFlush, 60000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) _areaFlush(); });
+window.addEventListener('beforeunload', _areaFlush);
+
 function show(name){
   const btn = document.querySelector('.tab[data-tab="' + name + '"]');
   if (!btn) return;
+  if (_area !== 'ops:' + name){
+    _areaFlush();
+    _area = 'ops:' + name;
+    try { fetch('/api/event', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'open_tab',
+        detail: 'Operations › ' + ((VIEWS[name] || [name])[0])})}); } catch (e) {}
+  }
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b === btn));
   if (!FRAMES[name]){
     const f = document.createElement('iframe');

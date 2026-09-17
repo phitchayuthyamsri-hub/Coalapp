@@ -14,7 +14,7 @@ from flask_login import login_required, current_user
 
 from . import engine
 from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
-                     MonitorRemark,
+                     MonitorRemark, ActivityEvent,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
                      PlanSetting, RouteLeg, PlanSnapshot, Notice)
 from . import readiness_import
@@ -844,6 +844,8 @@ def upload():
                              "imported." % _dmy(twin.list_date),
                        duplicate_of=twin.list_date, code="duplicate"), 409
 
+    _act("upload", "Readiness sheet for %s — %d truck(s) filled, %d replaced"
+         % (_dmy(day), len(rows), len(overlap)))
     _restate(dl)
     db.session.commit()
 
@@ -911,6 +913,10 @@ def rows_revert():
             continue
         row.state = nxt
         moved.append({"plate": row.plate, "from": cur, "to": nxt})
+    if moved:
+        _act("edit", "Stepped %d row(s) back for %s: %s"
+             % (len(moved), _dmy(day),
+                ", ".join(m["plate"] for m in moved[:8])))
     db.session.commit()
     _restate(dl)
     db.session.commit()
@@ -1542,6 +1548,8 @@ def track_remark():
     m.text = (d.get("text") or "").strip()[:300]
     m.by = current_user.username
     m.at = datetime.utcnow()
+    _act("edit", "Monitor remark on %s (%s): %s"
+         % (key, _dmy(day), m.text or "(cleared)"))
     db.session.commit()
     return jsonify(ok=True, key=key, text=m.text, by=m.by, at=_fmt(m.at))
 
@@ -1901,6 +1909,19 @@ def week_export():
                     mimetype="application/vnd.openxmlformats-officedocument."
                              "spreadsheetml.sheet",
                     headers={"Content-Disposition": 'attachment; filename="%s"' % name})
+
+
+def _act(action, detail):
+    """One line in the activity feed saying what this person just DID to the
+    data - written server-side with the write itself, so it cannot be missed
+    the way a page-side recorder can. Queued on the session; the endpoint's
+    own commit lands it."""
+    try:
+        db.session.add(ActivityEvent(user_id=current_user.id,
+                                     username=current_user.username,
+                                     action=action, detail=str(detail)[:300]))
+    except Exception:
+        pass
 
 
 def _road_plate(p):
@@ -2748,6 +2769,7 @@ def amend_request():
     dl.amend_decided_by = ""
     dl.amend_decided_at = None
     dl.amend_reason = ""
+    _act("edit", "Asked to amend the %s list: %s" % (_dmy(day), note))
     db.session.commit()
     return jsonify(ok=True, amend_state=dl.amend_state, at=_fmt(dl.amend_at))
 
@@ -2789,6 +2811,9 @@ def amend_decide():
     dl.amend_decided_by = current_user.username
     dl.amend_decided_at = datetime.utcnow()
     dl.amend_reason = reason
+    _act("edit", ("Amend allowed — gave the %s list back (%d row(s) to pending)"
+                  % (_dmy(day), moved)) if allow
+                 else "Amend declined for %s: %s" % (_dmy(day), reason))
     db.session.commit()
     return jsonify(ok=True, amend_state=dl.amend_state, state=dl.state,
                    rows_returned=moved)
@@ -2919,6 +2944,8 @@ def save_list():
                              "Change what is different, or send it again on purpose."
                              % _dmy(twin.list_date),
                        duplicate_of=twin.list_date, code="duplicate"), 409
+    _act("edit", "Saved the declaration for %s — %d truck(s)"
+         % (_dmy(day), len(incoming)))
     db.session.commit()
     out = _list_payload(dl, day)
     # Saving stays free - a half-filled sheet is normal while answers are being
@@ -3108,6 +3135,7 @@ def act_list(action):
         dl.submitted_by, dl.submitted_at = who, now
         dl.confirmed_by, dl.confirmed_at = who, now
         dl.reject_reason = ""
+        _act("edit", "Submitted & approved %d truck(s) for %s" % (moved, _dmy(day)))
     elif action == "confirm":
         # Decide every row currently sitting with the manager: ticked is
         # approved, unticked is denied. Rows the supervisor has not sent are
@@ -3118,6 +3146,7 @@ def act_list(action):
         if not moved:
             return jsonify(error="Nothing is waiting for approval."), 400
         dl.confirmed_by, dl.confirmed_at = who, now
+        _act("edit", "Confirmed %d row(s) for %s" % (moved, _dmy(day)))
     elif action == "reject":
         reason = (d.get("reason") or "").strip()
         if not reason:
@@ -3127,6 +3156,7 @@ def act_list(action):
             moved += 1
         dl.rejected_by, dl.rejected_at = who, now
         dl.reject_reason = reason
+        _act("edit", "Rejected the %s list: %s" % (_dmy(day), reason))
     db.session.commit()
     _restate(dl)
     db.session.commit()
