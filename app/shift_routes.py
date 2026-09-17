@@ -863,8 +863,10 @@ def upload():
         columns=parsed.get("columns"), state=dl.state)
 
 
-# One stage back, never two. The step back is an undo, not a reset.
-BACK_ONE = {"approved": "applied", "denied": "applied", "applied": "pending"}
+# One stage back, never two. The step back is an undo, not a reset. With the
+# supervisor as the end approval there is no manager stage between approved
+# and pending any more, so back-one lands on pending from everywhere.
+BACK_ONE = {"approved": "pending", "denied": "pending", "applied": "pending"}
 
 
 @bp.post("/rows/revert")
@@ -2788,10 +2790,9 @@ def amend_decide():
     reason = (d.get("reason") or "").strip()[:300]
 
     if allow:
-        # The revise path: an allowed amend hands even a confirmed list back -
-        # everything decided steps to pending, the sheet returns to the
-        # company as a draft, and the supervisor's re-submit alone approves
-        # the fixed sheet (amend_state 'allowed' is what marks the round).
+        # The supervisor is the end approval, so a confirmed list is theirs to
+        # hand back too: everything decided steps back to pending and the
+        # sheet returns to the company as a draft.
         moved = 0
         for r in DailyListRow.query.filter_by(list_id=dl.id).all():
             if (r.state or "pending") != "pending":
@@ -2976,8 +2977,7 @@ def _fleet_gaps(dl, sub_id):
 # is the run day itself. One constant, so changing the rhythm is one edit.
 FLOW_WINDOWS = {
     "declare": (-1, "08:00", "15:00"),
-    "submit":  (-1, "15:00", "16:30"),
-    "approve": (-1, "16:30", "17:00"),
+    "submit":  (-1, "15:00", "17:00"),
     "plan":    (-1, "17:00", "18:00"),
 }
 
@@ -3045,12 +3045,13 @@ def _flow_entry(day, dl, subs):
         man = {"state": "waiting",
                "note": "%d truck(s) awaiting approval" % st["applied"]}
     elif dl.state == "confirmed" or st["approved"] or st["denied"]:
-        # A revise round is approved by the supervisor's own re-submit: the
-        # same name on both means the manager step was passed through, not
-        # acted on, and the card must not read as if a manager decided it.
+        # The supervisor is the end approval: when the same name submitted
+        # and confirmed, the manager step was passed through, not acted on -
+        # and the card must not read as if a manager decided something.
         if dl.confirmed_by and dl.confirmed_by == dl.submitted_by:
             man = {"state": "done",
-                   "note": "approved with the supervisor's re-submit (revise)"}
+                   "note": "approved on submit — the supervisor is the "
+                           "end approval"}
         else:
             man = {"state": "done",
                    "note": "%d approved, %d denied%s"
@@ -3173,25 +3174,17 @@ def act_list(action):
     who, now = current_user.username, datetime.utcnow()
     moved = 0
     if action == "submit":
-        # The normal chain stands: the supervisor sends, the MANAGER approves.
-        # The one exception (2026-09-17) is a REVISE - a sheet handed back
-        # through an allowed amend request. It was already approved once; the
-        # fix does not need a second trip up the ladder, so the supervisor's
-        # re-submit approves it directly and closes the revise round.
-        revise = (dl.amend_state or "") == "allowed"
+        # The supervisor is the END approval (2026-09-16): submitting IS
+        # approving. Rows go straight to approved - the state the planner can
+        # build from - and the list confirms itself, which is also what raises
+        # the planner's alert. The manager watches; nothing waits on them.
         for r in moving:
-            r.state = "approved" if revise else "applied"
+            r.state = "approved"
             moved += 1
         dl.submitted_by, dl.submitted_at = who, now
-        if revise:
-            dl.confirmed_by, dl.confirmed_at = who, now
-            dl.amend_state = ""          # the round is closed by this approval
-            _act("edit", "Revise re-submitted & approved %d truck(s) for %s"
-                 % (moved, _dmy(day)))
-        else:
-            _act("edit", "Submitted %d truck(s) for %s to the manager"
-                 % (moved, _dmy(day)))
+        dl.confirmed_by, dl.confirmed_at = who, now
         dl.reject_reason = ""
+        _act("edit", "Submitted & approved %d truck(s) for %s" % (moved, _dmy(day)))
     elif action == "confirm":
         # Decide every row currently sitting with the manager: ticked is
         # approved, unticked is denied. Rows the supervisor has not sent are

@@ -244,10 +244,10 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <!-- ── Daily list ─────────────────────────────────────────────── -->
   <div class="card">
     <h2>Today's truck list</h2>
-    <p class="hint">The supervisor builds this list and submits it. The manager
-      confirms it &mdash; except a REVISE: a sheet handed back through an allowed
-      amend request is approved by the supervisor's re-submit alone. Monitoring
-      starts once the list is approved.<br>
+    <p class="hint">The supervisor builds this list and submits it &mdash; and
+      submitting IS the approval: the supervisor is the end of the chain, and
+      monitoring starts from that moment. The manager watches; nothing waits
+      on them.<br>
       The date at the top is the day these trucks are used. The date on each row is
       when that truck reaches the Mine.</p>
     <div id="listBanner" class="banner b-none">…</div>
@@ -263,7 +263,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     </div>
     <div id="listBody"></div>
     <div class="row" style="margin-top:12px">
-      <button id="btnSubmit" class="primary" title="Send the ticked trucks to the manager. On a revise round (sheet handed back through an amend) submitting approves directly. Unticked trucks stay pending.">Submit</button>
+      <button id="btnSubmit" class="primary" title="Approve the ticked trucks - the supervisor is the end approval. Unticked trucks stay pending. Monitoring starts.">Submit &mdash; approve</button>
       <button id="btnConfirm" class="go" title="Approve the list. Monitoring starts.">Confirm</button>
       <button id="btnReject" class="no" title="Send it back to the supervisor with a written reason.">Reject</button>
       <span id="dirty" style="display:none;color:var(--warn);font-size:12px;font-weight:600">
@@ -787,7 +787,7 @@ function wireBulk(){
 const BANNER = {
   none:      ['b-none',      'No list yet for this date.'],
   draft:     ['b-draft',     'Pending confirmation to manager.'],
-  submitted: ['b-submitted', 'Submitted — waiting for the manager to confirm.'],
+  submitted: ['b-submitted', 'Submitted under the old flow — submit again to finish the approval.'],
   confirmed: ['b-confirmed', 'Confirmed — locked. Monitoring is live.'],
   rejected:  ['b-rejected',  'Sent back by the manager.'],
   mixed:     ['b-none',      'Every company for this date.']
@@ -926,17 +926,14 @@ async function loadList(){
 
   // Say what the next step is, so nobody has to infer it from the buttons.
   const NEXT = {
-    none:      'Add the trucks going tomorrow, then Submit to the manager.',
+    none:      'Add the trucks going tomorrow, then Submit — submitting approves.',
     draft:     ROLE === 'supervisor' || ROLE === 'admin'
-                 ? 'Not sent yet. Submit when the list is right — a revise round '
-                   + '(sheet handed back) approves on your submit alone.'
-                 : 'The supervisor has not submitted this yet.',
-    submitted: ROLE === 'manager' || ROLE === 'admin'
-                 ? 'Waiting on you: Confirm to start monitoring, or Reject to send it back.'
-                 : 'Sent to the manager. Waiting for confirmation.',
+                 ? 'Not approved yet. Submit when the list is right — submitting approves it.'
+                 : 'The supervisor has not approved this yet.',
+    submitted: 'Approved rows are waiting in an old state — submit again to finish, or ask an admin.',
     confirmed: 'Approved and locked. Monitoring is live. An amend request brings it back.',
     rejected:  ROLE === 'supervisor' || ROLE === 'admin'
-                 ? 'Sent back by the manager. Fix the list and submit it again.'
+                 ? 'Sent back. Fix the list and submit it again.'
                  : 'Sent back to the supervisor.'
   };
   $('#nextStep').textContent = NEXT[LIST.state] || '';
