@@ -2285,7 +2285,10 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <button type="button" class="nav-group-btn">Setting ▾</button>
     <div class="nav-group-menu">
       <button data-page="anchors">Parameter</button>
-      <button data-page="gps" data-admin="1">GPS Data</button>
+      <!-- GPS Data (manual xlsx upload) retired 18/09/2026: GPS Capture pulls the
+           positions itself. The panel below stays in the markup on purpose - two
+           listeners bind to it unguarded at boot - it is just no longer reachable.
+           Re-enable by restoring: <button data-page="gps" data-admin="1">GPS Data</button> -->
       <button data-page="gpscap" data-admin="1">📡 GPS Capture</button>
       <button data-page="guide">📖 Guide</button>
     </div>
@@ -3373,9 +3376,13 @@ const map = L.map('map').setView([16.3, 107.4], 9);
     if (hidden) setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 50);
   });
 })();
-const baseTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap',
-  maxZoom: 19
+// Google's road tiles, straight from the tile server - no Maps API and no key.
+// OpenStreetMap's tiles do not load from the office network, and the fallback
+// below is a grey canvas, which is what the Parameter page had become.
+const baseTiles = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+  subdomains: '0123',
+  attribution: '© Google',
+  maxZoom: 20
 }).addTo(map);
 // If the basemap can't load (blocked/rate-limited/offline), fall back to a
 // plain grey canvas. Drawn geofences and route polylines are SVG and still
