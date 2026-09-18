@@ -557,7 +557,15 @@ def _declared_row(r, list_id, prior_state, prior=None):
         arrive_hhmm=keep("arrive_time", "arrive_hhmm", "arrive_hhmm", "arrive")[:5],
         back_in_service=keep("back_in_service", "back_in_service")[:10],
         remark=keep("remark", "remark")[:300],
-        note=(status or keep("remark", "remark"))[:300]), runs
+        # The declared status, and only that. It used to fall back to the
+        # remark when Status was blank, which put the company's sentence in
+        # four places that all mean "what this truck is doing": the Status
+        # column on the supervisor's board, the manager's approval card, the
+        # leg the GPS check compares against, and the fleet-gap test that
+        # decides whether a truck has been answered for at all. A truck with
+        # no status then looked answered everywhere, and the one place that
+        # would have caught it was reading the same fallback. Blank is blank.
+        note=status[:300]), runs
 
 
 def _list_payload(dl, day):
