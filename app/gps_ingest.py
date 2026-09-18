@@ -378,9 +378,9 @@ OUTSIDE_MIN = 30    # between them: driving a known road, position ages slowly
 
 
 def _anchor_polys():
-    from .models import Anchor
-    return [a.polygon for a in Anchor.query.all()
-            if a.polygon and len(a.polygon) >= 3]
+    """The shapes in force now: polling cadence is about where a truck IS."""
+    from . import geofence
+    return geofence.current_polygons()
 
 
 def due_plates(app, now=None):

@@ -149,10 +149,17 @@ def create_app(config_class=Config):
         _ensure_subcontractors()
         _ensure_plan_settings()
         _ensure_routeleg_schema()
+        _ensure_anchor_schema()
         _ensure_snapshot_schema()
         _ensure_shifts()
         from .seed import seed_if_empty
         seed_if_empty()
+        # After seeding, not only before: on a fresh database the zones do not
+        # exist yet when the schema step runs, and a zone with no "since the
+        # beginning" version would be judged as never having existed before
+        # its first edit - the exact loss versioning is there to prevent.
+        from .geofence import ensure_versions
+        ensure_versions()
 
     return app
 
@@ -312,6 +319,26 @@ def _ensure_snapshot_schema():
     if "day" not in cols:
         db.session.execute(text("ALTER TABLE plan_snapshot ADD COLUMN day VARCHAR(10)"))
         db.session.commit()
+
+
+def _ensure_anchor_schema():
+    """Geofences became versioned on 18/09/2026: two columns on Anchor, and a
+    first "since the beginning" version for every zone that has none - so the
+    shape already in the table is what history keeps being judged by."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("anchor")]
+    except Exception:
+        return
+    if "caption" not in cols:
+        db.session.execute(text("ALTER TABLE anchor ADD COLUMN caption VARCHAR(60) DEFAULT ''"))
+        db.session.commit()
+    if "retired_at" not in cols:
+        db.session.execute(text("ALTER TABLE anchor ADD COLUMN retired_at DATETIME"))
+        db.session.commit()
+    from .geofence import ensure_versions
+    ensure_versions()
 
 
 def _ensure_truck_schema():

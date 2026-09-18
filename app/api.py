@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify, abort, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
+from . import geofence
 from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime,
                      ActivityEvent, DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
@@ -163,10 +164,44 @@ def fleet_delete(plate):
 @bp.get("/anchors")
 @login_required
 def anchors():
-    return jsonify([{"id": a.id, "name": a.name, "color": a.color,
-                     "category": a.category, "role": a.role,
-                     "polygon": a.polygon, "min_dwell_min": a.min_dwell_min}
-                    for a in Anchor.query.all()])
+    """The zones in service. ?include=retired adds the ones that have been
+    retired, for anyone reading history."""
+    q = Anchor.query.order_by(Anchor.id)
+    if request.args.get("include") != "retired":
+        q = q.filter(Anchor.retired_at.is_(None))
+    return jsonify([geofence.as_api(a) for a in q.all()])
+
+
+@bp.post("/anchors")
+@admin_required
+def anchor_create():
+    """A new zone, from the Parameter page. Judges captures from now on."""
+    d = request.get_json(force=True, silent=True) or {}
+    try:
+        a = geofence.create(d, current_user.username)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True, id=a.id, anchor=geofence.as_api(a))
+
+
+@bp.put("/anchors/roles")
+@admin_required
+def anchor_roles():
+    """{roles: {xppl: id, loading: id, ...}} - one zone per role, the rest cleared."""
+    d = request.get_json(force=True, silent=True) or {}
+    return jsonify(ok=True, roles=geofence.set_roles(d.get("roles") or {}))
+
+
+@bp.delete("/anchors/<int:aid>")
+@admin_required
+def anchor_retire(aid):
+    """Retire, never delete: the zone stops matching from now and its past
+    visits stay exactly as they were."""
+    a = db.session.get(Anchor, aid)
+    if not a:
+        return jsonify(error="not found"), 404
+    geofence.retire(a, current_user.username)
+    return jsonify(ok=True, anchor=geofence.as_api(a))
 
 
 @bp.get("/routes")
@@ -209,9 +244,8 @@ def _last_pings():
 @bp.get("/status")
 @login_required
 def status():
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    anchors = geofence.for_engine()
+    roles = geofence.roles()
     routes = {r.leg_key: {"points": r.points, "speed": r.speed}
               for r in RouteLeg.query.all()}
 
@@ -244,9 +278,8 @@ def status():
 @login_required
 def visits():
     from datetime import datetime, timedelta
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    role_by_anchor = {a.id: a.role for a in Anchor.query.all() if a.role}
+    anchors = geofence.for_engine()
+    role_by_anchor = {v: k for k, v in geofence.roles().items()}
 
     q = GpsPing.query
     fr = request.args.get("from")
@@ -288,9 +321,8 @@ def visits():
 @bp.get("/pva")
 @login_required
 def pva():
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    anchors = geofence.for_engine()
+    roles = geofence.roles()
     pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
               "speed": p.speed, "status": p.status}
              for p in GpsPing.query.order_by(GpsPing.dt).all()]
@@ -348,9 +380,8 @@ def pva():
 
 # ── Shared engine state for analytics endpoints ──────────────────────────────
 def _engine_state():
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    anchors = geofence.for_engine()
+    roles = geofence.roles()
     routes = {r.leg_key: {"points": r.points, "speed": r.speed}
               for r in RouteLeg.query.all()}
     pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
@@ -551,18 +582,20 @@ def truckstatus():
 
 
 @bp.put("/anchors/<int:aid>")
-@login_required
+@admin_required
 def anchor_update(aid):
+    """Name, colour, category, caption, role change in place. A changed
+    polygon or dwell becomes a new version from now; an unchanged one does
+    not. `versioned` in the answer says which happened."""
     a = db.session.get(Anchor, aid)
     if not a:
         return jsonify(error="not found"), 404
-    d = request.get_json(force=True)
-    if "role" in d:
-        a.role = d["role"] or ""
-    if "min_dwell_min" in d and d["min_dwell_min"] is not None:
-        a.min_dwell_min = int(d["min_dwell_min"])
-    db.session.commit()
-    return jsonify(ok=True)
+    d = request.get_json(force=True, silent=True) or {}
+    try:
+        versioned = geofence.update(a, d, current_user.username)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True, versioned=versioned, anchor=geofence.as_api(a))
 
 
 # ── Shared key-value store (backs the full tool's localStorage) ──────────────

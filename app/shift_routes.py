@@ -18,6 +18,7 @@ from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
                      PlanSetting, RouteLeg, PlanSnapshot, Notice)
 from . import readiness_import
+from . import geofence
 from . import planner
 
 bp = Blueprint("shift", __name__, url_prefix="/api/shift")
@@ -467,9 +468,11 @@ def _visits_and_roles():
     Built the same way /api/visits builds them, so a check answered here and a
     visit listed there can never disagree.
     """
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    # Through geofence, so a zone is the versioned zone: a ping is judged by
+    # the shape in force when it was captured, and a change never rewrites
+    # what Monitor already showed.
+    anchors = geofence.for_engine()
+    roles = geofence.roles()
     pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
               "speed": p.speed, "status": p.status}
              for p in GpsPing.query.order_by(GpsPing.dt).all()]

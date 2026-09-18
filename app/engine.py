@@ -194,11 +194,43 @@ def constraint_aware_eta(start_time, points, lat, lng, speed, haul,
     return None
 
 # ── Visit detection ──────────────────────────────────────────────────────────
+def anchor_at(anchor, dt):
+    """The (polygon, min_dwell_min) of this zone in force at moment dt, or
+    (None, 0) if the zone did not exist yet or had been retired by then.
+
+    A zone with no `versions` is judged by its plain polygon - the shape it
+    has now - which is how the tool's client-side engine still calls this.
+    With versions, a ping is judged by the version whose valid_from is the
+    latest one at or before the ping: a boundary moved at 10:00 does not
+    touch the 09:55 ping. NULL valid_from means "since the beginning".
+    """
+    ret = anchor.get("retired_at")
+    if ret is not None and dt >= ret:
+        return None, 0
+    vers = anchor.get("versions")
+    if not vers:
+        return anchor.get("polygon"), (anchor.get("min_dwell_min", 5) or 0)
+    cur = None
+    for v in vers:
+        vf = v.get("valid_from")
+        if vf is None or vf <= dt:
+            cur = v
+        else:
+            break
+    if cur is None:
+        return None, 0
+    return cur.get("polygon"), (cur.get("min_dwell_min", 5) or 0)
+
+
 def build_visits(pings, anchors, deactivated=None):
     """
     pings:   [{plate, dt(datetime), lat, lng, speed, status}]
-    anchors: [{id, name, polygon, min_dwell_min}]
+    anchors: [{id, name, polygon, min_dwell_min, versions?, retired_at?}]
     Returns visits: [{plate, anchor_id, anchor_name, visit_num, enter, exit, open, ping_count}]
+
+    Each ping is tested against the zone AS IT WAS when the ping was captured
+    (see anchor_at). The dwell threshold is the one in force when the visit
+    opened.
     """
     deactivated = deactivated or set()
     out = []
@@ -213,15 +245,17 @@ def build_visits(pings, anchors, deactivated=None):
     for plate, plist in by_plate.items():
         plist.sort(key=lambda x: x["dt"])
         for anchor in anchors:
-            min_ms = (anchor.get("min_dwell_min", 5) or 0) * 60000
             inside_prev = False
             current = None
+            min_ms = 0
             visit_count = 0
             prev_ping = None
             for ping in plist:
-                inside_now = point_in_polygon(ping["lat"], ping["lng"], anchor["polygon"])
+                poly, dwell = anchor_at(anchor, ping["dt"])
+                inside_now = bool(poly) and point_in_polygon(ping["lat"], ping["lng"], poly)
                 if not inside_prev and inside_now:
                     visit_count += 1
+                    min_ms = (dwell or 0) * 60000
                     current = {"plate": plate, "anchor_id": anchor["id"],
                                "anchor_name": anchor["name"], "visit_num": visit_count,
                                "enter": ping["dt"], "exit": None, "open": False,

@@ -77,14 +77,39 @@ class GpsPing(db.Model):
 
 
 class Anchor(db.Model):
-    """Geofence zone. polygon stored as JSON list of [lat,lng]."""
+    """Geofence zone. polygon stored as JSON list of [lat,lng].
+
+    `polygon` and `min_dwell_min` here are the CURRENT shape - what the maps
+    draw and what a ping captured from now on is judged by. Every shape the
+    zone has ever had, and when each took effect, is in AnchorVersion, and
+    that is what the visit engine reads, so a change never rewrites history.
+    """
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     color = db.Column(db.String(20), default="#34c759")
     category = db.Column(db.String(40), default="")
+    caption = db.Column(db.String(60), default="")
     polygon = db.Column(db.JSON, nullable=False)
     min_dwell_min = db.Column(db.Integer, default=5)
     role = db.Column(db.String(20), default="")  # xppl/loading/border/ql49/ql49b/ql49p/port/detour
+    # A retired zone stops matching from this moment and never before. It is
+    # kept, not deleted, because the visits it produced are still history.
+    retired_at = db.Column(db.DateTime)
+
+
+class AnchorVersion(db.Model):
+    """One shape of a geofence and the moment it took effect.
+
+    valid_from is on the same clock as GpsPing.dt (local, UTC+7), because the
+    only thing it is ever compared with is a ping's time. NULL means "since
+    the beginning" - the shape a zone had before anyone changed it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    anchor_id = db.Column(db.Integer, index=True, nullable=False)
+    polygon = db.Column(db.JSON, nullable=False)
+    min_dwell_min = db.Column(db.Integer, default=5)
+    valid_from = db.Column(db.DateTime, index=True)
+    set_by = db.Column(db.String(80), default="")
 
 
 class RouteLeg(db.Model):

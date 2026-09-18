@@ -26,6 +26,7 @@ from datetime import datetime
 
 from app import create_app
 from app import engine
+from app import geofence
 from app.models import db, Truck, GpsPing, Anchor, KVStore
 
 FLEET_KEY = "actualGpsFleet_v2"
@@ -90,9 +91,8 @@ def _tool_anchor_ids():
 
 def build_timing():
     """Visits and cycles, computed from the pings the providers delivered."""
-    anchors = [{"id": a.id, "name": a.name, "polygon": a.polygon,
-                "min_dwell_min": a.min_dwell_min} for a in Anchor.query.all()]
-    roles = {a.role: a.id for a in Anchor.query.all() if a.role}
+    anchors = geofence.for_engine()      # versioned: history judged as it was
+    roles = geofence.roles()
     pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
               "speed": p.speed, "status": p.status}
              for p in GpsPing.query.order_by(GpsPing.dt).all()]

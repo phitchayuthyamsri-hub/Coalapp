@@ -3384,6 +3384,18 @@ const baseTiles = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z=
   attribution: '© Google',
   maxZoom: 20
 }).addTo(map);
+// Satellite with roads and labels drawn over it (Google's "hybrid"), from the
+// same key-free tile server. The switch sits top-right; the choice is kept per
+// browser so the page reopens the way it was left.
+const satTiles = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+  subdomains: '0123', attribution: '© Google', maxZoom: 20
+});
+L.control.layers({ 'Road': baseTiles, 'Satellite': satTiles }, null,
+                 { position: 'topright', collapsed: false }).addTo(map);
+try {
+  if (localStorage.getItem('anchorsBasemap_v1') === 'sat') { map.removeLayer(baseTiles); satTiles.addTo(map); }
+} catch (e) {}
+map.on('baselayerchange', e => { try { localStorage.setItem('anchorsBasemap_v1', e.name === 'Satellite' ? 'sat' : 'road'); } catch (_) {} });
 // If the basemap can't load (blocked/rate-limited/offline), fall back to a
 // plain grey canvas. Drawn geofences and route polylines are SVG and still
 // render on top, so the tool stays usable for viewing and editing.
@@ -3593,6 +3605,9 @@ function deleteAnchor(id) {
   if (a.labelMarker) map.removeLayer(a.labelMarker);
   STATE.anchors.splice(idx, 1);
   STATE.timelineHidden.delete(id);
+  // A zone that came from the server is retired there on Apply. One drawn
+  // and deleted before ever being applied was never anywhere else.
+  if (!String(id).startsWith('anc_')) { STATE.retiredAnchorIds = STATE.retiredAnchorIds || []; STATE.retiredAnchorIds.push(id); }
   renderAnchorList();
   renderAnchorFilter();
   saveAnchorsToStorage();
@@ -7293,14 +7308,85 @@ document.querySelectorAll('.tab-btn[data-atab]').forEach(btn => {
 })();
 
 // Apply button (Anchors page) — gate recompute behind explicit press
-document.getElementById('btnApplyAnchors').addEventListener('click', () => {
-  saveAnchorsToStorage();
-  saveRolesToStorage();
-  recomputeVisits();        // cascades to sequences + timeline
+document.getElementById('btnApplyAnchors').addEventListener('click', async () => {
+  const btn = document.getElementById('btnApplyAnchors');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await pushAnchorsToServer();
+    await syncAnchorsFromServer();
+    toast('Applied — saved to the server. New shapes judge captures from now on; history is unchanged.');
+  } catch (e) {
+    // Kept locally so nothing drawn is lost; the server still has the old shapes.
+    saveAnchorsToStorage(); saveRolesToStorage();
+    toast(e.message || 'Could not save to the server', true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Apply';
+  }
   renderAnchorFilter();
   renderDistTable();
-  toast('Applied — visits & sequences recomputed');
 });
+
+/* ===== GEOFENCES: THE SERVER IS THE STORE (18/09/2026) =====
+   This page used to keep its zones in the browser while Monitor read the
+   server, so an edit here never reached the times Monitor captured. Now the
+   server table is the only store: boot reads it, Apply writes it. Ids are the
+   server's; colour overrides, aliases and route-hiding stay per browser
+   because they are how this page draws, not what a zone is. */
+STATE.retiredAnchorIds = [];
+async function syncAnchorsFromServer() {
+  let list;
+  try {
+    const r = await fetch('/api/anchors');
+    if (!r.ok) return;
+    list = await r.json();
+  } catch (e) { return; }                       // offline: the cache stands
+  if (!Array.isArray(list)) return;
+  const pres = {};
+  STATE.anchors.forEach(a => { pres[String(a.id)] = { colorOverride: a.colorOverride, aliasOf: a.aliasOf, routeHidden: a.routeHidden }; });
+  STATE.anchors.forEach(a => { if (a.layer) map.removeLayer(a.layer); if (a.labelMarker) map.removeLayer(a.labelMarker); });
+  STATE.anchors = [];
+  const roles = {};
+  list.forEach(d => {
+    const id = String(d.id), p = pres[id] || {};
+    const a = { id, name: d.name, polygon: d.polygon, color: d.color || '#34c759',
+      colorOverride: p.colorOverride || undefined, caption: d.caption || '', category: d.category || '',
+      aliasOf: p.aliasOf || '', routeHidden: !!p.routeHidden,
+      minDwellMin: (d.min_dwell_min != null ? d.min_dwell_min : 5), layer: null, labelMarker: null };
+    STATE.anchors.push(a);
+    drawAnchorOnMap(a);
+    if (d.role) roles[d.role] = id;
+  });
+  STATE.roles = roles;
+  STATE.retiredAnchorIds = [];
+  saveAnchorsToStorage(); saveRolesToStorage();
+  renderAnchorList(); renderAnchorFilter(); renderRoleDropdowns();
+  try { populateLegAnchorDropdowns(); } catch (e) {}
+  try { recomputeVisits(); } catch (e) {}
+}
+async function pushAnchorsToServer() {
+  const hdr = { 'Content-Type': 'application/json' };
+  const idMap = {};
+  for (const a of STATE.anchors) {
+    const body = { name: a.name, color: a.color, category: a.category || '', caption: a.caption || '',
+                   polygon: a.polygon, min_dwell_min: (a.minDwellMin != null ? a.minDwellMin : 5) };
+    const isNew = String(a.id).startsWith('anc_');
+    const r = await fetch(isNew ? '/api/anchors' : '/api/anchors/' + a.id,
+                          { method: isNew ? 'POST' : 'PUT', headers: hdr, body: JSON.stringify(body) });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || ((r.status === 403) ? 'Only an admin may change the zones' : 'Could not save ' + a.name));
+    }
+    if (isNew) { const j = await r.json(); idMap[a.id] = String(j.id); a.id = String(j.id); }
+  }
+  for (const id of (STATE.retiredAnchorIds || [])) {
+    await fetch('/api/anchors/' + id, { method: 'DELETE' });
+  }
+  STATE.retiredAnchorIds = [];
+  const roles = {};
+  ROLE_IDS.forEach(k => { let v = STATE.roles[k]; if (!v) return; v = idMap[v] || v; roles[k] = Number(v); });
+  const rr = await fetch('/api/anchors/roles', { method: 'PUT', headers: hdr, body: JSON.stringify({ roles }) });
+  if (!rr.ok) throw new Error('Zones saved, but the roles could not be');
+}
 
 // Inner tab switching (Visits / Sequence / Timeline) on the Data page
 document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {  btn.addEventListener('click', () => {
@@ -11120,6 +11206,7 @@ populateLegAnchorDropdowns();
 renderAnchorList();
 renderAnchorFilter();
 renderRoleDropdowns();
+syncAnchorsFromServer();   // the server is the store; the cache above is only what it last said
 renderTable();
 renderSequenceTable();
 renderDistTable();
