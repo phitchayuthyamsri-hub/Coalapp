@@ -281,19 +281,39 @@ STATUS_CHOICES = ("FH", "BH", "Maintenance", "Breakdown", "Repair", "Accident",
                   "No driver", "Standby", "Paperwork hold", "Not available")
 
 
-def status_kind(status):
-    """What the Status cell resolves to: 'leg', 'reason', or '' for neither.
+_CHOICE_BY_WORD = {_norm_word(s): s for s in STATUS_CHOICES}
 
-    'reason' is still matched as a substring, because subcontractors write
-    sentences - "Maintenance until Friday" is an answer. '' is the dangerous
-    case: it is a cell the system cannot read, not a cell that says nothing.
+
+def status_value(status):
+    """The drop-down value this cell says, or '' if it is not one of them.
+
+    Whole cell, not a substring. is_running() stays deliberately tolerant -
+    it has to read years of sheets already stored - but what a NEW sheet is
+    allowed to contain is the list the drop-down offers and nothing else.
+    Every list on the system is FH or BH to the letter, so the tolerance was
+    never being used; what it did instead was let unreadable text through as
+    though it had been understood.
+
+    Case and spacing are forgiven, and so are the long forms of the two legs:
+    "back haul" is BH, because that is a way of writing the value, not a
+    different value.
     """
-    s = str(status or "").strip()
+    s = _norm_word(status)
     if not s:
         return ""
-    if leg_word(s):
-        return "leg"
-    return "" if is_running(s) else "reason"
+    return leg_word(status) or _CHOICE_BY_WORD.get(s, "")
+
+
+def status_kind(status):
+    """'leg' | 'reason' | '' - which sort of answer the Status cell gives.
+
+    '' is the dangerous case: a cell the system cannot read, which is not the
+    same as a cell that says nothing.
+    """
+    v = status_value(status)
+    if not v:
+        return ""
+    return "leg" if v in ("FH", "BH") else "reason"
 
 
 def problems(rows):
@@ -301,12 +321,12 @@ def problems(rows):
 
     Both rules are about a truck joining the day that nobody declared.
 
-    Status must resolve to one of the given values. A blank does not mean "no
+    Status must BE one of the drop-down's values. A blank does not mean "no
     answer" to the rest of the system - is_running() reads it as a WORKING
     truck, and _declared_row falls back to the remark for the note, so a blank
     status beside a full remark looks answered all the way down the chain and
-    is planned a load. Text matching no keyword does exactly the same thing:
-    the template's own instructions warn that "fixing engine" is counted as
+    is planned a load. Anything else in the cell does the same thing: the
+    template's own instructions warn that "fixing engine" is counted as
     running. Neither is something to warn about after the fact.
 
     Back in service is the day a stopped truck returns, so it belongs only on a
@@ -324,8 +344,10 @@ def problems(rows):
                 why = ('Status says "%s" - that belongs in the Loaded / Empty '
                        "column, not here" % raw)
             else:
-                why = ('Status says "%s", which is not one of the values the '
-                       "system reads" % (raw[:40] + ("..." if len(raw) > 40 else "")))
+                # Name the list back, because the fix is to pick from it.
+                why = ('Status says "%s" - pick one of: %s'
+                       % (raw[:40] + ("..." if len(raw) > 40 else ""),
+                          ", ".join(STATUS_CHOICES)))
             out.append({"row": r.get("row"), "plate": r.get("plate"),
                         "column": "Status", "why": why})
         elif kind == "leg" and r.get("back_in_service"):

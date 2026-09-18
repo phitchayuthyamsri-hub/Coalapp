@@ -156,8 +156,20 @@ check("Status the system cannot read is refused too", len(res["problems"]), 1)
 check("...and it quotes what was written",
       '"fixing the engine"' in res["problems"][0]["why"], True)
 
+# Status is checked against the drop-down, whole cell. Every list the system
+# holds says FH or BH to the letter, so the old substring tolerance was never
+# being used - what it did was let unreadable text through as understood.
 res = strict(H, [["20C10615", "Maintenance until Friday", "Empty", "", ""]])
-check("a REASON written as a sentence is still an answer", res["problems"], [])
+check("a reason with words around it is not a drop-down value",
+      len(res["problems"]), 1)
+check("...and the refusal lists what to pick instead",
+      "pick one of: FH, BH, Maintenance" in res["problems"][0]["why"], True)
+
+res = strict(H, [["20C10615", "  maintenance ", "Empty", "", ""]])
+check("case and spacing are forgiven", res["problems"], [])
+res = strict(H, [["20C10615", "back haul", "Empty", "", ""]])
+check("the long form of a leg is the same value", res["problems"], [])
+check("...and reads as BH", ri.status_value("back haul"), "BH")
 
 res = strict(H, [["20C10615", "Empty", "Empty", "", ""]])
 check("Loaded/Empty in the Status column is refused, not just warned",
@@ -208,6 +220,23 @@ check("blank is neither", ri.status_kind(""), "")
 check("nonsense is neither", ri.status_kind("fixing engine"), "")
 check("every value the drop-down offers is readable",
       [s for s in ri.STATUS_CHOICES if not ri.status_kind(s)], [])
+# A value the drop-down offers that is_running() does not recognise would be a
+# truck picked as out of service and still planned a load.
+check("every reason the drop-down offers stops the truck",
+      [s for s in ri.STATUS_CHOICES
+       if s not in ("FH", "BH") and ri.is_running(s)], [])
+
+# The page's drop-down and the importer must offer the same list, or a value
+# somebody picks on screen is refused by the upload that checks it.
+import re as _re
+_page = open(os.path.join(HERE, "..", "app", "templates", "subcontractor.html"),
+             encoding="utf-8").read()
+_m = _re.search(r"const STATUS = (\[[^\]]*\]);", _page, _re.S)
+check("the declaration page declares a STATUS list", bool(_m), True)
+if _m:
+    _list = tuple(x.strip().strip("'\"")
+                  for x in _re.findall(r"'([^']*)'", _m.group(1)))
+    check("...and it is the importer's list, exactly", _list, ri.STATUS_CHOICES)
 
 print("\n  %d FAILING" % FAIL if FAIL else "\n  all pass")
 sys.exit(1 if FAIL else 0)
