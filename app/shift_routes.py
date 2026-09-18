@@ -9,7 +9,7 @@ import json as _json
 import re
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request, Response, abort, current_app
+from flask import Blueprint, jsonify, request, Response, abort
 from flask_login import login_required, current_user
 
 from . import engine
@@ -781,11 +781,10 @@ def upload():
     os.close(fd)
     try:
         f.save(tmp)
-        # Sandbox only while the rule beds in: the same sheet still imports on
-        # prod, so a company is not stopped by a check nobody has told them
-        # about yet.
-        parsed = readiness_import.parse(
-            tmp, strict=bool(current_app.config.get("STAGING")))
+        # Tried on the sandbox, live everywhere since 18/09/2026. The companies
+        # have the template with the Status drop-down in it, so the rule is one
+        # they can meet before they press Upload.
+        parsed = readiness_import.parse(tmp, strict=True)
     finally:
         try:
             os.remove(tmp)

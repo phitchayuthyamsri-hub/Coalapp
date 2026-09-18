@@ -143,8 +143,9 @@ def parse(path, strict=False):
            'error': message when the sheet is refused}
 
     strict=True also returns 'problems': rows that break the Status and
-    Back-in-service rules. The caller decides what to do with them; parsing is
-    the same either way, so a sheet reads identically on both boxes."""
+    Back-in-service rules. The upload passes strict=True; the default is off so
+    that reading a sheet to LOOK at it never refuses one. Parsing itself is the
+    same either way - strict adds a verdict, it does not change what is read."""
     wb = load_workbook(path, data_only=True)
     ws = None
     for name in ("Readiness", "Sheet1"):

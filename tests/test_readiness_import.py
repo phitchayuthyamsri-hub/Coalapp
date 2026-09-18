@@ -204,11 +204,12 @@ check("no Status column is ONE fault, not one per row", len(res["problems"]), 1)
 check("...and says the column is missing",
       "no Status column" in res["problems"][0]["why"], True)
 
-# Prod is unchanged until the rule is switched on there.
+# Reading a sheet to LOOK at it is not the same as accepting one. The upload
+# asks for the verdict; nothing else has to.
 path = sheet(H, [["20C10615", "", "Empty", "", ""]])
 lenient = ri.parse(path)
 os.remove(path)
-check("a lenient parse does not judge the rows", "problems" in lenient, False)
+check("a plain parse does not judge the rows", "problems" in lenient, False)
 check("...and still reads them", len(lenient["rows"]), 1)
 
 # status_kind is the one place the vocabulary is decided.
