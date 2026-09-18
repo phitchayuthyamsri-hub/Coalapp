@@ -140,7 +140,12 @@ def create_app(config_class=Config):
             return resp
 
     with app.app_context():
-        db.create_all()
+        # Several gunicorn workers boot at the same instant and each runs this.
+        # create_all checks first and creates second, so two of them can both
+        # find a new table missing and one then fails on "already exists" -
+        # which happened to a worker the first time anchor_version shipped.
+        # The loser simply asks again: by then the table is there.
+        _create_all_racing()
         _ensure_user_schema()
         _ensure_admin()
         _ensure_listrow_schema()
@@ -321,6 +326,32 @@ def _ensure_snapshot_schema():
         db.session.commit()
 
 
+def _create_all_racing():
+    from sqlalchemy.exc import OperationalError
+    for attempt in range(3):
+        try:
+            db.create_all()
+            return
+        except OperationalError as e:
+            if "already exists" not in str(e) or attempt == 2:
+                raise
+            db.session.rollback()
+
+
+def _add_column_racing(table, column_sql):
+    """ALTER TABLE ... ADD COLUMN, tolerant of another worker having just done
+    it. SQLite says "duplicate column name"; that means it is there."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+    try:
+        db.session.execute(text("ALTER TABLE %s ADD COLUMN %s" % (table, column_sql)))
+        db.session.commit()
+    except OperationalError as e:
+        db.session.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+
+
 def _ensure_anchor_schema():
     """Geofences became versioned on 18/09/2026: two columns on Anchor, and a
     first "since the beginning" version for every zone that has none - so the
@@ -332,13 +363,16 @@ def _ensure_anchor_schema():
     except Exception:
         return
     if "caption" not in cols:
-        db.session.execute(text("ALTER TABLE anchor ADD COLUMN caption VARCHAR(60) DEFAULT ''"))
-        db.session.commit()
+        _add_column_racing("anchor", "caption VARCHAR(60) DEFAULT ''")
     if "retired_at" not in cols:
-        db.session.execute(text("ALTER TABLE anchor ADD COLUMN retired_at DATETIME"))
-        db.session.commit()
+        _add_column_racing("anchor", "retired_at DATETIME")
     from .geofence import ensure_versions
-    ensure_versions()
+    try:
+        ensure_versions()
+    except Exception:
+        # Two workers backfilling at once: one commits, the other's insert
+        # can collide. Whoever lost rolls back; the rows are there.
+        db.session.rollback()
 
 
 def _ensure_truck_schema():

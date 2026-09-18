@@ -1443,6 +1443,8 @@ input[type="date"] { width: 100%; }
 .anchor-list li.selected, .anchor-list li.selected .name,
 .anchor-list li.editing, .anchor-list li.editing .name { color: #111; }
 .anchor-list .name { cursor: text; }
+.anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+  color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .anchor-list .swatch {
   width: 12px; height: 12px;
   border-radius: 2px;
@@ -3888,7 +3890,7 @@ function renderAnchorList() {
       <label class="swatch-wrap" title="Click to change color">
         <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
       </label>
-      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}</span>
+      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}</span>${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}
       ${overrideMark}
       <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
@@ -7368,6 +7370,13 @@ async function syncAnchorsFromServer() {
   if (!Array.isArray(list)) return;
   const pres = {};
   STATE.anchors.forEach(a => { pres[String(a.id)] = { colorOverride: a.colorOverride, aliasOf: a.aliasOf, routeHidden: a.routeHidden }; });
+  // Zones drawn here and not yet applied exist nowhere but this browser. The
+  // server's list replaces what it knows about; it must not replace these.
+  // (On 18/09/2026 it did, and a zone someone had just drawn and named was
+  // gone on refresh.)
+  const unsaved = STATE.anchors.filter(a => String(a.id).startsWith('anc_'));
+  const keptRoles = {};
+  Object.keys(STATE.roles || {}).forEach(k => { if (String(STATE.roles[k] || '').startsWith('anc_')) keptRoles[k] = STATE.roles[k]; });
   STATE.anchors.forEach(a => { if (a.layer) map.removeLayer(a.layer); if (a.labelMarker) map.removeLayer(a.labelMarker); });
   STATE.anchors = [];
   const roles = {};
@@ -7381,13 +7390,24 @@ async function syncAnchorsFromServer() {
     drawAnchorOnMap(a);
     if (d.role) roles[d.role] = id;
   });
+  unsaved.forEach(a => { a.layer = null; a.labelMarker = null; STATE.anchors.push(a); drawAnchorOnMap(a); });
+  Object.assign(roles, keptRoles);
   STATE.roles = roles;
   STATE.retiredAnchorIds = [];
   saveAnchorsToStorage(); saveRolesToStorage();
   renderAnchorList(); renderAnchorFilter(); renderRoleDropdowns();
   try { populateLegAnchorDropdowns(); } catch (e) {}
   try { recomputeVisits(); } catch (e) {}
+  if (unsaved.length) toast(unsaved.length + ' zone' + (unsaved.length === 1 ? '' : 's') + ' drawn here ' + (unsaved.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
 }
+function unsavedZoneCount() {
+  return STATE.anchors.filter(a => String(a.id).startsWith('anc_')).length + (STATE.retiredAnchorIds || []).length;
+}
+// Leaving with an unapplied zone is the one way to lose it now; the browser
+// asks first.
+window.addEventListener('beforeunload', (e) => {
+  if (unsavedZoneCount() > 0) { e.preventDefault(); e.returnValue = ''; }
+});
 async function pushAnchorsToServer() {
   const hdr = { 'Content-Type': 'application/json' };
   const idMap = {};
