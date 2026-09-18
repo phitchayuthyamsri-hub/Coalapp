@@ -1443,6 +1443,10 @@ input[type="date"] { width: 100%; }
 .anchor-list li.selected, .anchor-list li.selected .name,
 .anchor-list li.editing, .anchor-list li.editing .name { color: #111; }
 .anchor-list .name { cursor: text; }
+/* The row is a grid and .anchor-meta is display:contents, so every direct
+   child of the row is a cell. Anything decorating the name has to live inside
+   the name cell - as a sibling it adds a column and shoves the last cell onto
+   the next grid row. */
 .anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
   color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .anchor-list .swatch {
@@ -3890,7 +3894,7 @@ function renderAnchorList() {
       <label class="swatch-wrap" title="Click to change color">
         <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
       </label>
-      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}</span>${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}
+      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span>
       ${overrideMark}
       <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
