@@ -100,6 +100,31 @@ def create_app(config_class=Config):
         from flask import session
         session.permanent = True
 
+    # The staging sandbox announces itself on every page - same orange banner
+    # idea as the logistics program - so nobody mistakes test data for the
+    # real day. Inert unless the environment says COALAPP_ENV=staging.
+    if (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging":
+        _BANNER = (b'<div style="position:sticky;top:0;z-index:99999;'
+                   b'background:#b45309;color:#fff;text-align:center;'
+                   b'font:700 12px/1.6 sans-serif;letter-spacing:.5px;'
+                   b'padding:3px 8px">STAGING &mdash; a sandbox with its own '
+                   b'data. Nothing here reaches the real day.</div>')
+
+        @app.after_request
+        def _staging_banner(resp):
+            try:
+                if (resp.content_type or "").startswith("text/html") \
+                        and not resp.direct_passthrough:
+                    body = resp.get_data()
+                    i = body.find(b"<body")
+                    if i >= 0:
+                        j = body.find(b">", i)
+                        if j >= 0:
+                            resp.set_data(body[:j + 1] + _BANNER + body[j + 1:])
+            except Exception:
+                pass
+            return resp
+
     with app.app_context():
         db.create_all()
         _ensure_user_schema()
