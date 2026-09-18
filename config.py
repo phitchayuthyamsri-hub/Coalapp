@@ -69,6 +69,18 @@ def gps_providers_config():
             "timestamp_field": os.environ.get("GPS_TCT_TS_FIELD", "LocalTime"),          # LocalTime (UTC+7) | UTCTime
             "plates": _plates(os.environ.get("GPS_TCT_PLATES")),                          # blank = all authorised vehicles
         },
+        # A SECOND TCT account. TCT moved the camera-package trucks onto their
+        # own CustomerCode (46354, Sep 2026) and one login cannot see both
+        # lists, so this account is pulled alongside the first.
+        "tct2": {
+            "enabled": _truthy(os.environ.get("GPS_TCT2_ENABLED")),
+            "base_url": os.environ.get("GPS_TCT2_BASE_URL", "http://webapi.dientutct.com/apiwba").rstrip("/"),
+            "username": os.environ.get("GPS_TCT2_USERNAME") or os.environ.get("GPS_TCT2_CUSTOMER_CODE", ""),
+            "password": os.environ.get("GPS_TCT2_PASSWORD") or os.environ.get("GPS_TCT2_KEY", ""),
+            "auth_mode": os.environ.get("GPS_TCT2_AUTH_MODE", "basic").strip().lower(),
+            "timestamp_field": os.environ.get("GPS_TCT2_TS_FIELD", "LocalTime"),
+            "plates": _plates(os.environ.get("GPS_TCT2_PLATES")),
+        },
         # Viettel vTracking 2.0 Open API. Header auth (APIKey), one POST returns
         # the current position of every plate asked for. Served from a bare IP
         # with a self-signed certificate, so TLS verification cannot succeed and

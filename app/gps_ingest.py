@@ -318,7 +318,11 @@ def _tct_vehicles(data):
     return None
 
 
-_CONNECTORS = {"tct": _fetch_tct, "viettel": _fetch_viettel, "adsun": _fetch_adsun}
+# "tct2" is a SECOND TCT account with its own credentials - TCT put part of
+# the fleet (the camera-package trucks) on a separate CustomerCode in Sep
+# 2026, and one login cannot see both lists.
+_CONNECTORS = {"tct": _fetch_tct, "tct2": _fetch_tct,
+               "viettel": _fetch_viettel, "adsun": _fetch_adsun}
 
 
 # ── runner / storage ─────────────────────────────────────────────────────────
@@ -326,7 +330,7 @@ _CONNECTORS = {"tct": _fetch_tct, "viettel": _fetch_viettel, "adsun": _fetch_ads
 def provider_ready(cfg, key):
     if not cfg.get("enabled"):
         return False
-    if key == "tct":
+    if key in ("tct", "tct2"):
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key == "adsun":
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
@@ -511,7 +515,7 @@ def debug_provider(app, key):
     if not provider_ready(pcfg, key):
         return {"ok": False, "error": "provider not enabled / missing credentials"}
     try:
-        if key == "tct":
+        if key in ("tct", "tct2"):
             url, body, headers = _tct_request(pcfg)
             data = _http_post_json(url, body, headers)
         elif key == "adsun":
@@ -575,7 +579,7 @@ def _basic_headers(user, pw):
 # Per-provider range caps. TCT pages 24h windows back-to-back without complaint.
 # Adsun caps a history query at ~3 days AND rate-limits successive calls (the
 # guide says 10s; measured ~30s), so an Adsun trail is a single call per click.
-TRAIL_MAX_DAYS = {"tct": 14, "viettel": 7, "adsun": 3}
+TRAIL_MAX_DAYS = {"tct": 14, "tct2": 14, "viettel": 7, "adsun": 3}
 _TRAIL_DEADLINE_S = 25     # stop paging after this many seconds, return partial
 _TRAIL_CALL_TIMEOUT = 12   # per provider call
 
@@ -756,6 +760,7 @@ def fetch_trail(app, source, plate, begin, end):
     src = source or ""
     key = ("adsun" if "adsun" in src else
            "viettel" if "viettel" in src else
+           "tct2" if "tct2" in src else
            "tct" if "tct" in src else None)
 
     def stored(reason):
@@ -780,8 +785,8 @@ def fetch_trail(app, source, plate, begin, end):
         return {"ok": False,
                 "error": "range too long for %s — choose %d days or fewer per trail" % (key.upper(), max_days)}
     try:
-        fn = {"tct": _trail_tct, "adsun": _trail_adsun,
-              "viettel": _trail_viettel}[key]
+        fn = {"tct": _trail_tct, "tct2": _trail_tct,
+              "adsun": _trail_adsun, "viettel": _trail_viettel}[key]
         pts, errors, truncated = fn(pcfg, plate, begin, end)
         bad = sum(1 for p in pts if not _sane_point(p.get("lat"), p.get("lng")))
         if bad:

@@ -28,7 +28,7 @@ def _no_store(resp):
     resp.headers["Expires"] = "0"
     return resp
 
-_PROVIDERS = ("tct", "viettel", "adsun")
+_PROVIDERS = ("tct", "tct2", "viettel", "adsun")
 
 
 def _parse_arg_dt(v):
