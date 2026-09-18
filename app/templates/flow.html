@@ -41,6 +41,12 @@
        justify-content:center;font-size:13px;font-weight:800;z-index:1;
        background:#16233a;border:2px solid var(--line);color:var(--mut)}
   .s-done .dot{background:#12301f;border-color:var(--ok);color:#5fd97e}
+  /* Nothing for this desk to do. Not a tick - a tick says a person did their
+     work - and not amber, because nothing is stuck. A dash in a dashed ring. */
+  .s-none .dot{background:transparent;border-style:dashed;border-color:#3d4d6b;color:#5a6a85}
+  .s-none .who{color:#5a6a85;font-weight:400;text-decoration:line-through;
+       text-decoration-color:#3d4d6b}
+  .s-none .note{color:#5a6a85}
   .s-waiting .dot,.s-doing .dot{background:#3a2a10;border-color:var(--warn);color:#fcd34d;
        box-shadow:0 0 0 4px rgba(245,158,11,.15)}
   .who{font-size:11.5px;font-weight:700;margin-top:6px}
@@ -54,6 +60,13 @@
   .now{margin-top:12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
        background:#2a1f10;border:1px solid #5a4020;color:#fcd34d}
   .now.ok{background:#12301f;border-color:#1e5a34;color:#86efac}
+  /* A day with no coal load. Above the chain, because it is the first thing
+     to know about the day - and in a colour of its own: not the amber of a
+     day that is stuck, not the green of a day that ran. */
+  .noload{margin:8px 0 2px;padding:10px 14px;border-radius:9px;font-size:13px;
+       background:#141d33;border:1px solid #2b3d66;color:#b7c6ea}
+  .noload b{display:block;text-transform:uppercase;letter-spacing:.5px;font-size:12px;
+       color:#dbe4ff;margin-bottom:2px}
   .now b{text-transform:uppercase;letter-spacing:.4px;font-size:11px}
   .msg{color:var(--mut);font-size:12px}
 </style>
@@ -78,7 +91,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const jget = async u => (await fetch(u)).json();
 const dmy = iso => iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4);
-const MARK = {done:'✓', waiting:'⏳', doing:'⏳', idle:'·'};
+const MARK = {done:'✓', waiting:'⏳', doing:'⏳', idle:'·', none:'—'};
 
 function stepHtml(s){
   return '<div class="step s-' + s.state + (s.state === 'done' ? ' p-done' : '') + '">'
@@ -101,13 +114,21 @@ function draw(d){
       + (day.today ? '<span class="chip">today</span>' : '');
     const cos = day.companies.map(c => {
       const done = !c.now.who;
+      // A day with no coal load never reads "Complete": the banner above the
+      // chain has already said what the day was, and nobody ran it.
       const now = done
-        ? '<div class="now ok"><b>Complete</b> &mdash; ' + esc(c.now.note) + '</div>'
+        ? (c.no_load ? ''
+           : '<div class="now ok"><b>Complete</b> &mdash; ' + esc(c.now.note) + '</div>')
         : '<div class="now"><b>Pending at: ' + esc(c.now.who) + '</b> &mdash; '
           + esc(c.now.note)
           + (c.now.overdue ? ' &middot; <b style="color:var(--bad)">its window ('
               + esc(c.now.window) + ') has passed</b>' : '') + '</div>';
+      const noload = c.no_load
+        ? '<div class="noload"><b>No coal load on ' + dmy(day.date) + '</b>'
+          + esc(c.no_load_note) + '.</div>'
+        : '';
       return (c.company ? '<div class="co">' + esc(c.company) + '</div>' : '')
+        + noload
         + '<div class="steps">' + c.stages.map(stepHtml).join('') + '</div>' + now;
     }).join('');
     return '<div class="card"><div class="day"><h2>' + dmy(day.date) + '</h2>'

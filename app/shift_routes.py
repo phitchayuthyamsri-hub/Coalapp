@@ -3122,8 +3122,11 @@ def _stage_window(day, key):
 def _flow_entry(day, dl, subs):
     """One company's day, as five stages: declare, submit, approve, plan,
     watch. Each stage is done, doing (started but unfinished), waiting (the
-    chain is stuck on it), or idle (not reached). `now` names the first stage
-    that is not done - whose desk the day is sitting on."""
+    chain is stuck on it), idle (not reached), or none - there was nothing for
+    this desk to do, so nobody at it did anything. That last one is NOT done:
+    a tick says a person did their work, and on a day with no coal load the
+    planner and the monitor did no work. `now` names the first stage that is
+    waiting or doing - whose desk the day is sitting on."""
     st = {"pending": 0, "applied": 0, "approved": 0, "denied": 0}
     rows = []
     if dl is not None:
@@ -3193,7 +3196,7 @@ def _flow_entry(day, dl, subs):
                        (", %d held back" % st["pending"]) if st["pending"] else "",
                        (" by " + dl.submitted_by) if dl.submitted_by else "")}
     elif all_down:
-        sup = {"state": "done",
+        sup = {"state": "none",
                "note": "no trucks available today, %d declared down" % len(rows)}
     else:
         sup = {"state": "waiting" if stages[-1]["state"] == "done" else "idle",
@@ -3219,7 +3222,7 @@ def _flow_entry(day, dl, subs):
                               (" by " + dl.confirmed_by) if dl.confirmed_by
                               else "")}
     elif all_down:
-        man = {"state": "done", "note": "nothing to approve"}
+        man = {"state": "none", "note": "nothing to approve"}
     else:
         man = {"state": "idle", "note": ""}
     stages.append(dict({"key": "approve", "who": "Manager"}, **man))
@@ -3231,7 +3234,7 @@ def _flow_entry(day, dl, subs):
                                + ((" by " + snap.issued_by)
                                   if getattr(snap, "issued_by", "") else "")})
     elif nothing_to_plan:
-        stages.append({"key": "plan", "who": "Planner", "state": "done",
+        stages.append({"key": "plan", "who": "Planner", "state": "none",
                        "note": "nothing to plan - no truck is due at the mine"
                                + ((", %d due on another day" % due_elsewhere)
                                   if due_elsewhere else "")})
@@ -3245,7 +3248,7 @@ def _flow_entry(day, dl, subs):
     if snap is not None:
         watch = {"state": "done", "note": "the day is live on Monitor"}
     elif nothing_to_plan:
-        watch = {"state": "done", "note": "nothing to watch"}
+        watch = {"state": "none", "note": "nothing to watch"}
     else:
         watch = {"state": "idle", "note": ""}
     stages.append(dict({"key": "watch", "who": "Monitor"}, **watch))
@@ -3267,8 +3270,25 @@ def _flow_entry(day, dl, subs):
             s["window"] = "run day · " + _dmy(day)
 
     now = next((s for s in stages if s["state"] in ("waiting", "doing")), None)
+
+    # Said once, at the top of the card, from the moment the sheet lands: a
+    # day with no coal load is the single most important fact about that day,
+    # and a note under the fourth of five dots is not where anyone finds it.
+    if all_down:
+        no_load = ("every truck is declared down (%d of %d), so nothing runs and "
+                   "there is no plan to issue" % (len(rows), len(rows)))
+    elif nothing_to_plan:
+        no_load = ("no truck is due at the mine to load"
+                   + ((" - %d due on another day" % due_elsewhere) if due_elsewhere
+                      else "")
+                   + ", so there is no plan to issue")
+    else:
+        no_load = ""
+
     return {"company": (subs.get(sub_id, "(no company)") if dl is not None else None),
             "sheet_state": dl.state if dl is not None else "",
+            "no_load": bool(no_load),
+            "no_load_note": no_load,
             "stages": stages,
             "now": ({"who": now["who"], "note": now["note"],
                      "overdue": bool(now.get("overdue")),
