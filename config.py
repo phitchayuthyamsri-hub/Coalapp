@@ -26,9 +26,27 @@ def _load_dotenv():
 
 _load_dotenv()
 
+DEFAULT_SECRET = "change-me-in-production"
+
+
+def is_staging():
+    """Whether this process is the sandbox. One definition, because the cookie
+    name depends on it and a second opinion would split a login in half."""
+    return (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging"
+
+
+def _hours(name, default):
+    """An hour count from the environment, ignoring anything unusable. A typo
+    in a unit file must not stop the app booting."""
+    try:
+        n = int(str(os.environ.get(name) or "").strip())
+        return n if n > 0 else default
+    except ValueError:
+        return default
+
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
+    SECRET_KEY = os.environ.get("SECRET_KEY", DEFAULT_SECRET)
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", "sqlite:///coalapp.db"
     )
@@ -38,12 +56,23 @@ class Config:
     # capture map falls back to saying so rather than rendering a broken frame.
     GOOGLE_MAPS_KEY = os.environ.get("GOOGLE_MAPS_KEY", "")
     MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB uploads
-    PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
-    SESSION_REFRESH_EACH_REQUEST = True  # sliding window: 30 min of inactivity
+    # A shift, not half an hour. Thirty minutes of idling signed people out in
+    # the middle of a working day - the window slides on every request, so
+    # touching the app at all keeps you in, and leaving it overnight does not.
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=_hours("SESSION_HOURS", 12))
+    SESSION_REFRESH_EACH_REQUEST = True     # sliding, from the last request
     # The logistics app shares this droplet's IP, browser cookies ignore ports,
     # and both apps default to a cookie named "session" — so each app kept
     # overwriting the other's login. A distinct name ends the fight.
-    SESSION_COOKIE_NAME = "coalapp_session"
+    #
+    # The sandbox needs its own name for exactly the same reason, and it is the
+    # same droplet again: prod on :8080 and staging on :8082 are one cookie jar
+    # to a browser, because a cookie is scoped by host and the port is not part
+    # of it. Sharing the name meant each login overwrote the other's, and since
+    # the two sign with different keys the overwritten one was not replaced but
+    # unreadable - so every switch between the two tabs was a fresh login.
+    SESSION_COOKIE_NAME = ("coalapp_staging_session" if is_staging()
+                           else "coalapp_session")
 
 
 def _truthy(v):

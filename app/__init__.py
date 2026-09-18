@@ -2,7 +2,7 @@ import os
 from flask import Flask
 from flask_login import LoginManager
 
-from config import Config, gps_providers_config
+from config import Config, DEFAULT_SECRET, gps_providers_config, is_staging
 from .models import db, User
 
 login_manager = LoginManager()
@@ -100,15 +100,23 @@ def create_app(config_class=Config):
         from flask import session
         session.permanent = True
 
-    # The staging sandbox announces itself on every page - same orange banner
-    # idea as the logistics program - so nobody mistakes test data for the
-    # real day. Inert unless the environment says COALAPP_ENV=staging.
-    _staging = (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging"
-    # Templates ask the same question when a change is being tried out on the
-    # sandbox before the real day sees it, so the answer lives in one place.
+    # A login is only as good as the key it is signed with. On the shipped
+    # default, anyone who has read the source can mint a session cookie for
+    # this box - and nothing said so, which is how the sandbox ran that way
+    # for days. Say it at every boot, where the logs will carry it.
+    if app.config.get("SECRET_KEY") == DEFAULT_SECRET:
+        app.logger.warning(
+            "SECRET_KEY is the shipped default - sessions can be forged. "
+            "Set SECRET_KEY in the systemd unit for this instance.")
+
+    # Templates ask whether this is the sandbox when a change is being tried
+    # out before the real day sees it, so the answer lives in one place.
+    _staging = is_staging()
     app.config["STAGING"] = _staging
     app.jinja_env.globals["STAGING"] = _staging
 
+    # The sandbox announces itself on every page - same orange banner idea as
+    # the logistics program - so nobody mistakes test data for the real day.
     if _staging:
         _BANNER = (b'<div style="position:sticky;top:0;z-index:99999;'
                    b'background:#b45309;color:#fff;text-align:center;'
