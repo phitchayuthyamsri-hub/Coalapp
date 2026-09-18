@@ -4,6 +4,7 @@ const html = fs.readFileSync('app/templates/shift_board.html', 'utf8');
 const blocks = (html.match(/<script>([\s\S]*?)<\/script>/g) || [])
   .map(b => b.slice(8, -9)).filter(js => !/{%|{{/.test(js));
 const tv = fs.readFileSync('app/static/tableview.js', 'utf8');
+const rowno = fs.readFileSync('app/static/rowno.js', 'utf8');
 
 const el = () => ({innerHTML:'', value:'', textContent:'', style:{}, dataset:{},
   classList:{add(){},remove(){},toggle(){},contains(){return false}},
@@ -36,6 +37,7 @@ const sandbox = {
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(tv, sandbox, {filename: 'tableview.js'});
+vm.runInContext(rowno, sandbox, {filename: 'rowno.js'});
 // only the declarations, not the boot IIFE that fetches
 const body = blocks.join('\n');
 try { vm.runInContext(body, sandbox, {filename: 'board.js'}); }
@@ -147,7 +149,7 @@ try {
   // table that still read 1, 4, 5 would be a worse answer to "which one am I
   // on" than no column at all.
   is('off the sandbox there is no No# column', html2.indexOf('c-no') >= 0, false);
-  vm.runInContext("TV.filters = {}; STAGING = true; drawRows();", sandbox);
+  vm.runInContext("TV.filters = {}; window.STAGING = true; drawRows();", sandbox);
   const numbered = store['listBody'].innerHTML;
   is('on the sandbox the No# header is there',
      numbered.indexOf('<th class="c-no"') >= 0, true);

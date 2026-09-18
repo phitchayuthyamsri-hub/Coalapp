@@ -144,7 +144,12 @@
   // ── drawing ──────────────────────────────────────────────────────────────
   Grid.prototype.draw = function () {
     var self = this;
-    var head = '<tr>' + this.cols.map(function (c, ci) {
+    // The row's place in the view. It carries no data-r / data-c, so it is
+    // outside the addressed grid entirely: the selection box, Ctrl+D and a
+    // pasted block never see it, and nothing the user types can land in it.
+    var noHead = global.noHead || function () { return ''; };
+    var noCell = global.rowNo || function () { return ''; };
+    var head = '<tr>' + noHead() + this.cols.map(function (c, ci) {
       var lv = self.sortLevel(ci);
       var badge = lv < 0 ? ''
         : '<span class="hsort">' + (self.sortSeq[lv].asc ? '▲' : '▼')
@@ -166,7 +171,7 @@
         return '<td data-r="' + vr + '" data-c="' + ci + '"'
           + (c.ro ? ' class="ro"' : '') + '>' + shown + '</td>';
       }).join('');
-      return '<tr class="' + self.rowClass(row) + '">' + tds + '</tr>';
+      return '<tr class="' + self.rowClass(row) + '">' + noCell(vr) + tds + '</tr>';
     }).join('');
 
     this.table.innerHTML = '<thead>' + head + '</thead><tbody>' + body + '</tbody>';
@@ -181,7 +186,9 @@
 
   Grid.prototype.wireHead = function () {
     var self = this;
-    Array.prototype.forEach.call(this.table.querySelectorAll('th'), function (th) {
+    // Only the real columns open a menu. The No# header addresses nothing, so
+    // clicking it would ask for column NaN.
+    Array.prototype.forEach.call(this.table.querySelectorAll('th[data-c]'), function (th) {
       th.onclick = function (e) { self.openColMenu(e, +th.dataset.c); };
     });
   };

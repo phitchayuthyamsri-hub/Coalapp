@@ -237,6 +237,7 @@
   body.embed main{padding-top:12px}
 
 </style>
+{% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
@@ -764,13 +765,13 @@ async function run(){
          + '</div>';
 
   $('#body').innerHTML = warn
-    + '<table><thead><tr><th>Truck</th><th>Sub</th><th>At mine</th><th>Load</th>'
+    + '<table><thead><tr>' + noHead() + '<th>Truck</th><th>Sub</th><th>At mine</th><th>Load</th>'
     + '<th>Leaves mine</th><th>At border</th><th>Crosses</th><th>Enters QL49</th>'
     + '<th>At port</th><th>Unloads</th><th>Leaves port</th><th>Back at mine</th>'
     + '<th>Home</th><th>Cycle</th><th>Waiting</th></tr></thead><tbody>'
-    + d.rows.map(function(r){
+    + d.rows.map(function(r, n){
         const bad = r.cycle_hours > 48;
-        return '<tr><td class="plate">' + esc(r.plate) + '</td>'
+        return '<tr>' + rowNo(n) + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub) + '</td>'
           + TCOLS.map(c => '<td>' + clock(r.t[c[1]]) + '</td>').join('')
           + '<td><span class="pill" style="background:'
@@ -828,14 +829,14 @@ async function loadVariance(){
     + '</div>';
 
   $('#vBody').innerHTML = head
-    + '<table><thead><tr><th>Truck</th><th>Sub</th><th>Status</th>'
+    + '<table><thead><tr>' + noHead() + '<th>Truck</th><th>Sub</th><th>Status</th>'
     + VCOLS.map(c => '<th>' + c[0] + '</th>').join('')
     + '<th>Cycle</th><th>Where it went</th></tr></thead><tbody>'
-    + d.rows.map(function(r){
+    + d.rows.map(function(r, n){
         const tone = r.status === 'missing' ? 'var(--bad)'
                    : r.status === 'unplanned' ? 'var(--warn)'
                    : r.status === 'moved' ? 'var(--txt)' : 'var(--mut)';
-        return '<tr><td class="plate">' + esc(r.plate) + '</td>'
+        return '<tr>' + rowNo(n) + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
           + '<td style="color:' + tone + '">' + esc(r.status) + '</td>'
           + VCOLS.map(c => '<td>' + mins(r.delta[c[1]]) + '</td>').join('')
@@ -957,12 +958,12 @@ function drawTable(d){
   if (!d.rows.length){ $('#wTable').innerHTML =
     '<div class="banner b-none">Nothing planned this week.</div>'; return; }
   $('#wTable').innerHTML =
-    '<table><thead><tr><th>Truck</th><th>Sub</th><th>Loop</th><th>By</th>'
+    '<table><thead><tr>' + noHead() + '<th>Truck</th><th>Sub</th><th>Loop</th><th>By</th>'
     + TCOLS.map(c => '<th>' + c[0] + '</th>').join('')
     + '<th>Home</th><th>Cycle</th><th>Waiting</th></tr></thead><tbody>'
-    + d.rows.map(function(r){
+    + d.rows.map(function(r, n){
         const bad = r.cycle_hours > 48;
-        return '<tr><td class="plate">' + esc(r.plate) + '</td>'
+        return '<tr>' + rowNo(n) + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub) + '</td>'
           + '<td>' + r.loop + '</td>'
           + '<td style="color:var(--mut)">' + (r.from_plan ? 'plan' : 'readiness') + '</td>'

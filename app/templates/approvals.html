@@ -86,6 +86,7 @@
   .tdy h4.hot{color:var(--red)}
   .ok{color:var(--grn)} .err{color:var(--red)}
 </style>
+{% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
@@ -188,7 +189,7 @@ function draw(){
         + (c.approved || 0) + ' approved &middot; ' + (c.denied || 0) + ' denied &middot; '
         + (c.pending || 0) + ' still with the supervisor</span></div>';
 
-    const rows = l.rows.map(r => {
+    const rows = l.rows.map((r, n) => {
       const cls = r.state === 'applied' ? 'waiting' : (r.state === 'denied' ? 'denied' : '');
       const gps = !r.gps_seen
         ? '<span class="why">not seen by GPS</span>'
@@ -199,7 +200,7 @@ function draw(){
               ? '<span class="why">' + r.gps_km_out + ' km from the mine'
                 + (r.gps_eta ? ' &middot; GPS eta ' + esc(r.gps_eta) : '') + '</span>'
               : '');
-      return '<tr class="' + cls + '">'
+      return '<tr class="' + cls + '">' + rowNo(n)
         + '<td class="plate">' + esc(r.plate) + trailLink(r.plate) + '</td>'
         + '<td><span class="st s-' + esc(r.state) + '">' + esc(r.state) + '</span></td>'
         + '<td>' + esc(r.status || '—')
@@ -230,7 +231,7 @@ function draw(){
     return '<div class="card">' + head
       + (l.reject_reason ? '<div class="note n-warn"><b>Rejected:</b> '
           + esc(l.reject_reason) + '</div>' : '')
-      + '<div class="wrap-t"><table><thead><tr>'
+      + '<div class="wrap-t"><table><thead><tr>' + noHead()
       + '<th style="width:92px">Truck</th><th style="width:80px">State</th>'
       + '<th style="width:110px">Status</th><th style="width:70px">Load</th>'
       + '<th style="width:110px">Location</th><th style="width:120px">At mine</th>'

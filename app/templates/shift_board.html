@@ -104,11 +104,6 @@
   #listTable .c-remark{min-width:130px} #listTable .c-stage{min-width:88px}
   #listTable .c-approve{min-width:66px} #listTable .c-reason{min-width:200px}
   #listTable .c-trail{min-width:54px;text-align:center;white-space:nowrap}
-  /* The row's place in the list as it is shown: a filtered or re-sorted table
-     is renumbered, so the number always reads against what is on screen. */
-  #listTable .c-no{min-width:30px;text-align:right;color:var(--mut);
-    font-variant-numeric:tabular-nums;font-size:11.5px}
-  #listTable tbody tr:hover td.c-no{color:var(--txt);font-weight:700}
   #listTable .c-gps{min-width:124px}
   #listTable .gps-loc{display:block}
   #listTable .gps-when{display:block;font-size:10.5px;color:var(--mut)}
@@ -197,6 +192,7 @@
   body.embed main{padding-top:12px}
   body.embed .card.sticky{top:0}
 </style>
+{% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
@@ -292,21 +288,10 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 </main>
 
 <script>
-// Which box is this. Its own block, before the page's script: the one line the
-// server writes, so everything below it is plain JavaScript.
-window.STAGING = {{ 'true' if STAGING else 'false' }};
-</script>
-
-<script>
 const $ = s => document.querySelector(s);
 let TV = null, CAN = {edit:false, edit_time:false};
 let LIST = null, ROLE = 'monitor', DIRTY = false;
 let SUBS = [], SUBID = '';
-// Sandbox only for now: the numbered column is being tried on staging before
-// the real day's list gets a column nobody asked for. The server sets the flag
-// in its own block above - kept out of here so this block stays plain JS that a
-// test can load and run.
-let STAGING = !!window.STAGING;
 
 // Any edit marks the form dirty so the state is visible rather than implied.
 document.addEventListener('input', e => {
@@ -463,12 +448,12 @@ function drawRows(){
   const heads = TV.cols.map(c => TV.head(c));
   heads.splice(1, 0, '<th class="c-trail">Trail</th>');
   // Counts the rows on screen, so "I am on 17" means the same thing to whoever
-  // is told it. No sort or filter menu: the number is a place, not a value.
-  if (STAGING) heads.unshift('<th class="c-no" title="Row number, as shown">No#</th>');
+  // is told it. Shared with every other truck list on the platform.
+  heads.unshift(noHead());
   const head = '<tr>' + heads.join('') + '</tr>';
   const body = view.map((i, n) => {
     const r = LIST.rows[i];
-    const no = STAGING ? '<td class="c-no">' + (n + 1) + '</td>' : '';
+    const no = rowNo(n);
     if (r.absent){
       // Committed for the project and never on the sheet. No tick, no timing
       // and no reason box: there is nothing to save against it.

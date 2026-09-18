@@ -39,6 +39,7 @@ const sandbox = {
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(tv, sandbox, {filename: 'tableview.js'});
+vm.runInContext(fs.readFileSync('app/static/rowno.js', 'utf8'), sandbox, {filename: 'rowno.js'});
 try { vm.runInContext(blocks.join('\n'), sandbox, {filename: 'monitor.js'}); }
 catch (e) { console.log('  load error (expected for boot fetches):', e.message.slice(0, 70)); }
 
@@ -153,6 +154,31 @@ try {
   is('back-haul reads port first',
      store['track'].innerHTML.indexOf('data-col="bh:port:plan"')
      < store['track'].innerHTML.indexOf('data-col="bh:mine:plan"'), true);
+
+  // ── the No# column ───────────────────────────────────────────────────────
+  // This header is two rows deep. The number belongs with the identifying
+  // columns on the top row, spanning both - a Plan/Actual sub-heading under it
+  // would be nonsense, and a th on the second row would shift the odd/even the
+  // Plan|Actual pair borders are drawn from.
+  vm.runInContext("LEG = 'fh'; TV.filters = {}; TV.sortSeq = []; drawTrack();", sandbox);
+  is('off the sandbox the monitor has no number column',
+     store['track'].innerHTML.indexOf('c-no') >= 0, false);
+
+  vm.runInContext("window.STAGING = true; drawTrack();", sandbox);
+  const mon = store['track'].innerHTML;
+  is('on the sandbox the number leads the first header row',
+     mon.indexOf('<thead><tr><th class="c-no"') >= 0, true);
+  is('...spanning both header rows', /<th class="c-no" rowspan="2"/.test(mon), true);
+  is('...and appearing once only', (mon.match(/<th class="c-no"/g) || []).length, 1);
+  is('every truck row is numbered', (mon.match(/<td class="c-no">(\d+)<\/td>/g) || [])
+     .map(s => s.replace(/\D/g, '')).join(','), '1,2,3,4');
+  is('the number sits before the location cell',
+     /<tr><td class="c-no">1<\/td><td class="where">/.test(mon), true);
+  is('a filtered monitor renumbers from 1', (function(){
+      vm.runInContext("TV.filters = {'fh:mine:act': new Set(['late'])}; drawTrack();", sandbox);
+      return (store['track'].innerHTML.match(/<td class="c-no">(\d+)<\/td>/g) || [])
+        .map(s => s.replace(/\D/g, '')).join(',');
+    })(), '1');
 } catch (e) {
   console.log('  RENDERER THREW: ' + e.message);
   fail++;

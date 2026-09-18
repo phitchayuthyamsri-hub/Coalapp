@@ -245,5 +245,45 @@ is('...leaving the cell alone', gr.rows[0].time, '');
 is('a loose time is accepted', gr.set(0,4,'6'), true);
 is('...and normalised', gr.rows[0].time, '06:00');
 
+// ── the No# column ─────────────────────────────────────────────────────────
+// The declaration grid is addressed by data-r / data-c. A number in front of
+// that addressing would be a column the user can select, fill down into and
+// paste over, so the thing to prove is that it stays OUTSIDE the addressing.
+console.log('');
+vm.runInContext(fs.readFileSync('app/static/rowno.js','utf8'), sandbox, {filename:'rowno.js'});
+
+function drawn(staging){
+  sandbox.window.STAGING = staging;
+  const out = {innerHTML:'', dataset:{}, setAttribute(){}, focus(){},
+    addEventListener(){}, removeEventListener(){},
+    querySelector(){ return null; }, querySelectorAll(){ return []; }};
+  const gd = new Grid({table: out, cols, rows: mk(3)});
+  gd.paint = () => {}; gd.wireHead = () => {};
+  gd.draw();
+  return out.innerHTML;
+}
+
+const plain = drawn(false);
+is('off the sandbox the grid has no number column', /c-no/.test(plain), false);
+
+const num = drawn(true);
+is('on the sandbox the header is there', /<th class="c-no"[^>]*>No#<\/th>/.test(num), true);
+is('...and it opens no column menu', /<th class="c-no"[^>]*data-c/.test(num), false);
+is('...and it leads the header row', num.indexOf('<thead><tr><th class="c-no"') >= 0, true);
+is('every row is numbered from 1', (num.match(/<td class="c-no">(\d+)<\/td>/g) || [])
+   .map(s => s.replace(/\D/g, '')).join(','), '1,2,3');
+is('the number cell is not addressable', /<td class="c-no"[^>]*data-[rc]=/.test(num), false);
+is('the real columns still start at column 0',
+   num.indexOf('<td data-r="0" data-c="0"') >= 0, true);
+is('...and the first row is still row 0',
+   /<td class="c-no">1<\/td><td data-r="0" data-c="0"/.test(num), true);
+
+// wireHead must skip it: a click on No# would otherwise ask for column NaN.
+const seen = [];
+const gw = g(mk(1));
+gw.table.querySelectorAll = sel => { seen.push(sel); return []; };
+Grid.prototype.wireHead.call(gw);
+is('only real headers are wired for a menu', seen.join(''), 'th[data-c]');
+
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

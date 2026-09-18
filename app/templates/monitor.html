@@ -183,6 +183,7 @@
   body.embed main{padding-top:12px}
   body.embed .card.sticky{top:0}
 </style>
+{% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
 <body class="">
@@ -456,12 +457,14 @@ function drawTrack(){
 
   $('#track').innerHTML = key +
     '<table class="grid" id="trackTable"><thead>'
-    + '<tr>' + idCols.map(c => TV.head(c)).join('')
+    // Spans both header rows, so it sits with the other identifying columns
+    // rather than taking a Plan/Actual sub-heading it has no use for.
+    + '<tr>' + noHead2() + idCols.map(c => TV.head(c)).join('')
     + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
     + '</tr>'
     + '<tr>' + placeCols.map(c => TV.head(c)).join('')
     + '</tr></thead><tbody>'
-    + view.map(function(i){
+    + view.map(function(i, n){
         const r = d.rows[i];
         return (function(r){
         const cs = cellsOf(r);
@@ -473,7 +476,7 @@ function drawTrack(){
                + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
              : '<span style="color:var(--mut)">not seen</span>');
         const rm = remarkOf(r);
-        return '<tr><td class="where">' + where + trailLink(r.plate) + '</td>'
+        return '<tr>' + rowNo(n) + '<td class="where">' + where + trailLink(r.plate) + '</td>'
           + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td class="tel">' + phoneCell(r) + '</td>'
           + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
