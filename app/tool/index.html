@@ -1447,6 +1447,7 @@ input[type="date"] { width: 100%; }
    child of the row is a cell. Anything decorating the name has to live inside
    the name cell - as a sibling it adds a column and shoves the last cell onto
    the next grid row. */
+#btnSaveAnchors.attention { background: #fcd34d; color: #111; font-weight: 700; }
 .anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
   color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .anchor-list .swatch {
@@ -2341,6 +2342,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <div class="panel">
           <h2>Anchors
             <button class="small" id="btnDraw">+ Draw</button>
+            <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
           <ul class="anchor-list" id="anchorList"></ul>
           <div class="btn-row">
@@ -2366,9 +2368,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <div class="help" id="roleStatus" style="margin-top:4px">No roles mapped</div>
           </div>
           <div class="btn-row" style="margin-top:8px">
-            <button id="btnApplyAnchors">Apply</button>
+            <button id="btnApplyAnchors">Apply — save to server</button>
           </div>
-          <div class="help-text">Map each role to an anchor, set anchor order, then press Apply to recompute visits &amp; sequences.</div>
+          <div class="help-text">Zones and roles are saved to the server when you press Save or Apply. A changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
         </div>
       </div>
 
@@ -3883,6 +3885,7 @@ function renderAnchorList() {
   STATE.anchors.forEach((a, idx) => {
     const li = document.createElement('li');
     li.dataset.id = a.id;
+    if (idx === 0) try { paintSaveButton(); } catch (e) {}
     const overrideMark = `<button class="reset-color${a.colorOverride ? '' : ' rc-hidden'}" data-act="reset-color" title="Reset to default">⟲</button>`;
     const upDis = idx === 0 ? 'disabled' : '';
     const downDis = idx === STATE.anchors.length - 1 ? 'disabled' : '';
@@ -7339,9 +7342,11 @@ document.querySelectorAll('.tab-btn[data-atab]').forEach(btn => {
 })();
 
 // Apply button (Anchors page) — gate recompute behind explicit press
-document.getElementById('btnApplyAnchors').addEventListener('click', async () => {
+async function applyAnchors() {
   const btn = document.getElementById('btnApplyAnchors');
+  const top = document.getElementById('btnSaveAnchors');
   btn.disabled = true; btn.textContent = 'Saving…';
+  if (top) { top.disabled = true; top.textContent = 'Saving…'; }
   try {
     await pushAnchorsToServer();
     await syncAnchorsFromServer();
@@ -7351,11 +7356,23 @@ document.getElementById('btnApplyAnchors').addEventListener('click', async () =>
     saveAnchorsToStorage(); saveRolesToStorage();
     toast(e.message || 'Could not save to the server', true);
   } finally {
-    btn.disabled = false; btn.textContent = 'Apply';
+    btn.disabled = false; btn.textContent = 'Apply — save to server';
+    if (top) top.disabled = false;
+    paintSaveButton();
   }
   renderAnchorFilter();
   renderDistTable();
-});
+}
+document.getElementById('btnApplyAnchors').addEventListener('click', applyAnchors);
+(function(){ const b = document.getElementById('btnSaveAnchors'); if (b) b.addEventListener('click', applyAnchors); })();
+// The header button carries the count of zones waiting to be saved, and
+// turns amber while there are any - the same colour as the row's badge.
+function paintSaveButton() {
+  const b = document.getElementById('btnSaveAnchors'); if (!b) return;
+  const n = unsavedZoneCount();
+  b.textContent = n ? ('💾 Save (' + n + ')') : '💾 Save';
+  b.classList.toggle('attention', n > 0);
+}
 
 /* ===== GEOFENCES: THE SERVER IS THE STORE (18/09/2026) =====
    This page used to keep its zones in the browser while Monitor read the
