@@ -122,5 +122,92 @@ check("a missing Loaded / Empty column is warned about",
 res, rows = parsed(sheet(["Plate", "Status", "Note"], [["20C10615", "FH", "waiting at gate"]]))
 check("a Note column is a remark", rows["20C10615"]["remark"], "waiting at gate")
 
+
+# ── the rules a sheet is refused for ───────────────────────────────────────
+# A blank Status is not "no answer": is_running() reads it as a WORKING truck,
+# and the row's note falls back to the remark, so a blank status beside a full
+# remark looks answered the whole way down and gets planned a load. That is
+# what a real Bac Nam sheet did on 18/09/2026 - seventeen trucks diverted to
+# another yard, every Status cell empty, not one warning raised.
+print("\nrefusals")
+
+
+def strict(headers, rows_in):
+    path = sheet(headers, rows_in)
+    res = ri.parse(path, strict=True)
+    os.remove(path)
+    return res
+
+
+H = ["Plate", "Status", "Loaded / Empty", "Back in service", "Remark"]
+
+res = strict(H, [["20C10615", "", "Empty", "", "mine has no coal, moved to Ango"]])
+check("a blank Status is refused", len(res["problems"]), 1)
+check("...naming the column", res["problems"][0]["column"], "Status")
+check("...and the truck", res["problems"][0]["plate"], "20C10615")
+check("...saying it is empty", res["problems"][0]["why"], "Status is empty")
+
+res = strict(H, [["20C10615", "", "Empty", "22/09/2026", "back on the 22nd"]])
+check("a remark and a return date do not excuse a blank Status",
+      len(res["problems"]), 1)
+
+res = strict(H, [["20C10615", "fixing the engine", "Empty", "", ""]])
+check("Status the system cannot read is refused too", len(res["problems"]), 1)
+check("...and it quotes what was written",
+      '"fixing the engine"' in res["problems"][0]["why"], True)
+
+res = strict(H, [["20C10615", "Maintenance until Friday", "Empty", "", ""]])
+check("a REASON written as a sentence is still an answer", res["problems"], [])
+
+res = strict(H, [["20C10615", "Empty", "Empty", "", ""]])
+check("Loaded/Empty in the Status column is refused, not just warned",
+      len(res["problems"]), 1)
+check("...and says where it belongs",
+      "Loaded / Empty column" in res["problems"][0]["why"], True)
+
+# Back in service is the day a stopped truck returns.
+res = strict(H, [["20C10615", "FH", "Loaded", "22/09/2026", ""]])
+check("Back in service on an FH truck is refused", len(res["problems"]), 1)
+check("...naming that column", res["problems"][0]["column"], "Back in service")
+res = strict(H, [["20C10615", "BH", "Empty", "22/09/2026", ""]])
+check("...and on a BH truck", len(res["problems"]), 1)
+res = strict(H, [["20C10615", "Breakdown", "Empty", "22/09/2026", ""]])
+check("...but it is exactly right on a stopped truck", res["problems"], [])
+res = strict(H, [["20C10615", "FH", "Loaded", "", ""]])
+check("an FH truck with no return date is fine", res["problems"], [])
+
+# One bad row stops the file: the route imports all of it or none.
+res = strict(H, [["20C10615", "FH", "Loaded", "", ""],
+                 ["20C10770", "", "Empty", "", ""],
+                 ["20H01353", "BH", "Empty", "", ""]])
+check("a good sheet with one bad row still reports it", len(res["problems"]), 1)
+check("...and the good rows are still parsed", len(res["rows"]), 3)
+
+res = strict(H, [["20C10615", "FH", "Loaded", "", ""],
+                 ["20C10770", "BH", "Empty", "", ""]])
+check("a clean sheet has nothing to answer for", res["problems"], [])
+
+res = strict(["Plate", "Loaded / Empty"], [["20C10615", "Empty"], ["20C10770", "Loaded"]])
+check("no Status column is ONE fault, not one per row", len(res["problems"]), 1)
+check("...and says the column is missing",
+      "no Status column" in res["problems"][0]["why"], True)
+
+# Prod is unchanged until the rule is switched on there.
+path = sheet(H, [["20C10615", "", "Empty", "", ""]])
+lenient = ri.parse(path)
+os.remove(path)
+check("a lenient parse does not judge the rows", "problems" in lenient, False)
+check("...and still reads them", len(lenient["rows"]), 1)
+
+# status_kind is the one place the vocabulary is decided.
+check("FH is a leg", ri.status_kind("FH"), "leg")
+check("back haul is a leg", ri.status_kind("back haul"), "leg")
+check("Maintenance is a reason", ri.status_kind("Maintenance"), "reason")
+check("No driver is a reason", ri.status_kind("No driver"), "reason")
+check("blank is neither", ri.status_kind(""), "")
+check("nonsense is neither", ri.status_kind("fixing engine"), "")
+check("every value the drop-down offers is readable",
+      [s for s in ri.STATUS_CHOICES if not ri.status_kind(s)], [])
+
 print("\n  %d FAILING" % FAIL if FAIL else "\n  all pass")
 sys.exit(1 if FAIL else 0)

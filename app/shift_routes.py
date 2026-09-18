@@ -9,7 +9,7 @@ import json as _json
 import re
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request, Response, abort
+from flask import Blueprint, jsonify, request, Response, abort, current_app
 from flask_login import login_required, current_user
 
 from . import engine
@@ -781,7 +781,11 @@ def upload():
     os.close(fd)
     try:
         f.save(tmp)
-        parsed = readiness_import.parse(tmp)
+        # Sandbox only while the rule beds in: the same sheet still imports on
+        # prod, so a company is not stopped by a check nobody has told them
+        # about yet.
+        parsed = readiness_import.parse(
+            tmp, strict=bool(current_app.config.get("STAGING")))
     finally:
         try:
             os.remove(tmp)
@@ -794,6 +798,20 @@ def upload():
         # and that is what the person uploading needs to read.
         return jsonify(error=parsed.get("error") or "No truck rows were found in that sheet.",
                        warnings=parsed.get("warnings", [])), 400
+
+    # The whole sheet or none of it. A part-imported file leaves a day that is
+    # half one version and half another, and nobody can see which rows are
+    # which - and these faults are the kind that put a truck into the plan
+    # without anyone declaring it, so they are refused rather than warned about.
+    bad = parsed.get("problems") or []
+    if bad:
+        plates = sorted({p["plate"] for p in bad if p.get("plate")})
+        return jsonify(
+            error="%d row(s) in this file cannot be read as an answer, so none "
+                  "of it was imported. Fix them in the sheet and upload it "
+                  "again." % len(bad),
+            code="invalid", problems=bad, plates=plates,
+            warnings=parsed.get("warnings", [])), 400
 
     roster = _roster(sub_id) if sub_id else {}
     on_sheet = {r["key"] for r in rows}

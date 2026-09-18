@@ -138,9 +138,13 @@ def _find_header(ws, limit=30):
     return None, {}, []
 
 
-def parse(path):
+def parse(path, strict=False):
     """-> {'rows': [...], 'header_row': n, 'columns': [...], 'warnings': [...],
-           'error': message when the sheet is refused}"""
+           'error': message when the sheet is refused}
+
+    strict=True also returns 'problems': rows that break the Status and
+    Back-in-service rules. The caller decides what to do with them; parsing is
+    the same either way, so a sheet reads identically on both boxes."""
     wb = load_workbook(path, data_only=True)
     ws = None
     for name in ("Readiness", "Sheet1"):
@@ -213,6 +217,10 @@ def parse(path):
         rec = {
             "plate": str(raw).strip(),
             "key": key,
+            # The Status cell exactly as it was written, kept so a refusal can
+            # quote it back. `activity` has already been normalised, and a
+            # misplaced "Loaded" has been blanked out of it.
+            "status_cell": text(r, "status"),
             "location": text(r, "location"),
             "status": load_word(load_raw) or load_raw,
             "activity": activity,
@@ -234,8 +242,16 @@ def parse(path):
 
     # later row wins on duplicates
     rows = list({r["key"]: r for r in rows}.values())
-    return {"rows": rows, "header_row": hrow, "columns": sorted(cols),
-            "sheet": ws.title, "warnings": warnings}
+    out = {"rows": rows, "header_row": hrow, "columns": sorted(cols),
+           "sheet": ws.title, "warnings": warnings}
+    if strict:
+        # No Status column at all is one fault, not fifty-eight empty cells.
+        out["problems"] = (
+            [{"row": hrow, "plate": "", "column": "Status",
+              "why": "This sheet has no Status column, so no truck on it says "
+                     "whether it is running"}]
+            if "status" not in cols else problems(rows))
+    return out
 
 
 # Words that mean the truck is NOT available to run today. Matched as substrings,
@@ -257,3 +273,65 @@ def is_running(activity):
     if not a:
         return True
     return not any(w in a for w in NOT_RUNNING)
+
+
+# What Status is allowed to say: the leg while a truck works, or one of the
+# reasons it does not. The same list the declaration page's drop-down offers.
+STATUS_CHOICES = ("FH", "BH", "Maintenance", "Breakdown", "Repair", "Accident",
+                  "No driver", "Standby", "Paperwork hold", "Not available")
+
+
+def status_kind(status):
+    """What the Status cell resolves to: 'leg', 'reason', or '' for neither.
+
+    'reason' is still matched as a substring, because subcontractors write
+    sentences - "Maintenance until Friday" is an answer. '' is the dangerous
+    case: it is a cell the system cannot read, not a cell that says nothing.
+    """
+    s = str(status or "").strip()
+    if not s:
+        return ""
+    if leg_word(s):
+        return "leg"
+    return "" if is_running(s) else "reason"
+
+
+def problems(rows):
+    """Rows a sheet must not be uploaded with. -> [{row, plate, column, why}]
+
+    Both rules are about a truck joining the day that nobody declared.
+
+    Status must resolve to one of the given values. A blank does not mean "no
+    answer" to the rest of the system - is_running() reads it as a WORKING
+    truck, and _declared_row falls back to the remark for the note, so a blank
+    status beside a full remark looks answered all the way down the chain and
+    is planned a load. Text matching no keyword does exactly the same thing:
+    the template's own instructions warn that "fixing engine" is counted as
+    running. Neither is something to warn about after the fact.
+
+    Back in service is the day a stopped truck returns, so it belongs only on a
+    truck that is stopped. Beside FH or BH it contradicts the cell next to it,
+    and there is no way to tell which of the two was meant.
+    """
+    out = []
+    for r in rows:
+        raw = str(r.get("status_cell") or "").strip()
+        kind = status_kind(r.get("activity"))
+        if not kind:
+            if not raw:
+                why = "Status is empty"
+            elif load_word(raw):
+                why = ('Status says "%s" - that belongs in the Loaded / Empty '
+                       "column, not here" % raw)
+            else:
+                why = ('Status says "%s", which is not one of the values the '
+                       "system reads" % (raw[:40] + ("..." if len(raw) > 40 else "")))
+            out.append({"row": r.get("row"), "plate": r.get("plate"),
+                        "column": "Status", "why": why})
+        elif kind == "leg" and r.get("back_in_service"):
+            out.append({"row": r.get("row"), "plate": r.get("plate"),
+                        "column": "Back in service",
+                        "why": "Back in service is filled on a %s truck - that "
+                               "date is only for a truck that is out of service"
+                               % leg_word(r.get("activity"))})
+    return out

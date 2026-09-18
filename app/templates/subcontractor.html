@@ -148,6 +148,9 @@
   .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
   .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
   .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
+  /* A refusal, not a caution: the sheet was not imported at all. */
+  .n-bad{background:#2b1414;border:1px solid #5e2626;color:#ffb3b3}
+  .n-bad th{color:#ff8f8f;font-weight:700}
 </style>
 {% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
@@ -758,6 +761,38 @@ async function send(f){
       fd.append('force', '1');
       r = await fetch('/api/shift/upload', {method:'POST', body: fd});
       j = await r.json();
+    }
+    // A refused sheet is only useful if it says WHICH rows and why - the
+    // person fixing it is looking at the spreadsheet, so lead with the row
+    // number and the plate they can find in it.
+    if (r.status === 400 && j.code === 'invalid'){
+      m.textContent = 'Not imported.'; m.className = 'msg err';
+      const p = j.problems || [];
+      const shown = p.slice(0, 20);
+      $('#upDetail').innerHTML =
+        '<div class="note n-bad"><b>' + esc(j.error) + '</b>'
+        + '<table style="width:100%;margin-top:8px;border-collapse:collapse;font-size:12.5px">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:3px 8px 3px 0">Row</th>'
+        + '<th style="text-align:left;padding:3px 8px 3px 0">Truck</th>'
+        + '<th style="text-align:left;padding:3px 8px 3px 0">Column</th>'
+        + '<th style="text-align:left;padding:3px 0">What is wrong</th></tr></thead><tbody>'
+        + shown.map(function(x){
+            return '<tr><td style="padding:2px 8px 2px 0">' + esc(String(x.row || ''))
+              + '</td><td style="padding:2px 8px 2px 0;white-space:nowrap">'
+              + esc(x.plate || '') + '</td>'
+              + '<td style="padding:2px 8px 2px 0;white-space:nowrap">'
+              + esc(x.column || '') + '</td>'
+              + '<td style="padding:2px 0">' + esc(x.why || '') + '</td></tr>';
+          }).join('')
+        + '</tbody></table>'
+        + (p.length > shown.length
+            ? '<div style="margin-top:6px">…and ' + (p.length - shown.length)
+              + ' more row(s).</div>' : '')
+        + '<div style="margin-top:8px">Status must say one of: '
+        + esc(STATUS.join(', ')) + '. Back in service is only for a truck that '
+        + 'is not running.</div></div>';
+      return;
     }
     if (!r.ok) throw new Error(j.error || 'Upload failed');
     m.textContent = 'Filled ' + j.imported + ' truck(s) from ' + f.name
