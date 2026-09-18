@@ -145,13 +145,12 @@ try {
       return (store['listBody'].innerHTML.match(/<tr/g) || []).length - 1;
     })(), 2);
 
-  // The No# column: staging only, and it numbers what is ON SCREEN. A filtered
+  // The No# column numbers what is ON SCREEN. A filtered
   // table that still read 1, 4, 5 would be a worse answer to "which one am I
   // on" than no column at all.
-  is('off the sandbox there is no No# column', html2.indexOf('c-no') >= 0, false);
-  vm.runInContext("TV.filters = {}; window.STAGING = true; drawRows();", sandbox);
+  vm.runInContext("TV.filters = {}; drawRows();", sandbox);
   const numbered = store['listBody'].innerHTML;
-  is('on the sandbox the No# header is there',
+  is('the No# header is there',
      numbered.indexOf('<th class="c-no"') >= 0, true);
   is('...with no sort menu on it', /<th class="c-no"[^>]*data-col/.test(numbered), false);
   is('...and it is the first column',

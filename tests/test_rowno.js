@@ -22,19 +22,13 @@ console.log('\n  rowno.js');
 {
   const g = {};
   vm.runInNewContext(fs.readFileSync('app/static/rowno.js', 'utf8'), {window: g});
-  is('off the sandbox the header is nothing', g.noHead(), '');
-  is('...and so is the cell', g.rowNo(0), '');
-  g.STAGING = true;
-  is('on the sandbox the header is a plain th',
+  is('the header is a plain th',
      g.noHead(), '<th class="c-no" title="Row number, as shown">No#</th>');
   is('...carrying no data-col, so no menu opens', /data-col|data-c=/.test(g.noHead()), false);
   is('the first row reads 1, not 0', g.rowNo(0), '<td class="c-no">1</td>');
   is('the tenth row reads 10', g.rowNo(9), '<td class="c-no">10</td>');
   is('a two-row header spans both',
      g.noHead2(), '<th class="c-no" rowspan="2" title="Row number, as shown">No#</th>');
-  is('the flag is read at call time, not at load', (function(){
-      g.STAGING = false; return g.rowNo(3);
-    })(), '');
 }
 
 // ── a stub DOM the two pages can draw into ─────────────────────────────────
@@ -103,10 +97,6 @@ try {
              can_decide:true, reject_reason:''}]
   }) + '; draw();', sandbox);
 
-  const off = store['body'].innerHTML;
-  is('off the sandbox there is no number column', /c-no/.test(off), false);
-
-  vm.runInContext('window.STAGING = true; draw();', sandbox);
   const on = store['body'].innerHTML;
   is('the header is there once per card', (on.match(/<th class="c-no"/g) || []).length, 1);
   is('...leading the header row', on.indexOf('<thead><tr><th class="c-no"') >= 0, true);
@@ -164,12 +154,6 @@ try {
   });
 
   const run = async () => {
-    vm.runInContext('window.STAGING = false;', sandbox);
-    await vm.runInContext('run()', sandbox);
-    const off = store['body'].innerHTML;
-    is('off the sandbox the issued plan has no number column', /c-no/.test(off), false);
-
-    vm.runInContext('window.STAGING = true;', sandbox);
     await vm.runInContext('run()', sandbox);
     const on = store['body'].innerHTML;
     is('the issued plan is numbered', nos(on), '1,2,3');
@@ -235,6 +219,21 @@ function wiring(){
   is('every truck list numbers its rows', noCells, []);
   is('...and each has a header to match', noHeadless, []);
   is('...and each index is bound by its loop', unbound, []);
+
+  // The shared style block must parse. A stray line left outside a comment
+  // becomes part of the NEXT selector, and the browser drops that whole rule
+  // silently - the numbers still render, just unstyled, which is easy to miss.
+  const inc = fs.readFileSync('app/templates/_rowno.html', 'utf8');
+  const css = (inc.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  is('no unbalanced comment markers', /\/\*|\*\//.test(bare), false);
+  is('nothing stray outside a rule', bare.replace(/[^{}]+\{[^{}]*\}/g, '').trim(), '');
+  const selectors = (bare.match(/([^{}]+)\{/g) || [])
+    .map(s => s.slice(0, -1).trim().replace(/\s+/g, ' '));
+  is('every selector is well formed',
+     selectors.filter(s => !/^[-\w\s.,:#()[\]="'>+~*]+$/.test(s)), []);
+  is('...and the number cell is one of them',
+     selectors.some(s => /td\.c-no/.test(s)), true);
 
   // The flag reaches every page, either directly or through base.html.
   const pages = ['shift_board', 'subcontractor', 'approvals', 'dispatch_planner',

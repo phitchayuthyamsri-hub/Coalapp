@@ -252,8 +252,7 @@ is('...and normalised', gr.rows[0].time, '06:00');
 console.log('');
 vm.runInContext(fs.readFileSync('app/static/rowno.js','utf8'), sandbox, {filename:'rowno.js'});
 
-function drawn(staging){
-  sandbox.window.STAGING = staging;
+function drawn(){
   const out = {innerHTML:'', dataset:{}, setAttribute(){}, focus(){},
     addEventListener(){}, removeEventListener(){},
     querySelector(){ return null; }, querySelectorAll(){ return []; }};
@@ -263,11 +262,8 @@ function drawn(staging){
   return out.innerHTML;
 }
 
-const plain = drawn(false);
-is('off the sandbox the grid has no number column', /c-no/.test(plain), false);
-
-const num = drawn(true);
-is('on the sandbox the header is there', /<th class="c-no"[^>]*>No#<\/th>/.test(num), true);
+const num = drawn();
+is('the header is there', /<th class="c-no"[^>]*>No#<\/th>/.test(num), true);
 is('...and it opens no column menu', /<th class="c-no"[^>]*data-c/.test(num), false);
 is('...and it leads the header row', num.indexOf('<thead><tr><th class="c-no"') >= 0, true);
 is('every row is numbered from 1', (num.match(/<td class="c-no">(\d+)<\/td>/g) || [])

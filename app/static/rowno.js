@@ -8,31 +8,26 @@
  * thing a row is addressed by - the tables keep their own row indexes for that,
  * which is what stops an edit landing on a different truck after a sort.
  *
- * window.STAGING is written by _rowno.html, from COALAPP_ENV on the server, and
- * is read at call time - so a page can flip it and redraw, which is how the
- * tests exercise both states.
+ * Tried on the sandbox first, live everywhere since 18/09/2026.
  */
 (function (g) {
   'use strict';
-
-  function on() { return !!g.STAGING; }
 
   /* The header cell. No data-col / data-c attribute on purpose: the column
    * menus are wired by those attributes, and a number has nothing to sort or
    * filter by. */
   g.noHead = function () {
-    return on() ? '<th class="c-no" title="Row number, as shown">No#</th>' : '';
+    return '<th class="c-no" title="Row number, as shown">No#</th>';
   };
 
   /* The row's cell. Takes the position in the VIEW, zero-based. */
   g.rowNo = function (n) {
-    return on() ? '<td class="c-no">' + (n + 1) + '</td>' : '';
+    return '<td class="c-no">' + (n + 1) + '</td>';
   };
 
   /* For a header that spans two rows, so the number sits beside the other
    * identifying columns rather than above a sub-heading of its own. */
   g.noHead2 = function () {
-    return on()
-      ? '<th class="c-no" rowspan="2" title="Row number, as shown">No#</th>' : '';
+    return '<th class="c-no" rowspan="2" title="Row number, as shown">No#</th>';
   };
 })(typeof window !== 'undefined' ? window : this);

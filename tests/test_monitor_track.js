@@ -110,8 +110,9 @@ try {
      out.indexOf('data-col="fh:mine:plan"') >= 0, true);
   is('so is Actual', out.indexOf('data-col="fh:port:act"') >= 0, true);
   is('sub-headers keep their own class', /class="hd sub2"/.test(out), true);
+  // Five identifying columns, plus the row number that sits with them.
   is('the id columns still span both header rows',
-     (out.match(/rowspan="2"/g) || []).length, 5);
+     (out.match(/rowspan="2"/g) || []).length, 6);
   is('the default order follows the corridor, mine first',
      plates(), ['20H00717','20C10770','20C10615','20H00715']);
   is('every truck carries a team-remark box',
@@ -161,12 +162,8 @@ try {
   // would be nonsense, and a th on the second row would shift the odd/even the
   // Plan|Actual pair borders are drawn from.
   vm.runInContext("LEG = 'fh'; TV.filters = {}; TV.sortSeq = []; drawTrack();", sandbox);
-  is('off the sandbox the monitor has no number column',
-     store['track'].innerHTML.indexOf('c-no') >= 0, false);
-
-  vm.runInContext("window.STAGING = true; drawTrack();", sandbox);
   const mon = store['track'].innerHTML;
-  is('on the sandbox the number leads the first header row',
+  is('the number leads the first header row',
      mon.indexOf('<thead><tr><th class="c-no"') >= 0, true);
   is('...spanning both header rows', /<th class="c-no" rowspan="2"/.test(mon), true);
   is('...and appearing once only', (mon.match(/<th class="c-no"/g) || []).length, 1);

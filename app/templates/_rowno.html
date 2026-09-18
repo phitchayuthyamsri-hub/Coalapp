@@ -1,12 +1,13 @@
 {# The row-number column, shared by every page that lists trucks.
 
-   Two things only: which box this is, and how the column looks. The pages
-   themselves decide where the cell goes, because no two of these tables are
-   built the same way.
+   Two things only: the column itself and how it looks. The pages decide where
+   the cell goes, because no two of these tables are built the same way.
 
-   The flag is its own one-line block so the pages' script blocks stay plain
-   JavaScript - the row tests load those blocks and run them, and a Jinja tag
-   in the middle would make them unloadable.
+   STAGING says which box this is. The column no longer reads it - it is live
+   everywhere since 18/09/2026 - but the flag stays because it is how the next
+   thing gets tried on the sandbox first. It is its own one-line block so the
+   pages' script blocks stay plain JavaScript: the row tests load those blocks
+   and run them, and a Jinja tag in the middle would make them unloadable.
 
    Include it inside <head>, before the page's own script. #}
 <script>window.STAGING = {{ 'true' if STAGING else 'false' }};</script>
@@ -14,10 +15,12 @@
 <style>
   /* Counts the rows as they are SHOWN. A filtered or re-sorted table starts
      again at 1, so the number answers "where am I" and nothing else - it is
-     never an id, and never saved. */
-     The two colour names are the shift pages'; the older tool pages call the
-     same two --muted and --ink, and the literal is for anything that names
-     neither. An undefined var with no fallback drops the whole declaration. */
+     never an id, and never saved.
+
+     The first colour name in each fallback chain is the shift pages'; the
+     older tool pages call the same two --muted and --ink, and the literal is
+     for anything that names neither. An undefined var with no fallback drops
+     the whole declaration. */
   th.c-no,td.c-no{width:34px;min-width:30px;text-align:right;white-space:nowrap;
     color:var(--mut,var(--muted,#8b9ab4));font-variant-numeric:tabular-nums;
     font-size:11.5px;font-weight:600}
