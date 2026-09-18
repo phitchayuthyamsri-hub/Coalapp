@@ -1412,7 +1412,7 @@ input[type="date"] { width: 100%; }
 .anchor-list { overflow-x: auto; }
 .anchor-list li, .anchor-list-head {
   display: grid;
-  grid-template-columns: 22px 14px 105px 16px 16px 16px 100px 110px 48px 95px 95px 64px;
+  grid-template-columns: 22px 14px minmax(140px, 1fr) 16px 16px 16px;
   align-items: center;
   gap: 5px;
   width: max-content;
@@ -1433,7 +1433,7 @@ input[type="date"] { width: 100%; }
   top: 0;
   z-index: 2;
 }
-.anchor-list li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.anchor-list li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rc-hidden { visibility: hidden; }
 .anchor-list li:last-child { border-bottom: none; }
 .anchor-list li:hover { background: var(--panel2); }
@@ -2297,7 +2297,8 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <div class="nav-group">
     <button type="button" class="nav-group-btn">Setting ▾</button>
     <div class="nav-group-menu">
-      <button data-page="anchors">Parameter</button>
+      <button data-page="anchors">Location</button>
+      <button data-page="route">Route</button>
       <!-- GPS Data (manual xlsx upload) retired 18/09/2026: GPS Capture pulls the
            positions itself. The panel below stays in the markup on purpose - two
            listeners bind to it unguarded at boot - it is just no longer reachable.
@@ -2332,7 +2333,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <div class="anchors-side">
       <div class="tab-bar" style="margin-bottom:10px">
         <button class="tab-btn active" data-atab="anchors">Anchor</button>
-        <button class="tab-btn" data-atab="routes">Routes</button>
+        <button class="tab-btn" data-atab="routes">Roads</button>
         <button class="tab-btn" data-atab="expected">Expected</button>
         <button class="small secondary" id="btnToggleMap" style="margin-left:auto">Hide map</button>
       </div>
@@ -2340,7 +2341,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <!-- ANCHORS TAB -->
       <div data-atab-panel="anchors">
         <div class="panel">
-          <h2>Anchors
+          <h2>Locations
             <button class="small" id="btnDraw">+ Draw</button>
             <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
@@ -2351,10 +2352,14 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="secondary small" id="btnClearAnchors">Clear all</button>
           </div>
           <input type="file" id="loadJsonInput" accept=".json" style="display:none">
-          <div class="help-text">Draw a polygon on the map. Double-click to finish. Use ✎ to edit shape, ▲▼ to reorder. Changes apply when you press <b>Apply</b>.</div>
+          <div class="help-text">Draw a polygon on the map. Double-click to finish. Click a name to rename it, ✎ to edit the shape, ▲▼ to reorder. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
         </div>
 
-        <div class="panel">
+        <!-- Sequence setup left this page on 18/09/2026. The order trucks pass
+             through Locations is a ROUTE now, built on the Route page. The
+             engine's role mapping stays on the server, untouched, until
+             monitoring reads routes. -->
+        <div class="panel" style="display:none">
           <h2>Sequence setup</h2>
           <div class="role-detail" style="display:block">
             <div class="row"><label>XPPL outer</label><select id="role_xppl"></select></div>
@@ -2617,6 +2622,13 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 </div>
 
 <!-- ============ PAGE: DISTANCES ============ -->
+<!-- ============ PAGE: ROUTE (embedded) ============ -->
+<div class="page" data-page-panel="route">
+  <div class="page-pad">
+    <iframe id="routeFrame" data-src="/route?embed=1" title="Route"
+            style="width:100%;height:calc(100vh - 230px);min-height:560px;border:1px solid var(--line);border-radius:10px;background:#0b1220"></iframe>
+  </div>
+</div>
 <!-- ============ PAGE: GPS CAPTURE (embedded) ============ -->
 <div class="page" data-page-panel="ops">
   <div class="page-pad">
@@ -3879,7 +3891,7 @@ function renderAnchorList() {
   if (STATE.anchors.length) {
     const headRow = document.createElement('li');
     headRow.className = 'anchor-list-head';
-    headRow.innerHTML = '<span></span><span></span><span>Name</span><span></span><span></span><span></span><span>Caption</span><span>Category</span><span>Dwell</span><span>Role</span><span>Same as</span><span>Route</span>';
+    headRow.innerHTML = '<span></span><span></span><span>Name</span><span></span><span></span><span></span>';
     ul.appendChild(headRow);
   }
   STATE.anchors.forEach((a, idx) => {
@@ -3901,32 +3913,6 @@ function renderAnchorList() {
       ${overrideMark}
       <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
-      <div class="anchor-meta">
-        <input class="am-caption" data-act="caption" type="text" placeholder="caption (short)" value="${escapeHtml(a.caption || '')}" title="Short label shown on Route tab">
-        <select class="am-cat" data-act="cat" title="Location category">
-          <option value=""${!a.category ? ' selected' : ''}>— category —</option>
-          <option value="origin"${a.category === 'origin' ? ' selected' : ''}>Origin</option>
-          <option value="destination"${a.category === 'destination' ? ' selected' : ''}>Destination</option>
-          <option value="origindest"${a.category === 'origindest' ? ' selected' : ''}>Origin + Destination</option>
-          <option value="wh"${a.category === 'wh' ? ' selected' : ''}>WH</option>
-          <option value="conjunction"${a.category === 'conjunction' ? ' selected' : ''}>Conjunction zone</option>
-          <option value="maintenance"${a.category === 'maintenance' ? ' selected' : ''}>Maintenance area</option>
-        </select>
-        <label class="am-dwell" title="Minimum dwell (min) for a stop to count — applies on next import">≥<input data-act="dwell" type="number" min="0" step="1" value="${a.minDwellMin != null ? a.minDwellMin : 5}">m</label>
-        <select class="am-role" data-act="role" title="Sequence role (XPPL / Lalay / QL49 / ChanMay / Detour spine)">
-          ${(() => {
-            const labels = { xppl: 'XPPL outer', loading: 'Loading', border: 'Lalay border', ql49: 'QL49', ql49b: 'QL49 (B side)', ql49p: 'QL49 (P side)', port: 'ChanMay port', detour: 'Detour' };
-            const cur = ROLE_IDS.find(r => STATE.roles[r] === a.id) || '';
-            return `<option value=""${!cur ? ' selected' : ''}>— role —</option>` +
-              ROLE_IDS.map(r => `<option value="${r}"${cur === r ? ' selected' : ''}>${labels[r] || r}</option>`).join('');
-          })()}
-        </select>
-        <select class="am-alias" data-act="alias" title="Treat this anchor as the SAME location as another (merges duplicates everywhere)">
-          <option value=""${!a.aliasOf ? ' selected' : ''}>— same as —</option>
-          ${STATE.anchors.filter(x => x.id !== a.id).map(x => `<option value="${x.id}"${a.aliasOf === x.id ? ' selected' : ''}>${escapeHtml(anchorLabel(x))}</option>`).join('')}
-        </select>
-        <button class="am-eye${a.routeHidden ? ' off' : ''}" data-act="routehide" title="Show/hide on Route tab (and Cycle path)">${a.routeHidden ? '🚫 route' : '👁 route'}</button>
-      </div>
     `;
     li.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, -1); });
     li.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, 1); });
@@ -7284,6 +7270,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'vlist') { _vlLoadSaved(); }
     if (t === 'gpscap') { const _gf = document.getElementById('gpscapFrame'); if (_gf && !_gf.getAttribute('src')) _gf.setAttribute('src', _gf.dataset.src); }
     if (t === 'ops') { const _of = document.getElementById('opsFrame'); if (_of && !_of.getAttribute('src')) _of.setAttribute('src', _of.dataset.src); }
+    if (t === 'route') { const _rf = document.getElementById('routeFrame'); if (_rf && !_rf.getAttribute('src')) _rf.setAttribute('src', _rf.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }
@@ -7343,9 +7330,9 @@ document.querySelectorAll('.tab-btn[data-atab]').forEach(btn => {
 
 // Apply button (Anchors page) — gate recompute behind explicit press
 async function applyAnchors() {
-  const btn = document.getElementById('btnApplyAnchors');
+  const btn = document.getElementById('btnApplyAnchors');   // may be gone: Sequence Setup left
   const top = document.getElementById('btnSaveAnchors');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   if (top) { top.disabled = true; top.textContent = 'Saving…'; }
   try {
     await pushAnchorsToServer();
@@ -7356,14 +7343,14 @@ async function applyAnchors() {
     saveAnchorsToStorage(); saveRolesToStorage();
     toast(e.message || 'Could not save to the server', true);
   } finally {
-    btn.disabled = false; btn.textContent = 'Apply — save to server';
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply — save to server'; }
     if (top) top.disabled = false;
     paintSaveButton();
   }
   renderAnchorFilter();
   renderDistTable();
 }
-document.getElementById('btnApplyAnchors').addEventListener('click', applyAnchors);
+(function(){ const b = document.getElementById('btnApplyAnchors'); if (b) b.addEventListener('click', applyAnchors); })();
 (function(){ const b = document.getElementById('btnSaveAnchors'); if (b) b.addEventListener('click', applyAnchors); })();
 // The header button carries the count of zones waiting to be saved, and
 // turns amber while there are any - the same colour as the row's badge.
@@ -7416,7 +7403,7 @@ async function syncAnchorsFromServer() {
   STATE.roles = roles;
   STATE.retiredAnchorIds = [];
   saveAnchorsToStorage(); saveRolesToStorage();
-  renderAnchorList(); renderAnchorFilter(); renderRoleDropdowns();
+  renderAnchorList(); renderAnchorFilter();
   try { populateLegAnchorDropdowns(); } catch (e) {}
   try { recomputeVisits(); } catch (e) {}
   if (unsaved.length) toast(unsaved.length + ' zone' + (unsaved.length === 1 ? '' : 's') + ' drawn here ' + (unsaved.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
@@ -7448,10 +7435,9 @@ async function pushAnchorsToServer() {
     await fetch('/api/anchors/' + id, { method: 'DELETE' });
   }
   STATE.retiredAnchorIds = [];
-  const roles = {};
-  ROLE_IDS.forEach(k => { let v = STATE.roles[k]; if (!v) return; v = idMap[v] || v; roles[k] = Number(v); });
-  const rr = await fetch('/api/anchors/roles', { method: 'PUT', headers: hdr, body: JSON.stringify({ roles }) });
-  if (!rr.ok) throw new Error('Zones saved, but the roles could not be');
+  // Roles are not sent. Sequence Setup left this page on 18/09/2026: the
+  // engine's mapping stays on the server exactly as it is, until monitoring
+  // reads a truck's stops from its route.
 }
 
 // Inner tab switching (Visits / Sequence / Timeline) on the Data page

@@ -19,6 +19,7 @@ from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
                      PlanSetting, RouteLeg, PlanSnapshot, Notice)
 from . import readiness_import
 from . import geofence
+from .models import Route as _Route
 from . import planner
 
 bp = Blueprint("shift", __name__, url_prefix="/api/shift")
@@ -140,6 +141,16 @@ def monitor_page():
     if "monitor" not in _views():
         abort(403)
     return render_template("monitor.html")
+
+
+@page_bp.route("/route")
+@login_required
+def route_page():
+    """Named routes: the order of Locations a truck on that route passes
+    through, and which trucks are locked to it. Reference data, so anyone
+    logged in may read it; writing is gated in the API."""
+    from flask import render_template
+    return render_template("route.html")
 
 
 @page_bp.route("/readiness")
@@ -589,8 +600,16 @@ def _list_payload(dl, day):
         if dl.subcontractor_id:
             roster = {c.key: c.plate for c in FleetCommitment.query.filter_by(
                 subcontractor_id=dl.subcontractor_id, released_on="").all()}
+        # The truck's standing route, for the Route column on the declaration
+        # list. Looked up by normalised plate, the way trucks are matched
+        # everywhere else here.
+        _trucks = {engine.norm_plate(t.plate): t for t in Truck.query.all()}
+        _rnames = {x.id: x.name for x in _Route.query.all()}
         for r in recs:
+            _t = _trucks.get(r.key or engine.norm_plate(r.plate))
             rows.append({
+                "route": _rnames.get(_t.route_id, "") if _t and _t.route_id else "",
+                "route_id": (_t.route_id if _t else None),
                 "plate": r.plate, "sub": short,
                 "ready": bool(r.ready),
                 "state": r.state or "pending",

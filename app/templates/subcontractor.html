@@ -269,6 +269,7 @@ const NOT_RUNNING = STATUS.slice(2);
 const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
                 'Workshop','Garage'];
 let ME = null, SUBID = null, ROWS = [], SUGGEST = {}, MAY_EDIT = false;
+let ROUTES = [];   // the named routes, with the plates locked to each
 let LIST = null, LOCKED = false, PICKER = null, SUBS = [];
 
 // Which companies filed something on the day now showing.
@@ -311,6 +312,7 @@ async function load(){
   let list = {rows: []}, sug = {rows: []};
   try { list = await jget('/api/shift/list?date=' + day + subQ()); } catch (e) {}
   try { sug = await jget('/api/shift/suggest?date=' + day + subQ()); } catch (e) {}
+  try { ROUTES = await jget('/api/route-seqs'); } catch (e) { ROUTES = []; }
 
   SUGGEST = {};
   (sug.rows || []).forEach(r => { SUGGEST[r.plate] = r; });
@@ -337,6 +339,11 @@ async function load(){
     ? Object.keys(byPlate)
     : (sug.rows || []).map(r => r.plate);
 
+  // A truck's route is a standing fact about the truck, not a line on the
+  // sheet: read from the routes themselves, so an undeclared truck shows it too.
+  const _k = v => String(v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const routeOfPlate = {};
+  ROUTES.forEach(r => (r.trucks || []).forEach(pl => { routeOfPlate[_k(pl)] = r.name; }));
   ROWS = plates.sort().map(pl => {
     const d = byPlate[pl] || {}, g = SUGGEST[pl] || {};
     const declared = d.plate !== undefined;
@@ -349,6 +356,7 @@ async function load(){
     return {
       plate: pl,
       driver: g.driver || '',
+      route: routeOfPlate[_k(pl)] || d.route || '',
       status: d.note || d.reason || (declared ? '' : g.status || ''),
       load: d.sheet_status || (declared ? '' : g.load || ''),
       location: d.location || (declared ? '' : g.location || ''),
@@ -463,6 +471,8 @@ function draw(){
   const cols = [
     {key:'plate',    label:'Truck',          width:'92px',  ro:true},
     {key:'driver',   label:'Driver',         width:'130px', ro:true},
+    {key:'route',    label:'Route',          width:'140px', list: ROUTES.map(r => r.name),
+     hint:'one route per truck'},
     {key:'status',   label:'Status',         width:'120px', list:STATUS},
     {key:'load',     label:'Loaded / Empty', width:'96px',  list:['Loaded','Empty']},
     {key:'location', label:'Location',       width:'125px', list:PLACES},
@@ -494,7 +504,7 @@ function draw(){
             + esc(g.why || 'not seen') + '</span>';
       }
     },
-    onChange: () => paint()
+    onChange: (row, key, val) => { paint(); if (key === 'route') lockRoute(row, val); }
   });
   GRID.onSay = (m) => { const el = $('#gridMsg'); el.textContent = m; el.className = 'msg ok'; };
   GRID.draw();
@@ -809,6 +819,32 @@ async function send(f){
     document.querySelector('.tabs button[data-pane=type]').click();
   } catch (e) {
     m.textContent = e.message || 'Upload failed'; m.className = 'msg err';
+  }
+}
+
+// One truck, one route. Saved the moment it is chosen, because it is a fact
+// about the truck that outlives this sheet; the sheet's Save does not carry
+// it. A refusal puts the cell back the way it was.
+async function lockRoute(row, name){
+  const m = $('#saveMsg');
+  const r = ROUTES.find(x => x.name === (name || ''));
+  if (name && !r) { m.textContent = 'Unknown route ' + name; m.className = 'msg err'; return; }
+  const prev = (ROUTES.find(x => (x.trucks || []).some(p => p === row.plate)) || {}).name || '';
+  try {
+    const res = await fetch('/api/trucks/' + encodeURIComponent(row.plate) + '/route', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({route_id: r ? r.id : null})});
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Could not set the route');
+    // keep the local picture honest without a reload
+    ROUTES.forEach(x => { x.trucks = (x.trucks || []).filter(p => p !== row.plate); });
+    if (r) r.trucks = (r.trucks || []).concat([row.plate]).sort();
+    m.textContent = r ? (row.plate + ' locked to ' + r.name) : (row.plate + ' is on no route');
+    m.className = 'msg ok';
+  } catch (e) {
+    row.route = prev;
+    if (GRID) GRID.draw();
+    m.textContent = e.message || 'Could not set the route'; m.className = 'msg err';
   }
 }
 

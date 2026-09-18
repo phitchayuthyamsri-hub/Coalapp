@@ -63,6 +63,24 @@ class Truck(db.Model):
     # is backwards: a truck that has stopped reporting is the one where more
     # requests achieve least.
     gps_last_pull = db.Column(db.DateTime, index=True)
+    # The one route this truck runs. Set on the declaration list, kept here
+    # because a truck keeps its route across days. One column, so one route -
+    # a truck cannot be on two, and readiness will later be split by it.
+    route_id = db.Column(db.Integer, index=True)
+
+
+class Route(db.Model):
+    """A named sequence of Locations: the order a truck on this route is
+    expected to pass through them. Built on the Route page from the zones on
+    the Location page. Monitoring will read a truck's stops from its route
+    and nowhere else; until that lands, the server's fixed role mapping still
+    drives the engine."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    sequence = db.Column(db.JSON, default=list)      # [anchor_id, ...] in order
+    note = db.Column(db.String(300), default="")
+    created_by = db.Column(db.String(80), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class GpsPing(db.Model):

@@ -11,7 +11,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from . import geofence
-from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime,
+from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime, Route,
                      ActivityEvent, DispatchPlanRow, LoadActualRow, SubFleetRow)
 from . import parsers, engine
 
@@ -596,6 +596,174 @@ def anchor_update(aid):
     except ValueError as e:
         return jsonify(error=str(e)), 400
     return jsonify(ok=True, versioned=versioned, anchor=geofence.as_api(a))
+
+
+# ── Routes: named sequences of Locations, and the truck lock ─────────────────
+def _may_edit_routes():
+    return getattr(current_user, "is_admin", False) or \
+        (getattr(current_user, "role", "") or "") in ("planner", "admin")
+
+
+def _plate_key(p):
+    import re as _re
+    return _re.sub(r"[^A-Za-z0-9]", "", str(p or "")).upper()
+
+
+def _may_lock_truck():
+    """Who sets a truck's route on the declaration list: the company, the
+    supervisor checking it, the planner, an admin."""
+    return getattr(current_user, "is_admin", False) or \
+        (getattr(current_user, "role", "") or "") in ("subcontractor", "supervisor",
+                                                       "planner", "admin")
+
+
+def _route_api(r, trucks_by_route, names):
+    seq = []
+    for x in (r.sequence or []):
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            continue
+        seq.append({"id": i, "name": names.get(i, "(retired zone)")})
+    return {"id": r.id, "name": r.name, "note": r.note or "", "sequence": seq,
+            "trucks": sorted(trucks_by_route.get(r.id, []))}
+
+
+def _routes_payload():
+    names = {a.id: a.name for a in Anchor.query.all()}
+    tbr = {}
+    for t in Truck.query.filter(Truck.route_id.isnot(None)).all():
+        tbr.setdefault(t.route_id, []).append(t.plate)
+    return [_route_api(r, tbr, names) for r in Route.query.order_by(Route.name).all()]
+
+
+def _clean_sequence(seq):
+    """Ids of zones in service, in order, no repeats. Anything else is refused
+    by name so the page can say which one."""
+    live = {a.id for a in Anchor.query.filter(Anchor.retired_at.is_(None)).all()}
+    out = []
+    for x in (seq or []):
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            raise ValueError("a sequence holds location ids only")
+        if i not in live:
+            raise ValueError("location %d is not a zone in service" % i)
+        if i in out:
+            raise ValueError("a location appears twice in the sequence")
+        out.append(i)
+    return out
+
+
+@bp.get("/route-seqs")
+@login_required
+def route_seqs():
+    return jsonify(_routes_payload())
+
+
+@bp.post("/route-seqs")
+@login_required
+def route_seq_create():
+    if not _may_edit_routes():
+        return jsonify(error="Only a planner or an admin may create a route"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify(error="a route needs a name"), 400
+    if Route.query.filter(func.lower(Route.name) == name.lower()).first():
+        return jsonify(error="a route called %s already exists" % name), 409
+    try:
+        seq = _clean_sequence(d.get("sequence"))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    r = Route(name=name[:80], sequence=seq, note=(d.get("note") or "")[:300],
+              created_by=current_user.username)
+    db.session.add(r)
+    db.session.commit()
+    return jsonify(ok=True, id=r.id, routes=_routes_payload())
+
+
+@bp.put("/route-seqs/<int:rid>")
+@login_required
+def route_seq_update(rid):
+    if not _may_edit_routes():
+        return jsonify(error="Only a planner or an admin may change a route"), 403
+    r = db.session.get(Route, rid)
+    if not r:
+        return jsonify(error="not found"), 404
+    d = request.get_json(force=True, silent=True) or {}
+    if "name" in d:
+        name = (d.get("name") or "").strip()
+        if not name:
+            return jsonify(error="a route needs a name"), 400
+        dup = Route.query.filter(func.lower(Route.name) == name.lower(), Route.id != rid).first()
+        if dup:
+            return jsonify(error="a route called %s already exists" % name), 409
+        r.name = name[:80]
+    if "sequence" in d:
+        try:
+            r.sequence = _clean_sequence(d.get("sequence"))
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+    if "note" in d:
+        r.note = (d.get("note") or "")[:300]
+    db.session.commit()
+    return jsonify(ok=True, routes=_routes_payload())
+
+
+@bp.delete("/route-seqs/<int:rid>")
+@login_required
+def route_seq_delete(rid):
+    """Refused while trucks are locked to it, unless ?force=1, which unlocks
+    them first - a truck must never point at a route that is not there."""
+    if not _may_edit_routes():
+        return jsonify(error="Only a planner or an admin may delete a route"), 403
+    r = db.session.get(Route, rid)
+    if not r:
+        return jsonify(error="not found"), 404
+    locked = Truck.query.filter_by(route_id=rid).all()
+    if locked and request.args.get("force") != "1":
+        return jsonify(error="%d truck(s) are locked to %s: %s. Move them first, or "
+                             "delete with force to unlock them."
+                             % (len(locked), r.name,
+                                ", ".join(sorted(t.plate for t in locked)[:8])),
+                       code="locked", trucks=sorted(t.plate for t in locked)), 409
+    for t in locked:
+        t.route_id = None
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify(ok=True, routes=_routes_payload())
+
+
+@bp.put("/trucks/<plate>/route")
+@login_required
+def truck_route(plate):
+    """Lock a truck to one route. One column, so one route: setting it moves
+    the truck off whatever it was on. null clears it."""
+    if not _may_lock_truck():
+        return jsonify(error="Your role may not set a truck's route"), 403
+    # Letters and digits only. engine.norm_plate keeps hyphens and spaces, so
+    # "20h-01385" typed on the sheet would never find "20H01385" in the fleet.
+    key = _plate_key(plate)
+    t = next((x for x in Truck.query.all() if _plate_key(x.plate) == key), None)
+    if not t:
+        return jsonify(error="unknown truck %s" % plate), 404
+    d = request.get_json(force=True, silent=True) or {}
+    rid = d.get("route_id")
+    if rid in (None, "", 0):
+        t.route_id = None
+    else:
+        try:
+            rid = int(rid)
+        except (TypeError, ValueError):
+            return jsonify(error="route_id must be a number"), 400
+        if not db.session.get(Route, rid):
+            return jsonify(error="no such route"), 404
+        t.route_id = rid
+    db.session.commit()
+    r = db.session.get(Route, t.route_id) if t.route_id else None
+    return jsonify(ok=True, plate=t.plate, route_id=t.route_id,
+                   route=(r.name if r else ""))
 
 
 # ── Shared key-value store (backs the full tool's localStorage) ──────────────

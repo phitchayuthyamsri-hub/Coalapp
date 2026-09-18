@@ -389,6 +389,8 @@ def _ensure_truck_schema():
     if "gps_last_pull" not in cols:
         db.session.execute(text("ALTER TABLE truck ADD COLUMN gps_last_pull DATETIME"))
         db.session.commit()
+    if "route_id" not in cols:
+        _add_column_racing("truck", "route_id INTEGER")
 
 
 def _ensure_daily_list_schema():
