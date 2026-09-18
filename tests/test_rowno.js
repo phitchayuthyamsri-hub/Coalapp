@@ -197,7 +197,60 @@ try {
   console.log('  PLANNER THREW: ' + e.message); fail++; done();
 }
 
+// ── every page that numbers rows is wired for it ───────────────────────────
+// Three ways to get this half-right, all of them silent until someone opens
+// the page: a cell with no header (every column then names its neighbour), a
+// header with no cell, and - the one that actually happened here - rowNo(i) in
+// a loop that never bound an i.
+function wiring(){
+  console.log('\n  wiring');
+  // A page is its template plus whatever script draws its rows - several put
+  // the header in the markup and the cell in a .js, so the pairing has to be
+  // checked per page, not per file.
+  const T = 'app/templates/', S = 'app/static/';
+  const PAGES = [
+    ['readiness',     [T + 'shift_board.html']],
+    ['subcontractor', [T + 'subcontractor.html', S + 'grid.js']],
+    ['approvals',     [T + 'approvals.html']],
+    ['planner',       [T + 'dispatch_planner.html']],
+    ['monitor',       [T + 'monitor.html']],
+    ['fleet',         [T + 'fleet.html', S + 'js/fleet.js']],
+    ['sub fleet',     [T + 'subfleet.html', S + 'js/subfleet.js']],
+    ['truck status',  [T + 'truckstatus.html', S + 'js/truckstatus.js']],
+    ['data',          [T + 'data.html', S + 'js/data.js']],
+    ['gps capture',   [T + 'gps_capture.html']],
+  ];
+  const noHeadless = [], noCells = [], unbound = [];
+  PAGES.forEach(([name, paths]) => {
+    const s = paths.map(p => fs.readFileSync(p, 'utf8')).join('\n');
+    if (!/\browNo\s*\(/.test(s)) noCells.push(name);
+    if (!(/\bnoHead2?\s*\(/.test(s) || /<th class="c-no"/.test(s))) noHeadless.push(name);
+    // The index must be bound by the loop it is used in.
+    new Set((s.match(/\browNo\s*\(\s*[A-Za-z_$][\w$]*\s*\)/g) || [])
+      .map(m => m.replace(/^\s*rowNo\s*\(\s*|\s*\)\s*$/g, ''))).forEach(nm => {
+        if (!new RegExp('(forEach|map)\\s*\\(\\s*(function\\s*)?\\(?[^)\\n]*\\b'
+                        + nm + '\\b\\s*[,)]').test(s)) unbound.push(name + ':' + nm);
+      });
+  });
+  is('every truck list numbers its rows', noCells, []);
+  is('...and each has a header to match', noHeadless, []);
+  is('...and each index is bound by its loop', unbound, []);
+
+  // The flag reaches every page, either directly or through base.html.
+  const pages = ['shift_board', 'subcontractor', 'approvals', 'dispatch_planner',
+                 'monitor', 'gps_capture', 'base'];
+  const missing = pages.filter(n =>
+    !/\{%\s*include\s+"_rowno\.html"\s*%\}/.test(
+      fs.readFileSync('app/templates/' + n + '.html', 'utf8')));
+  is('every page pulls the flag in', missing, []);
+  const inherits = ['fleet', 'subfleet', 'truckstatus', 'data'].filter(n =>
+    !/\{%\s*extends\s+"base\.html"\s*%\}/.test(
+      fs.readFileSync('app/templates/' + n + '.html', 'utf8')));
+  is('...and the rest inherit it from base', inherits, []);
+}
+
 function done(){
+  wiring();
   console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
   process.exit(fail ? 1 : 0);
 }

@@ -12,6 +12,7 @@
     <div class="subpanel" data-panel="sequence">
       <div class="row"><h2>Cycles</h2><span class="spacer"></span><span id="seqCount" class="muted"></span></div>
       <div class="tablewrap"><table id="seqTable"><thead><tr>
+        {% if STAGING %}<th class="c-no">No#</th>{% endif %}
         <th>Plate</th><th>Cycle date</th><th>Mine in</th><th>Loading</th><th>Border out</th>
         <th>QL49 out</th><th>Port in</th><th>QL49 back</th><th>Border back</th><th>Mine R</th>
         <th>Backhaul</th><th>Complete</th>

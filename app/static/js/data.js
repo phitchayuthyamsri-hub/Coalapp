@@ -21,9 +21,9 @@ async function loadSequences() {
   const d = await api('/api/sequences');
   $('#seqCount').textContent = `${d.count} cycles`;
   const tb = $('#seqTable tbody'); tb.innerHTML = '';
-  d.rows.forEach((r) => {
+  d.rows.forEach((r, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.plate}</td><td>${r.cycle_date}</td><td>${r.xppl_in}</td>
+    tr.innerHTML = `${rowNo(i)}<td>${r.plate}</td><td>${r.cycle_date}</td><td>${r.xppl_in}</td>
       <td>${r.loading_in}</td><td>${r.lalay_out_in}</td><td>${r.ql49_out_in}</td>
       <td>${r.chan_may_in}</td><td>${r.ql49_back_in}</td><td>${r.lalay_back_in}</td>
       <td>${r.xppl_r}</td><td>${r.backhaul_type}</td>

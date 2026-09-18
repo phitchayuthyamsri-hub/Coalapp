@@ -148,7 +148,7 @@
     // outside the addressed grid entirely: the selection box, Ctrl+D and a
     // pasted block never see it, and nothing the user types can land in it.
     var noHead = global.noHead || function () { return ''; };
-    var noCell = global.rowNo || function () { return ''; };
+    var rowNo = global.rowNo || function () { return ''; };
     var head = '<tr>' + noHead() + this.cols.map(function (c, ci) {
       var lv = self.sortLevel(ci);
       var badge = lv < 0 ? ''
@@ -171,7 +171,7 @@
         return '<td data-r="' + vr + '" data-c="' + ci + '"'
           + (c.ro ? ' class="ro"' : '') + '>' + shown + '</td>';
       }).join('');
-      return '<tr class="' + self.rowClass(row) + '">' + noCell(vr) + tds + '</tr>';
+      return '<tr class="' + self.rowClass(row) + '">' + rowNo(vr) + tds + '</tr>';
     }).join('');
 
     this.table.innerHTML = '<thead>' + head + '</thead><tbody>' + body + '</tbody>';

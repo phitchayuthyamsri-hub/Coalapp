@@ -15,9 +15,12 @@
   /* Counts the rows as they are SHOWN. A filtered or re-sorted table starts
      again at 1, so the number answers "where am I" and nothing else - it is
      never an id, and never saved. */
+     The two colour names are the shift pages'; the older tool pages call the
+     same two --muted and --ink, and the literal is for anything that names
+     neither. An undefined var with no fallback drops the whole declaration. */
   th.c-no,td.c-no{width:34px;min-width:30px;text-align:right;white-space:nowrap;
-    color:var(--mut);font-variant-numeric:tabular-nums;font-size:11.5px;
-    font-weight:600}
+    color:var(--mut,var(--muted,#8b9ab4));font-variant-numeric:tabular-nums;
+    font-size:11.5px;font-weight:600}
   th.c-no{cursor:default}
-  tbody tr:hover td.c-no{color:var(--txt)}
+  tbody tr:hover td.c-no{color:var(--txt,var(--ink,#e7ecf5))}
 </style>

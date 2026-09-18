@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GPS Capture — TMS</title>
+{% include "_rowno.html" %}
 {% if maps_key %}
 <script>
   // Google loads asynchronously; anything touching the map waits for this.
@@ -166,11 +167,11 @@ function truckTable(trucks){
   if(!trucks.length) return el('div','empty','No pings captured yet. Configure a provider and press Pull now.');
   const wrap = el('div'); wrap.style.overflow='auto';
   const t = el('table');
-  t.innerHTML = '<thead><tr><th>Truck</th><th>Source</th><th>Last ping</th><th>Pings</th></tr></thead>';
+  t.innerHTML = '<thead><tr>' + noHead() + '<th>Truck</th><th>Source</th><th>Last ping</th><th>Pings</th></tr></thead>';
   const tb = el('tbody');
-  trucks.forEach(r=>{
+  trucks.forEach((r,i)=>{
     const tr = el('tr');
-    tr.innerHTML = '<td class="mono">'+r.plate+'</td><td>'+r.source+'</td><td class="mono">'+(r.last||'—')+'</td><td>'+(r.count||0).toLocaleString()+'</td>';
+    tr.innerHTML = rowNo(i)+'<td class="mono">'+r.plate+'</td><td>'+r.source+'</td><td class="mono">'+(r.last||'—')+'</td><td>'+(r.count||0).toLocaleString()+'</td>';
     tb.appendChild(tr);
   });
   t.appendChild(tb); wrap.appendChild(t); return wrap;

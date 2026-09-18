@@ -12,6 +12,7 @@
     <div class="tablewrap">
       <table id="sfTable">
         <thead><tr>
+          {% if STAGING %}<th class="c-no">No#</th>{% endif %}
           <th>Plate</th><th>Declared haul</th><th>Status</th><th>Location</th>
           <th>Claimed arrive Mine</th><th>Est. arrive Mine</th><th>Δ (est−claim)</th><th>GPS check</th>
         </tr></thead><tbody></tbody>

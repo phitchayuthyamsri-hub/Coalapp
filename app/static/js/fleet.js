@@ -14,10 +14,10 @@ async function loadFleet() {
   $('#fleetCount').textContent = `${list.length} trucks`;
   const tb = $('#fleetTable tbody');
   tb.innerHTML = '';
-  list.forEach((t) => {
+  list.forEach((t, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${t.plate}</td>
+      ${rowNo(i)}<td>${t.plate}</td>
       <td><span class="badge ${STATUS_CLASS[t.status] || ''}">${t.status}</span></td>
       <td>${t.driver || ''}</td>
       <td>${t.phone || ''}</td><td>${t.gps_provider || ''}</td>
