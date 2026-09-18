@@ -42,8 +42,11 @@ FLEET = ("20H01381", "20H01385", "20H01393")
 app = create_app()
 
 
-def entry(statuses, tick=None, decide=None):
-    """Build a day with these declared statuses and read its flow card."""
+def entry(statuses, tick=None, decide=None, times=None):
+    """Build a day with these declared statuses and read its flow card.
+
+    `times` gives a plate its mine arrival as (date, hh:mm). That is what makes
+    a truck plannable, and its absence is what makes a day unplannable."""
     with app.app_context():
         DailyListRow.query.delete()
         DailyList.query.delete()
@@ -55,9 +58,11 @@ def entry(statuses, tick=None, decide=None):
         db.session.add(dl)
         db.session.flush()
         for plate, st in statuses.items():
-            row, _ = sr._declared_row({"plate": plate, "activity": st,
-                                       "remark": "company's own words"},
-                                      dl.id, "pending")
+            payload = {"plate": plate, "activity": st,
+                       "remark": "company's own words"}
+            if times and plate in times:
+                payload["arrive_date"], payload["arrive_time"] = times[plate]
+            row, _ = sr._declared_row(payload, dl.id, "pending")
             if tick and plate in tick:
                 row.state = tick[plate]
             if decide and plate in decide:
@@ -116,6 +121,60 @@ check("the supervisor's stage reports what was sent",
 check("...and the manager is waiting", stage(e, "approve")["state"], "waiting")
 check("...on the right number", stage(e, "approve")["note"],
       "2 truck(s) awaiting approval")
+
+# ── a sheet nothing can be planned from ────────────────────────────────────
+# The planner seeds from trucks arriving at the mine to LOAD. A day of nothing
+# but FH has no arrival times at all: those trucks are already loaded and
+# running to port, so they are delivering, but none is coming back to start a
+# cycle. Before this the chain marched on to the Planner, sat there as
+# "20 approved truck(s), no plan issued yet", and went overdue at 16:30.
+ALL_FH = {p: "FH" for p in FLEET}
+
+print("\nevery truck FH, no mine arrival time - the 19/09 shape")
+e = entry(ALL_FH, tick={p: "applied" for p in FLEET})
+plan = stage(e, "plan")
+check("the planner is not left waiting", plan["state"], "done")
+check("...and says there is nothing to plan",
+      plan["note"], "nothing to plan - no truck is due at the mine")
+check("...and is never overdue for it", plan.get("overdue"), None)
+check("the monitor has nothing to watch", stage(e, "watch")["note"], "nothing to watch")
+check("the manager's decision still stands",
+      stage(e, "approve")["note"], "3 truck(s) awaiting approval")
+check("...so the day is still on the manager's desk", e["now"]["who"], "Manager")
+
+print("\n...and once the manager has approved it")
+e = entry(ALL_FH, decide={p: "approved" for p in FLEET})
+check("the planner still has nothing to plan",
+      stage(e, "plan")["note"], "nothing to plan - no truck is due at the mine")
+check("...is not waiting", stage(e, "plan")["state"], "done")
+check("...and is not overdue", stage(e, "plan").get("overdue"), None)
+check("nobody is holding the day up", e["now"]["who"], "")
+check("...and the card says why",
+      e["now"]["note"], "nothing to plan - no truck is due at the mine")
+
+print("\na truck due at the mine on ANOTHER day says so")
+e = entry(ALL_FH, decide={p: "approved" for p in FLEET},
+          times={"20H01381": ("2026-09-22", "06:00")})
+check("the note counts the trucks due elsewhere",
+      stage(e, "plan")["note"],
+      "nothing to plan - no truck is due at the mine, 1 due on another day")
+
+print("\none truck due at the mine IS a plannable day")
+e = entry({"20H01381": "BH", "20H01385": "FH", "20H01393": "Maintenance"},
+          decide={"20H01381": "approved", "20H01385": "approved"},
+          times={"20H01381": (DAY, "06:00")})
+plan = stage(e, "plan")
+check("the planner is asked for a plan", plan["state"], "waiting")
+check("...with the old wording", plan["note"], "2 approved truck(s), no plan issued yet")
+check("...and the day waits on the planner", e["now"]["who"], "Planner")
+check("the monitor is idle until a plan exists", stage(e, "watch")["note"], "")
+
+print("\nan all-down day is also a day nothing can be planned from")
+e = entry(ALL_DOWN)
+check("the planner says so too",
+      stage(e, "plan")["note"], "nothing to plan - no truck is due at the mine")
+check("but the headline names the more specific reason",
+      e["now"]["note"], "no trucks available today")
 
 print("\n  %d FAILING" % FAIL if FAIL else "\n  all pass")
 sys.exit(1 if FAIL else 0)

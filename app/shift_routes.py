@@ -3162,6 +3162,25 @@ def _flow_entry(day, dl, subs):
     all_down = bool(rows) and not gaps and not sent and all(
         not readiness_import.is_running(r.note) for r in rows)
 
+    # And whether a plan can come out of this sheet at all. The planner seeds
+    # from trucks arriving at the mine to LOAD - that is what a mine arrival
+    # time is - so a sheet with no arrival time for this day has nothing to
+    # plan, however many trucks are on it and however correctly they are
+    # declared. A day of nothing but FH is the ordinary way that happens: those
+    # trucks are already loaded and running to port, so they are delivering,
+    # but none of them is coming back to start a new cycle.
+    #
+    # Without this the chain marched on to the Planner, sat there as "20
+    # approved truck(s), no plan issued yet", and went overdue at 16:30 -
+    # asking for a plan that cannot exist. A day nobody can plan is not a
+    # planner who has not planned it.
+    due_at_mine = sum(1 for r in rows
+                      if r.arrive_date == day and (r.arrive_hhmm or "").strip())
+    due_elsewhere = sum(1 for r in rows
+                        if (r.arrive_date or "").strip() and r.arrive_date != day
+                        and (r.arrive_hhmm or "").strip())
+    nothing_to_plan = bool(rows) and not due_at_mine
+
     if dl is None:
         sup = {"state": "idle", "note": ""}
     elif dl.state == "rejected":
@@ -3211,6 +3230,11 @@ def _flow_entry(day, dl, subs):
                                + ((" " + _fmt(snap.issued_at)) if snap.issued_at else "")
                                + ((" by " + snap.issued_by)
                                   if getattr(snap, "issued_by", "") else "")})
+    elif nothing_to_plan:
+        stages.append({"key": "plan", "who": "Planner", "state": "done",
+                       "note": "nothing to plan - no truck is due at the mine"
+                               + ((", %d due on another day" % due_elsewhere)
+                                  if due_elsewhere else "")})
     elif st["approved"]:
         stages.append({"key": "plan", "who": "Planner", "state": "waiting",
                        "note": "%d approved truck(s), no plan issued yet"
@@ -3218,9 +3242,13 @@ def _flow_entry(day, dl, subs):
     else:
         stages.append({"key": "plan", "who": "Planner", "state": "idle", "note": ""})
 
-    stages.append({"key": "watch", "who": "Monitor",
-                   "state": "done" if snap is not None else "idle",
-                   "note": "the day is live on Monitor" if snap is not None else ""})
+    if snap is not None:
+        watch = {"state": "done", "note": "the day is live on Monitor"}
+    elif nothing_to_plan:
+        watch = {"state": "done", "note": "nothing to watch"}
+    else:
+        watch = {"state": "idle", "note": ""}
+    stages.append(dict({"key": "watch", "who": "Monitor"}, **watch))
 
     # Each stage carries its window, and a stage still open past its window
     # says so - "pending" and "pending, and late" are different situations.
@@ -3247,6 +3275,8 @@ def _flow_entry(day, dl, subs):
                      "window": now.get("window", "")} if now
                     else {"who": "",
                           "note": "no trucks available today" if all_down
+                                  else "nothing to plan - no truck is due at "
+                                       "the mine" if nothing_to_plan
                                   else "the whole chain has run"})}
 
 
