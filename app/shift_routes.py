@@ -3150,6 +3150,18 @@ def _flow_entry(day, dl, subs):
                        "note": "%d trucks declared" % len(rows)})
 
     sent = st["applied"] + st["approved"] + st["denied"]
+
+    # A day nobody can run is not a day somebody forgot about. When every truck
+    # is answered and every answer is a reason it is NOT running, there is
+    # nothing to tick - so Submit rightly refuses, nothing reaches the manager,
+    # and the list stays a draft for ever. Read literally that came out as
+    # "nothing sent to the manager yet", which is word for word what a
+    # supervisor who has not looked at the sheet gets. Two very different days,
+    # one sentence. Judged on the declared status rather than the tick, because
+    # the tick is the supervisor's choice and this is the company's answer.
+    all_down = bool(rows) and not gaps and not sent and all(
+        not readiness_import.is_running(r.note) for r in rows)
+
     if dl is None:
         sup = {"state": "idle", "note": ""}
     elif dl.state == "rejected":
@@ -3161,6 +3173,9 @@ def _flow_entry(day, dl, subs):
                "note": "%d sent%s%s" % (sent,
                        (", %d held back" % st["pending"]) if st["pending"] else "",
                        (" by " + dl.submitted_by) if dl.submitted_by else "")}
+    elif all_down:
+        sup = {"state": "done",
+               "note": "no trucks available today, %d declared down" % len(rows)}
     else:
         sup = {"state": "waiting" if stages[-1]["state"] == "done" else "idle",
                "note": "nothing sent to the manager yet"}
@@ -3184,6 +3199,8 @@ def _flow_entry(day, dl, subs):
                            % (st["approved"], st["denied"],
                               (" by " + dl.confirmed_by) if dl.confirmed_by
                               else "")}
+    elif all_down:
+        man = {"state": "done", "note": "nothing to approve"}
     else:
         man = {"state": "idle", "note": ""}
     stages.append(dict({"key": "approve", "who": "Manager"}, **man))
@@ -3228,7 +3245,9 @@ def _flow_entry(day, dl, subs):
             "now": ({"who": now["who"], "note": now["note"],
                      "overdue": bool(now.get("overdue")),
                      "window": now.get("window", "")} if now
-                    else {"who": "", "note": "the whole chain has run"})}
+                    else {"who": "",
+                          "note": "no trucks available today" if all_down
+                                  else "the whole chain has run"})}
 
 
 @bp.get("/flow")
