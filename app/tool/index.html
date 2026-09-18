@@ -1438,6 +1438,11 @@ input[type="date"] { width: 100%; }
 .anchor-list li:last-child { border-bottom: none; }
 .anchor-list li:hover { background: var(--panel2); }
 .anchor-list li.selected { background: #e8f1fc; }
+/* Light rows in a dark theme: the text must not inherit the theme's light
+   colour, or the name of the very zone you just drew is invisible. */
+.anchor-list li.selected, .anchor-list li.selected .name,
+.anchor-list li.editing, .anchor-list li.editing .name { color: #111; }
+.anchor-list .name { cursor: text; }
 .anchor-list .swatch {
   width: 12px; height: 12px;
   border-radius: 2px;
@@ -1510,6 +1515,7 @@ input[type="date"] { width: 100%; }
 .anchor-list .name { flex: 1 1 auto; font-size: 12px; }
 .anchor-list .name-input {
   flex: 1 1 auto;
+  color: #111; background: #fff;
   border: 1px solid #0071e3;
   padding: 2px 5px;
   font-size: 12px;
@@ -3506,7 +3512,7 @@ function showRouteEditToolbar(legKey, mode) {
     bar = document.createElement('div');
     bar.id = 'editToolbar';
     bar.style.cssText = `position:absolute; top:10px; left:50%; transform:translateX(-50%);
-      z-index:1000; background:#fff; padding:8px 12px; border-radius:8px;
+      z-index:1000; background:#fff; color:#111; padding:8px 12px; border-radius:8px;
       box-shadow:0 2px 10px rgba(0,0,0,0.15); display:flex; gap:8px; align-items:center; font-size:12px;`;
     document.querySelector('.map-container').appendChild(bar);
   }
@@ -3554,6 +3560,38 @@ function addAnchor(name, polygon) {
   renderAnchorFilter();
   saveAnchorsToStorage();
   recomputeVisits();
+  // A zone you have just drawn is a zone you are about to name. Open the
+  // name box on its row straight away, with the placeholder selected, so the
+  // first thing typed replaces it - nobody has to discover that names can be
+  // clicked on.
+  const li = document.querySelector('.anchor-list li[data-id="' + id + '"]');
+  if (li) { li.scrollIntoView({ block: 'nearest' }); beginRenameAnchor(li, anchor); }
+}
+
+// Swap the name for an input; Enter or leaving the box commits, Escape keeps
+// the old name. Shared by the row's click and by a freshly drawn zone.
+function beginRenameAnchor(li, a) {
+  const span = li.querySelector('.name');
+  if (!span) return;                       // already renaming
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'name-input';
+  inp.value = a.name;
+  inp.placeholder = 'zone name';
+  span.replaceWith(inp);
+  inp.focus();
+  inp.select();
+  let done = false;
+  const commit = () => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    renameAnchor(a.id, v || a.name);      // an emptied box keeps the old name
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') inp.blur();
+    if (ev.key === 'Escape') { inp.value = a.name; inp.blur(); }
+  });
 }
 
 function drawAnchorOnMap(anchor) {
@@ -3694,7 +3732,7 @@ function showEditToolbar(a) {
     bar.id = 'editToolbar';
     bar.style.cssText = `
       position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; background: #fff; padding: 8px 12px; border-radius: 8px;
+      z-index: 1000; background: #fff; color: #111; padding: 8px 12px; border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.15); display: flex; gap: 8px;
       align-items: center; font-size: 12px;
     `;
@@ -3850,7 +3888,7 @@ function renderAnchorList() {
       <label class="swatch-wrap" title="Click to change color">
         <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
       </label>
-      <span class="name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}</span>
       ${overrideMark}
       <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
@@ -3883,23 +3921,10 @@ function renderAnchorList() {
     `;
     li.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, -1); });
     li.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, 1); });
-    li.querySelector('.name').addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      const span = e.target;
-      const inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'name-input';
-      inp.value = a.name;
-      span.replaceWith(inp);
-      inp.focus();
-      inp.select();
-      const commit = () => renameAnchor(a.id, inp.value.trim());
-      inp.addEventListener('blur', commit);
-      inp.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') inp.blur();
-        if (ev.key === 'Escape') { inp.value = a.name; inp.blur(); }
-      });
-    });
+    const nameEl = li.querySelector('.name');
+    const startRename = (e) => { if (e) e.stopPropagation(); beginRenameAnchor(li, a); };
+    nameEl.addEventListener('click', startRename);
+    nameEl.addEventListener('dblclick', startRename);
     li.querySelector('[data-act="del"]').addEventListener('click', (e) => {
       e.stopPropagation();
       if (confirm(`Delete anchor "${a.name}"?`)) deleteAnchor(a.id);
