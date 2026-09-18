@@ -103,7 +103,13 @@ def create_app(config_class=Config):
     # The staging sandbox announces itself on every page - same orange banner
     # idea as the logistics program - so nobody mistakes test data for the
     # real day. Inert unless the environment says COALAPP_ENV=staging.
-    if (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging":
+    _staging = (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging"
+    # Templates ask the same question when a change is being tried out on the
+    # sandbox before the real day sees it, so the answer lives in one place.
+    app.config["STAGING"] = _staging
+    app.jinja_env.globals["STAGING"] = _staging
+
+    if _staging:
         _BANNER = (b'<div style="position:sticky;top:0;z-index:99999;'
                    b'background:#b45309;color:#fff;text-align:center;'
                    b'font:700 12px/1.6 sans-serif;letter-spacing:.5px;'

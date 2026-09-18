@@ -142,6 +142,35 @@ try {
       // minus the header row
       return (store['listBody'].innerHTML.match(/<tr/g) || []).length - 1;
     })(), 2);
+
+  // The No# column: staging only, and it numbers what is ON SCREEN. A filtered
+  // table that still read 1, 4, 5 would be a worse answer to "which one am I
+  // on" than no column at all.
+  is('off the sandbox there is no No# column', html2.indexOf('c-no') >= 0, false);
+  vm.runInContext("TV.filters = {}; STAGING = true; drawRows();", sandbox);
+  const numbered = store['listBody'].innerHTML;
+  is('on the sandbox the No# header is there',
+     numbered.indexOf('<th class="c-no"') >= 0, true);
+  is('...with no sort menu on it', /<th class="c-no"[^>]*data-col/.test(numbered), false);
+  is('...and it is the first column',
+     numbered.indexOf('<tbody><tr><td class="c-no">1</td><td class="plate">') >= 0, true);
+  is('every row is numbered, absent ones included',
+     (numbered.match(/<td class="c-no">/g) || []).length, 5);
+  is('the absent row is numbered too',
+     /<tr style="opacity:.72"><td class="c-no">5<\/td>/.test(numbered), true);
+  is('...and still spans the rest of the table', numbered.indexOf('colspan="8"') >= 0, true);
+  is('numbering follows the sort, not the data order', (function(){
+      vm.runInContext("TV.sortSeq = [{key:'status', asc:false}]; drawRows();", sandbox);
+      // Maintenance sorts first; it must be No# 1 while keeping data-i="2".
+      return /<td class="c-no">1<\/td><td class="plate">20H00789/.test(
+        store['listBody'].innerHTML);
+    })(), true);
+  is('a filtered table renumbers from 1', (function(){
+      vm.runInContext(
+        "TV.sortSeq = []; TV.filters = {status: new Set(['BH'])}; drawRows();", sandbox);
+      const h = store['listBody'].innerHTML;
+      return (h.match(/<td class="c-no">(\d+)<\/td>/g) || []).join(',');
+    })(), '<td class="c-no">1</td>,<td class="c-no">2</td>');
 } catch (e) {
   console.log('  RENDERER THREW: ' + e.message);
   fail++;
