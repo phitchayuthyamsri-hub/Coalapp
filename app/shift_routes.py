@@ -3205,6 +3205,12 @@ def _flow_entry(day, dl, subs):
 
     if dl is None:
         man = {"state": "idle", "note": ""}
+    elif nothing_to_plan and not (st["approved"] or st["denied"]):
+        # The chain stops at the supervisor. Approving trucks that cannot be
+        # planned would make nothing plannable, so there is no decision here -
+        # the sheet was sent, and that is where a day with no coal load ends.
+        # A manager who already decided keeps that on the record (below).
+        man = {"state": "none", "note": "nothing to approve - no coal load"}
     elif st["applied"]:
         man = {"state": "waiting",
                "note": "%d truck(s) awaiting approval" % st["applied"]}

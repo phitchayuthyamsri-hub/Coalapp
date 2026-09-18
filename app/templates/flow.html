@@ -37,6 +37,10 @@
         background:var(--line);z-index:0}
   .step:first-child::before{display:none}
   .step.p-done::before{background:var(--ok)}
+  /* On a day with no coal load nothing flows down the chain, so the rail
+     stays grey the whole way - the ticks say who did their part, the rail
+     says what moved, and here nothing did. */
+  .steps.noload .step::before{background:var(--line)}
   .dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
        justify-content:center;font-size:13px;font-weight:800;z-index:1;
        background:#16233a;border:2px solid var(--line);color:var(--mut)}
@@ -129,7 +133,8 @@ function draw(d){
         : '';
       return (c.company ? '<div class="co">' + esc(c.company) + '</div>' : '')
         + noload
-        + '<div class="steps">' + c.stages.map(stepHtml).join('') + '</div>' + now;
+        + '<div class="steps' + (c.no_load ? ' noload' : '') + '">'
+        + c.stages.map(stepHtml).join('') + '</div>' + now;
     }).join('');
     return '<div class="card"><div class="day"><h2>' + dmy(day.date) + '</h2>'
       + chips + '</div>' + cos + '</div>';

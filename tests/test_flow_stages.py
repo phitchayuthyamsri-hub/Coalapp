@@ -88,7 +88,7 @@ check("the supervisor's desk had nothing to do - not a tick", sup["state"], "non
 check("...and says why", sup["note"], "no trucks available today, 3 declared down")
 check("...not 'nothing sent to the manager yet'",
       "nothing sent" in sup["note"], False)
-check("the manager has nothing to approve", man["note"], "nothing to approve")
+check("the manager has nothing to approve", man["note"], "nothing to approve - no coal load")
 check("...and is not left waiting, nor ticked", man["state"], "none")
 check("the declaration itself still reads as complete",
       stage(e, "declare")["note"], "3 trucks declared")
@@ -115,7 +115,8 @@ check("the day is still the supervisor's to send",
 
 print("\nand a day that really did go through is untouched")
 e = entry({"20H01381": "FH", "20H01385": "BH", "20H01393": "Maintenance"},
-          tick={"20H01381": "applied", "20H01385": "applied"})
+          tick={"20H01381": "applied", "20H01385": "applied"},
+          times={"20H01385": (DAY, "06:00")})
 check("the supervisor's stage reports what was sent",
       stage(e, "submit")["note"].startswith("2 sent"), True)
 check("...and the manager is waiting", stage(e, "approve")["state"], "waiting")
@@ -138,9 +139,12 @@ check("...and says there is nothing to plan",
       plan["note"], "nothing to plan - no truck is due at the mine")
 check("...and is never overdue for it", plan.get("overdue"), None)
 check("the monitor has nothing to watch", stage(e, "watch")["note"], "nothing to watch")
-check("the manager's decision still stands",
-      stage(e, "approve")["note"], "3 truck(s) awaiting approval")
-check("...so the day is still on the manager's desk", e["now"]["who"], "Manager")
+check("the chain stops at the supervisor - nothing to approve",
+      stage(e, "approve")["note"], "nothing to approve - no coal load")
+check("...so the manager is a dash, not pending", stage(e, "approve")["state"], "none")
+check("...and the day sits on nobody's desk", e["now"]["who"], "")
+check("...the supervisor's send is still on the record",
+      stage(e, "submit")["note"].startswith("3 sent"), True)
 
 print("\n...and once the manager has approved it")
 e = entry(ALL_FH, decide={p: "approved" for p in FLEET})
@@ -183,7 +187,7 @@ check("an all-FH day carries the banner", e["no_load"], True)
 check("...and says why, and what follows",
       e["no_load_note"],
       "no truck is due at the mine to load, so there is no plan to issue")
-check("...even while the manager still has a decision to make", e["now"]["who"], "Manager")
+check("...and nobody is asked to decide anything", e["now"]["who"], "")
 e = entry(ALL_FH, decide={p: "approved" for p in FLEET},
           times={"20H01381": ("2026-09-22", "06:00")})
 check("trucks due on another day are counted in it",
@@ -201,6 +205,18 @@ e = entry({"20H01381": "BH", "20H01385": "FH", "20H01393": "Maintenance"},
           times={"20H01381": (DAY, "06:00")})
 check("a plannable day has no banner", e["no_load"], False)
 check("...and an empty note", e["no_load_note"], "")
+
+print("\na manager who already approved a no-load day keeps the record")
+e = entry(ALL_FH, decide={p: "approved" for p in FLEET})
+check("their decision is not erased into a dash", stage(e, "approve")["state"], "done")
+check("...and still reads as theirs", stage(e, "approve")["note"], "3 approved, 0 denied")
+
+print("\na BH truck with no arrival time is a no-load day")
+e = entry({"20H01381": "BH", "20H01385": "FH", "20H01393": "Maintenance"},
+          tick={"20H01381": "applied", "20H01385": "applied"})
+check("the banner is up", e["no_load"], True)
+check("the chain stops at the supervisor", stage(e, "approve")["state"], "none")
+check("...even though two trucks were sent", stage(e, "submit")["note"].startswith("2 sent"), True)
 
 print("\n  %d FAILING" % FAIL if FAIL else "\n  all pass")
 sys.exit(1 if FAIL else 0)

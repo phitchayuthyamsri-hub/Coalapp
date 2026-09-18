@@ -40,23 +40,25 @@ function drawn(company){
   return store['body'].innerHTML;
 }
 
-console.log('a day with no coal load, manager still deciding');
+console.log('a day with no coal load - the chain stops at the supervisor');
 let out = drawn({company: 'Bac Nam', no_load: true,
   no_load_note: 'no truck is due at the mine to load, so there is no plan to issue',
   stages: [stage('Subcontractor','done','20 trucks declared'),
            stage('Supervisor','done','20 sent'),
-           stage('Manager','waiting','20 truck(s) awaiting approval'),
+           stage('Manager','none','nothing to approve - no coal load'),
            stage('Planner','none','nothing to plan - no truck is due at the mine'),
            stage('Monitor','none','nothing to watch')],
-  now: {who: 'Manager', note: '20 truck(s) awaiting approval', overdue: false, window: ''}});
+  now: {who: '', note: 'nothing to plan - no truck is due at the mine'}});
 is('the banner is on the card', /class="noload"/.test(out), true);
 is('...leading with the fact', /<b>No coal load on 19\/09\/2026<\/b>/.test(out), true);
 is('...and the reason', out.indexOf('no truck is due at the mine to load') >= 0, true);
 is('...above the chain, not under it',
-   out.indexOf('class="noload"') < out.indexOf('class="steps"'), true);
+   out.indexOf('class="noload"') < out.indexOf('class="steps'), true);
 is('the planner is a dash, not a tick', /s-none[^>]*>[\s\S]*?<div class="dot">—<\/div>[\s\S]*?Planner/.test(out), true);
 is('...and its rail is not green', (out.match(/p-done/g) || []).length, 2);
-is('the manager is still pending', out.indexOf('Pending at: Manager') >= 0, true);
+is('nobody is pending', out.indexOf('Pending at') >= 0, false);
+is('the rail is greyed for the whole chain', /class="steps noload"/.test(out), true);
+is('...and it does not read Complete either', out.indexOf('Complete') >= 0, false);
 
 console.log('\nthe same day once the manager has approved');
 out = drawn({company: 'Bac Nam', no_load: true,
@@ -69,6 +71,7 @@ is('it never reads Complete', out.indexOf('Complete') >= 0, false);
 is('...the banner is the headline', /class="noload"/.test(out), true);
 is('three desks ticked, two dashed',
    [(out.match(/s-done/g) || []).length, (out.match(/s-none/g) || []).length].join('/'), '3/2');
+is('the rail is grey here too', /class="steps noload"/.test(out), true);
 
 console.log('\na normal day is unchanged');
 out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',
@@ -79,6 +82,7 @@ out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',
 is('no banner', /class="noload"/.test(out), false);
 is('it reads Complete', out.indexOf('<b>Complete</b>') >= 0, true);
 is('no dashes', /s-none/.test(out), false);
+is('the rail is green', /class="steps noload"/.test(out), false);
 
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);
