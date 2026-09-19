@@ -241,6 +241,11 @@ _TOOL_HTML = None
 # Capture discrete user actions (tab opens, sorts, uploads, Calculate, exports,
 # manual-time edits, language switches) via global event delegation — no tool
 # internals are touched. Events are batched and flushed to /api/event.
+# A tab whose login is gone goes to the login page instead of sitting on stale
+# data - the tool polls the bridge and would otherwise get 401 after 401 in
+# silence. Same file every other page loads from _rowno.html.
+_SESSION = '<script src="/static/session_guard.js"></script>'
+
 _EVENTS = """<script>
 (function(){
   var Q=[], lastK='', lastT=0;
@@ -309,7 +314,7 @@ def _tool_html():
         # Dates read day first here too (DD/MM/YYYY), as on every other page.
         dfmt = os.path.join(os.path.dirname(__file__), "static", "datefmt.js")
         dates = '<script src="/static/datefmt.js?v=%d"></script>' % int(os.path.getmtime(dfmt))
-        _TOOL_HTML = html.replace("<head>", "<head>" + _BRIDGE + _GUARD + _EVENTS
+        _TOOL_HTML = html.replace("<head>", "<head>" + _SESSION + _BRIDGE + _GUARD + _EVENTS
                                   + seed + dates, 1)
     return _TOOL_HTML
 

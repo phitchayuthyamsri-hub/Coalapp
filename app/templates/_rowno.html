@@ -12,6 +12,10 @@
    Include it inside <head>, before the page's own script. #}
 <script>window.STAGING = {{ 'true' if STAGING else 'false' }};</script>
 <script src="/static/rowno.js?v={{ asset_v('rowno.js') }}"></script>
+{# The one include every page already carries, so it also carries the session
+   guard: a tab whose login is gone goes to the login page instead of sitting
+   on stale data. See static/session_guard.js. #}
+<script src="/static/session_guard.js?v={{ asset_v('session_guard.js') }}"></script>
 <style>
   /* Counts the rows as they are SHOWN. A filtered or re-sorted table starts
      again at 1, so the number answers "where am I" and nothing else - it is
