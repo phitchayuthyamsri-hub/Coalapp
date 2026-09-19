@@ -1455,20 +1455,32 @@ ON_TIME_MINUTES = 60
 # The corridor as four places, seen twice: loaded on the way out, empty on the
 # way home. Each entry is (key, label, the plan field that promises it, the
 # geofence role that proves it, which edge of the visit counts).
+# Every event the planner times on the loaded run (user 2026-09-19), in journey
+# order: (key, label, plan field, zone role, which edge of the visit). The
+# Monitor used to show the four arrivals - a tenth of what the plan says. An
+# exit edge reads the same matched visit as its arrival, so "Leaves mine" is
+# the mine visit's exit and "Crosses" is the border visit's exit. Load is its
+# own zone (XPPL Loading area). Unload has no zone that marks it, so its
+# actual is never GPS-confirmed: it shows the plan and an estimate, honestly
+# grey, rather than a time nobody measured.
 LOC_FH = [
-    ("mine",   "Mine",   "arrive_mine",   "xppl",   "enter"),
-    ("border", "Border", "arrive_border", "border", "enter"),
-    ("ql49",   "QL49",   "ql49_in",       "ql49",   "enter"),
-    ("port",   "Port",   "arrive_port",   "port",   "enter"),
+    ("mine",   "At mine",     "arrive_mine",   "xppl",    "enter"),
+    ("load",   "Load",        "load_start",    "loading", "enter"),
+    ("leave",  "Leaves mine", "load_end",      "xppl",    "exit"),
+    ("border", "At border",   "arrive_border", "border",  "enter"),
+    ("cross",  "Crosses",     "cross_border",  "border",  "exit"),
+    ("ql49",   "Enters QL49", "ql49_in",       "ql49",    "enter"),
+    ("port",   "At port",     "arrive_port",   "port",    "enter"),
+    ("unload", "Unloads",     "unload_start",  None,      None),
 ]
 # Going home the plan times only the two ends. The middle two are real places a
 # truck passes and GPS sees, so they are shown with an actual and no promise
 # rather than left off the board.
 LOC_BH = [
-    ("port",   "Port",   "depart_port", "port",   "exit"),
-    ("ql49",   "QL49",   None,          "ql49",   "enter"),
-    ("border", "Border", None,          "border", "enter"),
-    ("mine",   "Mine",   "back",        "xppl",   "enter"),
+    ("port",   "Leaves port",  "depart_port", "port",   "exit"),
+    ("ql49",   "QL49",         None,          "ql49",   "enter"),
+    ("border", "Border",       None,          "border", "enter"),
+    ("mine",   "Back at mine", "back",        "xppl",   "enter"),
 ]
 
 
@@ -1517,6 +1529,13 @@ def _match_cycle(vs, roles):
     port = first_at("port", mine["enter"], strict=True)
     limit = port["enter"] if port else None
     cursor = mine["enter"]
+    # Loading is inside the mine's stay, so it is walked from the mine's ENTER
+    # like everything else - but the cursor does not move past it: a truck can
+    # be seen at the loading area and still leave the mine later, and the
+    # border must be judged from the mine's exit, not from loading.
+    lv = first_at("loading", cursor, limit, strict=True)
+    if lv:
+        out[("fh", "loading")] = lv
     for role in ("border", "ql49"):
         v = first_at(role, cursor, limit, strict=True)
         if v:
@@ -1738,6 +1757,8 @@ def track():
     iso = lambda d: _local(d).strftime("%Y-%m-%dT%H:%M") if d else None
     blind = set()
     for _k, _l, _p, role, _e in LOC_FH + LOC_BH:
+        if role is None:                 # timed by the plan, marked by no zone (Unload)
+            continue
         aid = roles.get(role)
         if aid is None or aid not in seen_anchor:
             blind.add(role)
@@ -1815,11 +1836,11 @@ def track():
                 out.append(cell)
             return out
 
-        # Computed in journey order, returned in COLUMN order, so the same four
-        # columns hold the same four places whichever leg is on screen.
+        # Each leg's cells in that leg's own journey order. The page draws the
+        # columns from `locations[leg]`, so the two legs no longer have to share
+        # a key set - the loaded run has eight events, the run home four.
         def by_column(spec_cells):
-            ix = {c["key"]: c for c in spec_cells}
-            return [ix[k] for k, _l, _f, _r, _e in LOC_FH]
+            return list(spec_cells)
 
         phone = phones.get(engine.norm_plate(plate)) or ""
         rows.append({
@@ -1845,7 +1866,8 @@ def track():
         # Named rather than dropped: approved, not dispatched, and the reason is
         # almost always a missing arrival time on the sheet.
         not_planned=not_planned, not_planned_count=len(not_planned),
-        locations=[{"key": k, "label": l} for k, l, _f, _r, _e in LOC_FH],
+        locations={"fh": [{"key": k, "label": l} for k, l, _f, _r, _e in LOC_FH],
+                   "bh": [{"key": k, "label": l} for k, l, _f, _r, _e in LOC_BH]},
         blind=sorted(blind), rows=rows, on_time_minutes=ON_TIME_MINUTES,
         summary={
             "trucks": len(rows),

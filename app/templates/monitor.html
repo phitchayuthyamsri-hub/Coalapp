@@ -438,7 +438,12 @@ function drawTrack(){
   }
   // Going home the truck runs port, QL49, border, mine - so the columns run that
   // way too. Reading a journey backwards is harder than moving four headings.
-  const locs = LEG === 'bh' ? d.locations.slice().reverse() : d.locations;
+  // The server names each leg's events in that leg's journey order. (An
+  // older answer sent one array for both legs, with the run home to be read
+  // backwards - kept readable so a saved page from before still draws.)
+  const locs = Array.isArray(d.locations)
+    ? (LEG === 'bh' ? d.locations.slice().reverse() : d.locations)
+    : (d.locations[LEG] || []);
   const key = '<div class="key">'
     + '<span><b class="t-ok">14:24</b> <i>on time, within ' + TOL + ' min of plan</i></span>'
     + '<span><b class="t-early">14:24 &minus;1.6 h</b> <i>early</i></span>'
@@ -448,7 +453,9 @@ function drawTrack(){
     + '</div>';
   // Going home the truck runs port, QL49, border, mine, so the cells are read
   // back to front on the back-haul - the same reversal the headings get.
-  const cellsOf = r => LEG === 'bh' ? r.bh.slice().reverse() : r.fh;
+  const cellsOf = r => (LEG === 'bh'
+    ? (Array.isArray(d.locations) ? r.bh.slice().reverse() : r.bh)
+    : r.fh);
   const whereOf = r => r.last_seen ? r.last_seen.place
                      : (r.enroute ? 'on the road' : 'not seen');
   // Places order along the corridor, mine first - not alphabetically, where

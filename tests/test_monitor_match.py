@@ -39,7 +39,7 @@ def check(label, got, want):
 
 create_app()                                     # shift_routes needs the app once
 
-ROLES = {"xppl": 1, "border": 2, "ql49": 3, "port": 4}
+ROLES = {"xppl": 1, "border": 2, "ql49": 3, "port": 4, "loading": 5}
 D = datetime(2026, 9, 18)
 
 
@@ -109,5 +109,37 @@ vs = [visit("xppl", at(15, 10)), visit("port", at(23, 40), at(1, 15, day=1))]
 m = sr._match_cycle(vs, ROLES)
 check("port exit is the homeward time", m[("bh", "port")]["exit"].strftime("%d %H:%M"), "19 01:15")
 
+print("\nthe loading zone, and the exits that are the other events")
+# Mine 15:10-16:40; loading area 15:30-16:20 inside that stay; border 19:30-19:50;
+# port 23:40. Load is the loading zone's ENTER; Leaves mine the mine's EXIT;
+# Crosses the border's EXIT - all read off the same matched visits.
+vs = [visit("xppl", at(15, 10), at(16, 40)),
+      visit("loading", at(15, 30), at(16, 20)),
+      visit("border", at(19, 30), at(19, 50)),
+      visit("ql49", at(21, 0)), visit("port", at(23, 40), at(1, 15, day=1))]
+m = sr._match_cycle(vs, ROLES)
+check("Load is the loading zone's arrival", when(m, "fh", "loading"), "18 15:30")
+check("...matched inside the mine's stay, after the mine's arrival",
+      m[("fh", "loading")]["enter"] > m[("fh", "xppl")]["enter"], True)
+check("Leaves mine is the mine visit's exit",
+      m[("fh", "xppl")]["exit"].strftime("%d %H:%M"), "18 16:40")
+check("Crosses is the border visit's exit",
+      m[("fh", "border")]["exit"].strftime("%d %H:%M"), "18 19:50")
+check("...and the border is still judged from the mine, not from loading",
+      when(m, "fh", "border"), "18 19:30")
+
+# The previous loop's loading visit (before this loop's mine arrival) is not this one.
+vs = [visit("loading", at(3, 0)), visit("xppl", at(15, 10), at(16, 40)),
+      visit("border", at(19, 30))]
+m = sr._match_cycle(vs, ROLES)
+check("a loading visit from before the mine arrival is not this loop's",
+      when(m, "fh", "loading"), None)
+
+# A loading zone the GPS never saw leaves Load empty and moves nothing else.
+vs = [visit("xppl", at(15, 10), at(16, 40)), visit("border", at(19, 30)), visit("port", at(23, 40))]
+m = sr._match_cycle(vs, ROLES)
+check("no loading visit: Load is blank", when(m, "fh", "loading"), None)
+check("...and the rest still match", (when(m, "fh", "border"), when(m, "fh", "port")),
+      ("18 19:30", "18 23:40"))
 print("\n  %d FAILING" % FAIL if FAIL else "\n  all pass")
 sys.exit(1 if FAIL else 0)

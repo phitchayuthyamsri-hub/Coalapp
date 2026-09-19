@@ -156,6 +156,35 @@ try {
      store['track'].innerHTML.indexOf('data-col="bh:port:plan"')
      < store['track'].innerHTML.indexOf('data-col="bh:mine:plan"'), true);
 
+  // The server now names each leg's events in that leg's own order (user
+  // 2026-09-19): eight on the loaded run, four on the run home. The page draws
+  // whatever list it is given for the leg on screen, in that order.
+  const FH8 = [['mine','At mine'],['load','Load'],['leave','Leaves mine'],['border','At border'],
+               ['cross','Crosses'],['ql49','Enters QL49'],['port','At port'],['unload','Unloads']]
+    .map(([k,l]) => ({key:k, label:l}));
+  const BH4 = [['port','Leaves port'],['ql49','QL49'],['border','Border'],['mine','Back at mine']]
+    .map(([k,l]) => ({key:k, label:l}));
+  const cell = (plan, actual) => ({plan, actual, estimate: null, delay: null, blind: false});
+  const row8 = {plate:'20H01397', sub:'Bac Nam', phone:'', phone_known:false, planned:true,
+    fh: FH8.map((l, i) => cell('2026-09-18T' + String(13 + i).padStart(2, '0') + ':00', null)),
+    bh: BH4.map(() => cell(null, null)), last_seen: null, enroute: null, drift: 0};
+  vm.runInContext("var __rows0 = TRACK.rows, __locs0 = TRACK.locations;"
+    + "TRACK.locations = {fh: " + JSON.stringify(FH8) + ", bh: " + JSON.stringify(BH4) + "};"
+    + "TRACK.rows = [" + JSON.stringify(row8) + "]; TV.sortSeq = []; TV.filters = {}; LEG = 'fh'; drawTrack();", sandbox);
+  const eight = store['track'].innerHTML;
+  is('the loaded run shows eight events', (eight.match(/class="loc"/g) || []).length, 8);
+  is('...in the planner\'s order',
+     ['At mine','Load','Leaves mine','At border','Crosses','Enters QL49','At port','Unloads']
+       .map(l => eight.indexOf('>' + l + '<')).every((p, i, a) => p >= 0 && (i === 0 || p > a[i-1])), true);
+  is('...each with a plan and an actual column', (eight.match(/data-col="fh:[a-z0-9]+:(plan|act)"/g) || []).length, 16);
+  vm.runInContext("LEG = 'bh'; drawTrack();", sandbox);
+  const four = store['track'].innerHTML;
+  is('the run home shows its four, port first', (four.match(/class="loc"/g) || []).length, 4);
+  is('...not reversed a second time',
+     four.indexOf('>Leaves port<') < four.indexOf('>Back at mine<'), true);
+  // Put the four-row fixture back: the checks below count its rows.
+  vm.runInContext("TRACK.rows = __rows0; TRACK.locations = __locs0; LEG = 'fh'; drawTrack();", sandbox);
+
   // ── the No# column ───────────────────────────────────────────────────────
   // This header is two rows deep. The number belongs with the identifying
   // columns on the top row, spanning both - a Plan/Actual sub-heading under it
