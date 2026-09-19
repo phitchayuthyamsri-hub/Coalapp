@@ -2333,7 +2333,14 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <div class="anchors-side">
       <div class="tab-bar" style="margin-bottom:10px">
         <button class="tab-btn active" data-atab="anchors">Anchor</button>
-        <button class="tab-btn" data-atab="routes">Roads</button>
+        <!-- Roads tab retired 19/09/2026 (user): the per-leg road polylines were
+             never drawn - every leg read "no route" - so the ETA they fed was always
+             blank, and the tab only added a third thing called route beside
+             Setting > Route and Expected. The panel below stays in the markup on
+             purpose, the way GPS Data does: its buttons bind at boot unguarded. It is
+             just no longer reachable. The planner's own leg speeds and distances are
+             server-side (RouteLeg) and are untouched.
+             Re-enable by restoring: <button class="tab-btn" data-atab="routes">Roads</button> -->
         <button class="tab-btn" data-atab="expected">Expected</button>
         <button class="small secondary" id="btnToggleMap" style="margin-left:auto">Hide map</button>
       </div>
@@ -9925,20 +9932,10 @@ function buildStatusRows() {
           eta = new Date(lp.dt.getTime() + hrs * 3600 * 1000);
           etaC = constraintAwareETA(lp.dt, legKey, lp.lat, lp.lng, spd, 'Backhaul', last.backhaulType);
         } else {
-          // No polyline for this leg → blank ETA + one-time alert
+          // No polyline for this leg → blank ETA. This used to offer a trip to
+          // the Roads tab to draw one; that tab is retired (19/09/2026), so the
+          // offer led nowhere, and a dead end is worse than a blank cell.
           remKm = null; eta = null;
-          if (!STATE._routeAlertedThisSession.has(legKey)) {
-            STATE._routeAlertedThisSession.add(legKey);
-            const leg = DIST_LEGS.find(l => l.key === legKey);
-            const go = confirm(`No route drawn for "${leg ? leg.label : legKey}", so ETA can't be computed.\n\nGo to the Routes page to draw it now?\n\n(OK = go to Routes, Cancel = leave blank)`);
-            if (go) {
-              setTimeout(() => {
-                const btn = document.querySelector('#pageNav button[data-page="anchors"]');
-                if (btn) btn.click();
-                if (typeof showAnchorTab === 'function') showAnchorTab('routes');
-              }, 50);
-            }
-          }
         }
       }
     }
