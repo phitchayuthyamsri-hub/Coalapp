@@ -1472,6 +1472,69 @@ LOC_BH = [
 ]
 
 
+def _match_cycle(vs, roles):
+    """Which visit is this cycle's actual at each place - anchored at the mine
+    and walked forward in the order the truck runs.
+
+    vs: one truck's visits in the day's window, any order.
+    -> {("fh"|"bh", role): visit}
+
+    The old matcher took, for each place, the first visit in the window. On
+    18/09/2026 that read a truck's QL49 at 03:45 and port at 14:07 - the loop
+    it had just finished - as this cycle's actuals, 39 hours "early", while
+    its mine arrival for this cycle had not happened yet. A place cannot be
+    reached before the place before it.
+
+    So: the loaded run starts at the first MINE visit in the window. No mine
+    visit, no actuals - everything downstream stays an estimate, because
+    whatever visits there are belong to the previous loop. From the mine, the
+    port is the first port visit after it; border and QL49 are the first
+    visits at those places after the previous matched stop and before that
+    port (a blind or missing stop is skipped, not guessed). The run home
+    starts at that port visit's exit and walks the same way back to the mine.
+    """
+    vs = sorted(vs, key=lambda v: v["enter"])
+
+    def first_at(role, after=None, before=None, strict=False):
+        aid = roles.get(role)
+        if aid is None:
+            return None
+        for v in vs:
+            if v["anchor_id"] != aid:
+                continue
+            if after is not None and (v["enter"] <= after if strict else v["enter"] < after):
+                continue
+            if before is not None and v["enter"] >= before:
+                continue
+            return v
+        return None
+
+    out = {}
+    mine = first_at("xppl")
+    if mine is None:
+        return out
+    out[("fh", "xppl")] = mine
+    port = first_at("port", mine["enter"], strict=True)
+    limit = port["enter"] if port else None
+    cursor = mine["enter"]
+    for role in ("border", "ql49"):
+        v = first_at(role, cursor, limit, strict=True)
+        if v:
+            out[("fh", role)] = v
+            cursor = v["enter"]
+    if port is None:
+        return out
+    out[("fh", "port")] = port
+    out[("bh", "port")] = port
+    cursor = port.get("exit") or port["enter"]
+    for role in ("ql49", "border", "xppl"):
+        v = first_at(role, cursor, strict=True)
+        if v:
+            out[("bh", role)] = v
+            cursor = v["enter"]
+    return out
+
+
 @bp.get("/map")
 @login_required
 def map_data():
@@ -1692,31 +1755,15 @@ def track():
         vs = sorted(by_plate_visits.get(engine.norm_plate(plate), []),
                     key=lambda x: x["enter"])
 
-        # The port splits the loop: everything before it is the loaded run, and
-        # a second pass at the same place afterwards is the run home.
-        port_id = roles.get("port")
-        split = None
-        for v in vs:
-            if v["anchor_id"] == port_id:
-                split = v
-                break
+        # Mine first. The cycle's actuals begin at the truck's arrival at the
+        # mine and are walked forward from there - see _match_cycle. Until the
+        # mine is seen, every later place is an estimate, however many visits
+        # the window holds: those belong to the loop before.
+        matched = _match_cycle(vs, roles)
 
         def pick(role, edge, leg):
-            aid = roles.get(role)
-            if not aid:
-                return None
-            for v in vs:
-                if v["anchor_id"] != aid:
-                    continue
-                if leg == "fh" and split is not None and v["enter"] > split["enter"]:
-                    continue
-                if leg == "bh":
-                    if split is None:
-                        continue
-                    if role != "port" and v["enter"] <= (split.get("exit") or split["enter"]):
-                        continue
-                return v.get(edge) or v.get("enter")
-            return None
+            v = matched.get((leg, role))
+            return (v.get(edge) or v.get("enter")) if v else None
 
         last_seen = None
         for key, label, field, role, edge in LOC_FH + LOC_BH:
