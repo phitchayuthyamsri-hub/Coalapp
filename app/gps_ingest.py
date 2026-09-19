@@ -26,6 +26,8 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
+from sqlalchemy import func
+
 from .models import db, GpsPing, GpsIngestRun
 
 # Operation timezone (Indochina, UTC+7). Server stores run times in UTC; the page
@@ -400,11 +402,20 @@ def due_plates(app, now=None):
     now = now or datetime.utcnow()
     polys = _anchor_polys()
 
-    # Latest position per plate, in one pass rather than a query per truck.
+    # Latest position per plate. This used to read the WHOLE ping table every
+    # run - every five minutes, from cron - and keep the last row per plate as
+    # it went. That is the table's full length for a few dozen answers, and it
+    # got slower every day. Ask the database for the maximum instead: one row
+    # per plate, a few dozen in all. Still ordered ascending so that when two
+    # raw spellings of a plate normalise to the same key, the later one wins -
+    # which is what the read-everything loop did.
+    sub = (db.session.query(GpsPing.plate, func.max(GpsPing.dt).label("mx"))
+           .group_by(GpsPing.plate).subquery())
     last = {}
-    for plate, lat, lng, dt in db.session.query(
-            GpsPing.plate, GpsPing.lat, GpsPing.lng, GpsPing.dt
-    ).order_by(GpsPing.dt.asc()).all():
+    for plate, lat, lng, dt in (
+            db.session.query(GpsPing.plate, GpsPing.lat, GpsPing.lng, GpsPing.dt)
+            .join(sub, (GpsPing.plate == sub.c.plate) & (GpsPing.dt == sub.c.mx))
+            .order_by(GpsPing.dt.asc()).all()):
         last[engine.norm_plate(plate)] = (lat, lng, dt)
 
     due, inside_n, outside_n = [], 0, 0
