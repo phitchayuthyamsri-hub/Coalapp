@@ -83,6 +83,22 @@
      freeze against the page under the filter bar (--freeze), not against a box. */
   #trackCard{width:max-content;min-width:100%}
   #track table.grid{width:max-content;min-width:100%;margin-top:0}
+  /* The page is now wider than the window, so the two bars that stay put when
+     it scrolls DOWN have to stay put when it scrolls SIDEWAYS as well. They are
+     laid out against the whole scrolled width and held one window wide at the
+     window's left edge; without that they slide off to the left, and the frozen
+     table header - which parks under them - freezes over an empty strip with
+     trucks showing above it. --vw is the window without its scrollbar, measured,
+     because 100vw counts the scrollbar and would push the page wider still. */
+  body{width:max-content;min-width:100%}
+  header{left:0;width:var(--vw,100vw)}
+  .card.sticky{left:18px;width:calc(var(--vw,100vw) - 36px)}
+  /* The page's own side margins are the one strip the bar does not cover, and
+     the table scrolls under them in plain sight. The bar carries its own
+     backdrop across both of them - behind the panel, but inside the bar's
+     stacking context, so it still hides everything passing below. */
+  .card.sticky::before{content:'';position:absolute;top:0;bottom:0;left:-18px;
+        right:-18px;background:var(--bg);z-index:-1}
   /* The identity columns - No#, Last location, Truck - stay put while the
      rest scrolls under them. Offsets are measured from the rendered widths
      (applyTrackFreeze), so a hidden No# or a wider plate just works. A pinned
@@ -340,6 +356,9 @@ function applyTrackFreeze(){
     pinned.push({cls, th});
   }
   if (!pinned.length) return;
+  // The pinned block parks against the window's own edge, not the card's. Park
+  // it at the card's edge instead and the rest of the table scrolls through the
+  // strip of page margin left beside it, in plain sight.
   let left = 0;
   pinned.forEach((p, n) => {
     const w = p.th.offsetWidth || 0;
@@ -640,7 +659,11 @@ function measure(){
   const hdr = document.querySelector('header');
   const h = (hdr ? hdr.getBoundingClientRect().height : 0)
     + (bar ? bar.getBoundingClientRect().height : 0);
-  document.documentElement.style.setProperty('--freeze', Math.round(h) + 'px');
+  const de = document.documentElement;
+  de.style.setProperty('--freeze', Math.round(h) + 'px');
+  // clientWidth is the window WITHOUT the vertical scrollbar; 100vw includes it,
+  // and a bar 15px too wide is 15px of horizontal scroll nobody asked for.
+  if (de.clientWidth) de.style.setProperty('--vw', de.clientWidth + 'px');
 }
 window.addEventListener('resize', measure);
 
