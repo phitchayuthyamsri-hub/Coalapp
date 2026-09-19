@@ -2271,7 +2271,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <div class="nav-group">
     <button type="button" class="nav-group-btn">Plan ▾</button>
     <div class="nav-group-menu">
-      <button data-page="data" data-subtab="timeline">Gantt chart</button>
+      <button data-page="data">Gantt chart</button>
       <button data-page="send">📲 Send Plan</button>
       <button data-page="plan" data-admin="1">Dispatch Plan</button>
     </div>
@@ -2286,25 +2286,24 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     </div>
   </div>
 
-  <div class="nav-group">
-    <button type="button" class="nav-group-btn">Inputs ▾</button>
-    <div class="nav-group-menu">
-      <button data-page="weigh">Weighbridge</button>
-      <button data-page="data" data-subtab="sequence">Sequence/Route</button>
-    </div>
-  </div>
+  <!-- Inputs group retired 19/09/2026 (user): Sequence/Route went, and Weighbridge
+       moved into Setting, which left the group holding nothing.
+       Re-enable by restoring the group around:
+       <button data-page="weigh">Weighbridge</button> -->
 
   <div class="nav-group">
     <button type="button" class="nav-group-btn">Setting ▾</button>
     <div class="nav-group-menu">
       <button data-page="anchors">Location</button>
       <button data-page="route">Route</button>
+      <button data-page="weigh">Weighbridge</button>
       <!-- GPS Data (manual xlsx upload) retired 18/09/2026: GPS Capture pulls the
            positions itself. The panel below stays in the markup on purpose - two
            listeners bind to it unguarded at boot - it is just no longer reachable.
            Re-enable by restoring: <button data-page="gps" data-admin="1">GPS Data</button> -->
       <button data-page="gpscap" data-admin="1">📡 GPS Capture</button>
-      <button data-page="guide">📖 Guide</button>
+      <!-- Guide retired 19/09/2026 (user). Its page panel stays in the markup.
+           Re-enable by restoring: <button data-page="guide">📖 Guide</button> -->
     </div>
   </div>
   <!-- Validated List tab hidden: the WI process runs as a manual, not in-program.
@@ -2341,7 +2340,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
              just no longer reachable. The planner's own leg speeds and distances are
              server-side (RouteLeg) and are untouched.
              Re-enable by restoring: <button class="tab-btn" data-atab="routes">Roads</button> -->
-        <button class="tab-btn" data-atab="expected">Expected</button>
+        <!-- Expected tab retired 19/09/2026 (user): its templates only labelled
+             finished cycles on the Sequence/Route page, which is retired too, so
+             nothing reads them any more. Panel kept in the markup - its buttons
+             bind at boot unguarded.
+             Re-enable by restoring: <button class="tab-btn" data-atab="expected">Expected</button> -->
         <button class="small secondary" id="btnToggleMap" style="margin-left:auto">Hide map</button>
       </div>
 
@@ -2489,12 +2492,19 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     </div>
 
     <div class="panel flex">
-      <div class="tab-bar">
-        <button class="tab-btn" data-tab="visits" style="display:none">Visits</button>
-        <button class="tab-btn active" data-tab="sequence">Sequence</button>
-        <button class="tab-btn" data-tab="route">Route</button>
-        <button class="tab-btn" data-tab="timeline">Timeline</button>
-      </div>
+      <!-- Tab bar retired 19/09/2026 (user): this page is the Gantt chart alone
+           now. Sequence and Route went with the Inputs entry that opened them;
+           Visits was already hidden. Their panels stay in the markup - toolbars,
+           search boxes and export buttons all bind at boot unguarded - and the
+           Timeline panel below is simply the one left showing. Nothing clicks a
+           tab button any more: showGantt() does the showing.
+           Re-enable by restoring:
+           <div class="tab-bar">
+             <button class="tab-btn" data-tab="visits" style="display:none">Visits</button>
+             <button class="tab-btn active" data-tab="sequence">Sequence</button>
+             <button class="tab-btn" data-tab="route">Route</button>
+             <button class="tab-btn" data-tab="timeline">Timeline</button>
+           </div> -->
 
       <!-- VISITS (hidden tab; panel kept so filter/render wiring stays intact) -->
       <div class="tab-panel" data-tab-panel="visits">
@@ -2515,7 +2525,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       </div>
 
       <!-- SEQUENCE -->
-      <div class="tab-panel active" data-tab-panel="sequence">
+      <div class="tab-panel" data-tab-panel="sequence">
         <div class="table-toolbar">
           <div class="count" id="seqCount">No sequences yet</div>
           <input type="text" class="search-box" id="seqSearchBox" placeholder="Search plate...">
@@ -2558,7 +2568,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       </div>
 
       <!-- TIMELINE -->
-      <div class="tab-panel" data-tab-panel="timeline">
+      <div class="tab-panel active" data-tab-panel="timeline">
         <div class="table-toolbar">
           <div class="count" id="timelineCount">No data loaded</div>
           <div style="display:flex;gap:6px;align-items:center;font-size:11px">
@@ -7258,6 +7268,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     document.querySelectorAll('#pageNav button[data-page]').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('[data-page-panel]').forEach(p => p.classList.toggle('active', p.dataset.pagePanel === t));
     if (btn.dataset.subtab) { const _sb=document.querySelector('.tab-btn[data-tab="'+btn.dataset.subtab+'"]'); if (_sb) _sb.click(); }
+    if (t === 'data' && typeof showGantt === 'function') showGantt();
     // Whichever group owns the page now showing wears the highlight; all of them
     // close. Written against the groups that exist rather than one named id.
     const own = btn.closest('.nav-group');
@@ -7465,6 +7476,17 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {  btn.addEventLi
     }
   });
 });
+
+// The Data page is the Gantt chart alone now (user 19/09/2026): its tab bar is
+// gone, so there is no Timeline button left to click. Showing the page shows the
+// chart, and the two places that used to reach it by clicking that button come
+// here instead.
+function showGantt(){
+  document.querySelectorAll('[data-tab-panel]').forEach(p => {
+    p.classList.toggle('active', p.dataset.tabPanel === 'timeline');
+  });
+  if (typeof renderTimeline === 'function') renderTimeline();
+}
 
 // Fleet-scope segmented controls (all instances share STATE.filters.fleetScope)
 document.querySelectorAll('.fleet-scope-seg button[data-scope]').forEach(btn => {
@@ -10326,8 +10348,7 @@ function gotoTimelineForPlate(subPlate) {
   const dataBtn = document.querySelector('#pageNav button[data-page="data"]');
   if (dataBtn) dataBtn.click();
   setTimeout(() => {
-    const tb = document.querySelector('.tab-btn[data-tab="timeline"]');
-    if (tb) tb.click();
+    showGantt();
     if (typeof refreshAllTables === 'function') refreshAllTables();
     else if (typeof renderTimeline === 'function') renderTimeline();
     if (gpsPlate) toast('Timeline: ' + gpsPlate + ' \u00b7 this month');

@@ -188,10 +188,10 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
 const TABS = [
   ["ops","Operations (Subcontractor / Supervisor / Managers / Planner / Monitor)"],
   ["perf","Performance"],["daily","Daily performance"],["pva","Plan vs Actual"],
-  ["subfleet","Subcontractor fleet status"],["anchors","Parameter"],["data","Sequence/Route"],
+  ["subfleet","Subcontractor fleet status"],["anchors","Parameter"],["data","Gantt chart"],
   ["timeline","Timeline"],
   ["gps","GPS Data"],["plan","Dispatch Plan"],["truckstatus","Truck Status"],
-  ["weigh","Weighbridge"],["fleet","Fleet"],["guide","Guide"]
+  ["weigh","Weighbridge"],["fleet","Fleet"]
 ];
 const ALL = TABS.map(t => t[0]);
 const APPS = [["tms","TMS : Coal project"],["report","Daily/Weekly performance report"]];
