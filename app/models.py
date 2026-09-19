@@ -83,6 +83,67 @@ class Route(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Visit(db.Model):
+    """One truck inside one zone - what engine.build_visits() derives.
+
+    The derived layer (plan of 19/09/2026). Every analytics page rebuilds these
+    from the whole ping table on each request, which is work that grows with
+    history and is repeated constantly. A visit, once its zone has been left
+    and the window has settled, can never change: stored here, it is computed
+    once and read forever.
+
+    `frozen_at` set = settled and trusted. NULL = still in the live tail, kept
+    for comparison only. Nothing reads this table until the switch-over.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    plate = db.Column(db.String(40), index=True, nullable=False)
+    anchor_id = db.Column(db.Integer, index=True, nullable=False)
+    anchor_name = db.Column(db.String(120), default="")
+    visit_num = db.Column(db.Integer, default=0)
+    enter = db.Column(db.DateTime, index=True, nullable=False)
+    exit = db.Column(db.DateTime)
+    open = db.Column(db.Boolean, default=False)
+    ping_count = db.Column(db.Integer, default=0)
+    frozen_at = db.Column(db.DateTime)
+    __table_args__ = (db.UniqueConstraint("plate", "anchor_id", "enter",
+                                          name="uq_visit"),)
+
+
+class Cycle(db.Model):
+    """One mine-to-mine run - what engine.recompute_sequences() derives.
+
+    Columns are the timing fields the status engine already reads, one per
+    stage, so a stored row hands back exactly the dict it was built from. A
+    cycle is CLOSED when `xppl_r` is set: the truck reached the mine again.
+    Only a closed cycle is ever frozen - an open one is still being written by
+    the road.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    plate = db.Column(db.String(40), index=True, nullable=False)
+    cycle_date = db.Column(db.DateTime, index=True, nullable=False)
+    xppl_in = db.Column(db.DateTime)
+    xppl_out = db.Column(db.DateTime)
+    loading_in = db.Column(db.DateTime)
+    loading_out = db.Column(db.DateTime)
+    lalay_out_in = db.Column(db.DateTime)
+    lalay_out_out = db.Column(db.DateTime)
+    ql49_out_in = db.Column(db.DateTime)
+    ql49_out_out = db.Column(db.DateTime)
+    chan_may_in = db.Column(db.DateTime)
+    chan_may_out = db.Column(db.DateTime)
+    ql49_back_in = db.Column(db.DateTime)
+    ql49_back_out = db.Column(db.DateTime)
+    detour_in = db.Column(db.DateTime)
+    detour_out = db.Column(db.DateTime)
+    lalay_back_in = db.Column(db.DateTime)
+    lalay_back_out = db.Column(db.DateTime)
+    xppl_r = db.Column(db.DateTime)
+    backhaul_type = db.Column(db.String(20))
+    frozen_at = db.Column(db.DateTime)
+    __table_args__ = (db.UniqueConstraint("plate", "cycle_date",
+                                          name="uq_cycle"),)
+
+
 class GpsPing(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plate = db.Column(db.String(40), index=True, nullable=False)
