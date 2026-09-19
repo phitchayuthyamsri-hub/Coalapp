@@ -1259,9 +1259,13 @@ header .actions { display: flex; gap: 8px; }
 .nav-group-btn { background: transparent; color: #aeaeb2; border: none; padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; }
 .nav-group-btn:hover { color: #fff; background: #3a3a3c; }
 .nav-group.active-group .nav-group-btn { color: #fff; border-bottom-color: #0a84ff; }
-.nav-group-menu { display: none; position: absolute; top: 100%; left: 0; background: #1d1d1f; border: 1px solid #3a3a3c; border-radius: 6px; min-width: 150px; z-index: 2000; box-shadow: 0 6px 18px rgba(0,0,0,0.35); padding: 4px; }
+/* Fit to content (user 19/09/2026): min-width was a flat 150px, which left a
+   short menu padded out and wrapped a long label - "Subcontractor fleet status"
+   came out on two lines. max-content sizes each menu to its own longest item,
+   and nowrap keeps that item on one line. */
+.nav-group-menu { display: none; position: absolute; top: 100%; left: 0; background: #1d1d1f; border: 1px solid #3a3a3c; border-radius: 6px; min-width: max-content; z-index: 2000; box-shadow: 0 6px 18px rgba(0,0,0,0.35); padding: 4px; }
 .nav-group.open .nav-group-menu { display: block; }
-.nav-group-menu button { display: block; width: 100%; text-align: left; border-radius: 4px; }
+.nav-group-menu button { display: block; width: 100%; text-align: left; border-radius: 4px; white-space: nowrap; }
 /* Page container — only the active page shows */
 .page { display: none; flex: 1 1 auto; min-height: 0; }
 .page.active { display: flex; flex-direction: column; }
@@ -2272,7 +2276,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <button type="button" class="nav-group-btn">Plan ▾</button>
     <div class="nav-group-menu">
       <button data-page="data">Gantt chart</button>
-      <button data-page="send">📲 Send Plan</button>
+      <button data-page="send">Send Plan</button>
       <button data-page="plan" data-admin="1">Dispatch Plan</button>
     </div>
   </div>
@@ -2301,7 +2305,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
            positions itself. The panel below stays in the markup on purpose - two
            listeners bind to it unguarded at boot - it is just no longer reachable.
            Re-enable by restoring: <button data-page="gps" data-admin="1">GPS Data</button> -->
-      <button data-page="gpscap" data-admin="1">📡 GPS Capture</button>
+      <button data-page="gpscap" data-admin="1">GPS Capture</button>
       <!-- Guide retired 19/09/2026 (user). Its page panel stays in the markup.
            Re-enable by restoring: <button data-page="guide">📖 Guide</button> -->
     </div>
@@ -6285,8 +6289,14 @@ function renderFileInfo() {
 function initFiltersFromFile() {
   const f = STATE.fileInfo;
   if (!f) return;
-  const from = new Date(f.minDate); from.setHours(0,0,0,0);
+  let from = new Date(f.minDate); from.setHours(0,0,0,0);
   const to = new Date(f.maxDate); to.setHours(23,59,59,999);
+  // Open on 1 September (user 19/09/2026). The pings reach further back than
+  // anybody reads, and starting on the first of them put the chart months away
+  // from the days being worked. Taken from the year the data ENDS in, and only
+  // when there is something on or after it - otherwise the chart opens empty.
+  const sep1 = new Date(to.getFullYear(), 8, 1, 0, 0, 0, 0);   // 8 = September
+  if (sep1 > from && sep1 <= to) from = sep1;
   STATE.filters.dateFrom = from;
   STATE.filters.dateTo = to;
   document.getElementById('dateFrom').value = isoDate(from);
