@@ -343,7 +343,19 @@ function phoneCell(r){
    measured from the header cells as rendered, so widths are never guessed.
    Header cells for these columns live on the FIRST header row (rowspan 2);
    body cells are matched by class in each row. */
-const TRACK_FREEZE = ['c-no', 'where', 'plate'];
+// Everything that says WHICH truck this is travels with the eye - through the
+// team's own remark (user 2026-09-19), so a note written about a truck is still
+// beside it when the row is scrolled out to the far events. Only the times move.
+// A column is named by its header key; the body cell's class is not always the
+// same word, so it is carried here rather than guessed.
+const TRACK_FREEZE = [
+  {col: 'c-no',   cell: 'c-no'},
+  {col: 'where',  cell: 'where'},
+  {col: 'plate',  cell: 'plate'},
+  {col: 'phone',  cell: 'tel'},
+  {col: 'sub',    cell: 'c-sub'},
+  {col: 'remark', cell: 'rmk'}
+];
 function applyTrackFreeze(){
   const tbl = document.getElementById('trackTable');
   if (!tbl || !tbl.tHead || !tbl.tHead.rows || !tbl.tHead.rows.length) return;
@@ -351,9 +363,10 @@ function applyTrackFreeze(){
   const head = Array.from(tbl.tHead.rows[0].cells);
   const pinned = [];        // [{cls, th}], in column order, only while contiguous from the left
   for (const th of head){
-    const cls = TRACK_FREEZE.find(c => th.classList.contains(c) || th.getAttribute('data-col') === c);
-    if (!cls) break;
-    pinned.push({cls, th});
+    const col = TRACK_FREEZE.find(c => th.classList.contains(c.col)
+      || th.getAttribute('data-col') === c.col);
+    if (!col) break;
+    pinned.push({cls: col.cell, th});
   }
   if (!pinned.length) return;
   // The pinned block parks against the window's own edge, not the card's. Park
@@ -541,7 +554,7 @@ function drawTrack(){
         return '<tr>' + rowNo(n) + '<td class="where">' + where + trailLink(r.plate) + '</td>'
           + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td class="tel">' + phoneCell(r) + '</td>'
-          + '<td style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
+          + '<td class="c-sub" style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
           + '<td class="rmk"><input class="rmk-in" maxlength="300"'
             + ' data-plate="' + esc(r.plate) + '"'
             + ' value="' + esc(rm.text || '') + '"'
