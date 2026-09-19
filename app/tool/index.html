@@ -6307,7 +6307,6 @@ function initFiltersFromFile() {
 // (user 19/09/2026). Numeric-aware, so QL49 sits after QL9 rather than before
 // it, and case-blind. Lists whose order carries meaning are NOT sorted: the
 // places along the corridor, a status list, the role ladder.
-function az(list){ return azBy(list, x => x); }
 function azBy(list, key){
   return (list || []).slice().sort(function (a, b) {
     return String(key(a) == null ? '' : key(a))
