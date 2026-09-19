@@ -702,7 +702,9 @@ function focusGroup(grp){
 // -- the plan ----------------------------------------------------------------
 async function loadSubs(){
   const j = await jget('/api/shift/subcontractors');
-  const list = j.subcontractors || [];
+  const list = (j.subcontractors || []).slice().sort((a, b) =>
+    String(a.short).localeCompare(String(b.short), undefined,
+                                  {numeric: true, sensitivity: 'base'}));
   // The revision is queued across every company, same as the week, so it can be
   // read whole. A subcontractor login gets only its own, pinned server-side.
   $('#sub').innerHTML = (list.length > 1 ? '<option value="">All companies</option>' : '')

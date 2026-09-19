@@ -271,7 +271,7 @@ function populateTrailTrucks(trucks){
   const sel=document.getElementById('trailTruck'); if(!sel) return;
   const cur=sel.value;
   sel.innerHTML='<option value="">All trucks (Excel export)</option>'
-    +(trucks||[]).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
+    +(trucks||[]).slice().sort(function(x,y){ return String(x.plate).localeCompare(String(y.plate), undefined, {numeric:true, sensitivity:'base'}); }).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
   if(cur) sel.value=cur;
   _autoTrail();
 }

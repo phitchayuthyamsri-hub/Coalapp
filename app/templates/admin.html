@@ -264,7 +264,10 @@ function pageSelect(v, cls){
 function companySelect(v, cls){
   const cur = v == null ? '' : String(v);
   return '<select class="' + cls + '"><option value="">—</option>'
-    + SUBS.map(s => '<option value="' + s.id + '"' + (cur === String(s.id) ? ' selected' : '')
+    + SUBS.slice().sort((x, y) => String(x.name || x.short)
+        .localeCompare(String(y.name || y.short), undefined,
+                       {numeric: true, sensitivity: 'base'}))
+      .map(s => '<option value="' + s.id + '"' + (cur === String(s.id) ? ' selected' : '')
         + '>' + esc(s.short || s.name) + '</option>').join('') + '</select>';
 }
 

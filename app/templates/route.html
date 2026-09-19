@@ -112,7 +112,11 @@ async function load(){
 // page lists them.
 function addable(route){
   const have = new Set(route.sequence.map(s => s.id));
-  return LOCS.filter(l => !have.has(l.id));
+  // A→Z (user 19/09/2026): the stops are looked up by name here, not walked
+  // along the corridor - that ordering belongs to the sequence itself.
+  return LOCS.filter(l => !have.has(l.id)).sort((a, b) =>
+    String(a.name).localeCompare(String(b.name), undefined,
+                                 {numeric: true, sensitivity: 'base'}));
 }
 
 function draw(){

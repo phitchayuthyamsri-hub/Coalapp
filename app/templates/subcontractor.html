@@ -471,7 +471,7 @@ function draw(){
   const cols = [
     {key:'plate',    label:'Truck',          width:'92px',  ro:true},
     {key:'driver',   label:'Driver',         width:'130px', ro:true},
-    {key:'route',    label:'Route',          width:'140px', list: ROUTES.map(r => r.name),
+    {key:'route',    label:'Route',          width:'140px', list: ROUTES.map(r => r.name).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'})),
      hint:'one route per truck'},
     {key:'status',   label:'Status',         width:'120px', list:STATUS},
     {key:'load',     label:'Loaded / Empty', width:'96px',  list:['Loaded','Empty']},

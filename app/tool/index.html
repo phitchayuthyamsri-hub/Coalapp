@@ -6293,6 +6293,19 @@ function initFiltersFromFile() {
   document.getElementById('dateTo').value = isoDate(to);
 }
 
+// Every dropdown built from data - locations, plates, companies - lists A→Z
+// (user 19/09/2026). Numeric-aware, so QL49 sits after QL9 rather than before
+// it, and case-blind. Lists whose order carries meaning are NOT sorted: the
+// places along the corridor, a status list, the role ladder.
+function az(list){ return azBy(list, x => x); }
+function azBy(list, key){
+  return (list || []).slice().sort(function (a, b) {
+    return String(key(a) == null ? '' : key(a))
+      .localeCompare(String(key(b) == null ? '' : key(b)),
+                     undefined, {numeric: true, sensitivity: 'base'});
+  });
+}
+
 function renderTruckFilter() {
   const dd = document.getElementById('msTruckDropdown');
   const plates = Array.from(STATE.fileInfo?.plates || []).sort();
@@ -6359,7 +6372,7 @@ function renderAnchorFilter() {
       <button class="small" data-act="all">Select all</button>
       <button class="small secondary" data-act="none">Clear</button>
     </div>
-    <div class="ms-items">` + STATE.anchors.map(a => `
+    <div class="ms-items">` + azBy(STATE.anchors, a => a.name).map(a => `
     <label class="ms-item">
       <input type="checkbox" value="${a.id}" checked>
       <span class="swatch" style="display:inline-block;width:10px;height:10px;background:${effectiveColor(a.id, a.name)};border-radius:2px;margin-right:4px"></span>
@@ -7259,6 +7272,25 @@ function _sendAllDone(){ const s=document.getElementById('waStep'); if(s) s.clas
 /* ===== END SEND PLAN ===== */
 
 
+// An embedded page scrolls inside its own frame, so the frame's BOTTOM edge is
+// where its horizontal scrollbar lives. height:calc(100vh - 150px) was a guess
+// at the chrome above the frame, and it guessed short: with the staging banner
+// in place the Monitor's scrollbar sat below the window and could not be
+// reached at all (user 19/09/2026). Measure the top instead and end the frame
+// where the window ends, so the bar is always the bottom line on screen.
+function sizeEmbeddedFrames(){
+  ['opsFrame', 'routeFrame', 'gpscapFrame'].forEach(function (id) {
+    var f = document.getElementById(id);
+    if (!f || f.offsetParent === null) return;      // its page is not showing
+    var top = f.getBoundingClientRect().top;
+    var h = Math.max(360, Math.round(window.innerHeight - top - 12));
+    f.style.minHeight = '0';
+    f.style.height = h + 'px';
+  });
+}
+window.addEventListener('resize', sizeEmbeddedFrames);
+window.addEventListener('load', sizeEmbeddedFrames);
+
 // ============================================================
 // PAGE NAVIGATION (top-level)
 // ============================================================
@@ -7269,6 +7301,8 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     document.querySelectorAll('[data-page-panel]').forEach(p => p.classList.toggle('active', p.dataset.pagePanel === t));
     if (btn.dataset.subtab) { const _sb=document.querySelector('.tab-btn[data-tab="'+btn.dataset.subtab+'"]'); if (_sb) _sb.click(); }
     if (t === 'data' && typeof showGantt === 'function') showGantt();
+    // The frame is only measurable once its page is the one showing.
+    setTimeout(sizeEmbeddedFrames, 0);
     // Whichever group owns the page now showing wears the highlight; all of them
     // close. Written against the groups that exist rather than one named id.
     const own = btn.closest('.nav-group');
@@ -7604,7 +7638,7 @@ function renderRoleDropdowns() {
     if (!sel) return;
     const current = STATE.roles[rid] || '';
     sel.innerHTML = '<option value="">— none —</option>' +
-      STATE.anchors.map(a =>
+      azBy(STATE.anchors, a => a.name).map(a =>
         `<option value="${a.id}"${a.id === current ? ' selected' : ''}>${escapeHtml(a.name)}</option>`
       ).join('');
     sel.onchange = () => {
