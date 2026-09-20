@@ -1398,7 +1398,9 @@ input[type="date"] { width: 100%; }
   list-style: none;
   padding: 0;
   margin: 0 0 8px 0;
-  max-height: 220px;
+  /* It used to be a 220px strip beside the map. The map has its own page now,
+     so the list grows to whatever the window gives it. */
+  max-height: none;
   overflow-y: auto;
   border: 1px solid #f0f0f2;
   border-radius: 5px;
@@ -1416,7 +1418,8 @@ input[type="date"] { width: 100%; }
 .anchor-list { overflow-x: auto; }
 .anchor-list li, .anchor-list-head {
   display: grid;
-  grid-template-columns: 22px 14px minmax(140px, 1fr) 16px 16px 16px 16px;
+  grid-template-columns: 22px 14px minmax(170px, 1.3fr)
+                         132px 164px 92px 116px 16px 16px 16px;
   align-items: center;
   gap: 5px;
   width: max-content;
@@ -1437,34 +1440,6 @@ input[type="date"] { width: 100%; }
   top: 0;
   z-index: 2;
 }
-/* The place's working conditions (20/09/2026). Opened from the ⚙ on a row and
-   shown under the list rather than inside it: the list scrolls at 220px, and
-   four labelled fields do not fit in a scrolling strip. */
-.cond-box {
-  border: 1px solid var(--line, #e5e5ea);
-  border-radius: 6px;
-  padding: 9px 10px;
-  margin: 0 0 8px 0;
-  background: var(--panel2, #fafafc);
-}
-.cond-box[hidden] { display: none; }
-.cond-head {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 11px; font-weight: 600; margin-bottom: 8px;
-}
-.cond-head .cond-who { color: var(--ink); }
-.cond-head button { margin-left: auto; }
-.cond-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px 12px;
-}
-.cond-grid label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
-.cond-grid input, .cond-grid select { width: 100%; box-sizing: border-box; }
-.cond-window { display: flex; align-items: center; gap: 5px; }
-.cond-window span { font-size: 10px; color: var(--muted); }
-.cond-note { font-size: 10px; color: var(--muted); margin-top: 7px; line-height: 1.5; }
-
 .anchor-list li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rc-hidden { visibility: hidden; }
 .anchor-list li:last-child { border-bottom: none; }
@@ -2077,14 +2052,27 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 }
 
 /* ===== New page layouts (v34) ===== */
+/* One column since the map left (20/09/2026): the list has the page. */
 .anchors-layout {
   display: grid;
-  grid-template-columns: 1fr 6px 360px;
+  grid-template-columns: 1fr;
   gap: 7px;
   flex: 1 1 auto;
   min-height: 0;
   padding: 10px;
 }
+.locmap-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 10px;
+}
+.locmap-layout .map-container { flex: 1 1 auto; min-height: 0; }
+.locmap-bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.locmap-bar .locmap-who { font-size: 12px; font-weight: 600; color: var(--ink); }
+.locmap-bar .locmap-hint { font-size: 10px; color: var(--muted); margin-left: auto; }
 .anchors-layout .map-container { height: 100%; min-height: 0; }
 .anchors-side { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 
@@ -2327,6 +2315,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <button type="button" class="nav-group-btn">Setting ▾</button>
     <div class="nav-group-menu">
       <button data-page="anchors">Location</button>
+      <button data-page="locmap">Location map</button>
       <button data-page="route">Route</button>
       <button data-page="weigh">Weighbridge</button>
       <!-- GPS Data (manual xlsx upload) retired 18/09/2026: GPS Capture pulls the
@@ -2354,13 +2343,29 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 .page-help-points li{margin:1px 0}
 .page-help.collapsed .page-help-body{display:none}
 </style>
-<div class="page" data-page-panel="anchors">
-  <div class="anchors-layout">
+<!-- The map is its own page (user, 20/09/2026). It used to take two thirds of
+     the Location page and was only wanted when a shape was being drawn or
+     checked, which is rarely. The Location list now has the page to itself and
+     "View on Map" comes here; drawing and shape-editing come here on their own.
+     One #map element, still - Leaflet is initialised once and only needs
+     invalidateSize() when this page is shown. -->
+<div class="page" data-page-panel="locmap">
+  <div class="locmap-layout">
+    <div class="locmap-bar">
+      <button class="small secondary" id="btnMapBack">← Locations</button>
+      <span class="locmap-who" id="mapWho"></span>
+      <button class="small" id="btnMapDraw">+ Draw</button>
+      <span class="locmap-hint">Draw a polygon; double-click to finish.</span>
+    </div>
     <div class="map-container">
       <div id="map"></div>
       <div class="map-overlay" id="mapStats" style="display:none"></div>
     </div>
-    <div id="paneSplitter" title="Drag to resize panes"></div>
+  </div>
+</div>
+
+<div class="page" data-page-panel="anchors">
+  <div class="anchors-layout">
     <div class="anchors-side">
       <div class="tab-bar" style="margin-bottom:10px">
         <button class="tab-btn active" data-atab="anchors">Anchor</button>
@@ -2384,56 +2389,18 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <div data-atab-panel="anchors">
         <div class="panel">
           <h2>Locations
+            <button class="small secondary" id="btnViewMap" title="Open the map. A selected Location opens zoomed to it.">🗺 View on Map</button>
             <button class="small" id="btnDraw">+ Draw</button>
             <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
           <ul class="anchor-list" id="anchorList"></ul>
-          <div class="cond-box" id="condBox" hidden>
-            <div class="cond-head">
-              Conditions — <span class="cond-who" id="condWho"></span>
-              <button class="small secondary" id="condClose2">Close</button>
-            </div>
-            <div class="cond-grid">
-              <div>
-                <label for="condType">Location type</label>
-                <select id="condType">
-                  <option value="">— not set —</option>
-                  <option value="load">Load</option>
-                  <option value="unload">Unload</option>
-                  <option value="load_unload">Load/Unload</option>
-                  <option value="border">Border</option>
-                  <option value="highway">Highway</option>
-                </select>
-              </div>
-              <div>
-                <label>Window time</label>
-                <div class="cond-window">
-                  <input type="time" id="condOpen" title="Opens">
-                  <span>to</span>
-                  <input type="time" id="condClose" title="Closes">
-                </div>
-              </div>
-              <div>
-                <label for="condBays">Loading bay</label>
-                <input type="number" id="condBays" min="0" step="1" placeholder="not set">
-              </div>
-              <div>
-                <label for="condLoadMin">Loading time (minutes)</label>
-                <input type="number" id="condLoadMin" min="0" step="1" placeholder="not set">
-              </div>
-            </div>
-            <div class="cond-note">Blank means not recorded, which is not the same as zero. A window
-              may run past midnight (22:00 to 06:00). Loading time is how long the work is expected to
-              take — it is not the min-dwell the geofence uses to decide a visit happened.
-              Press <b>Save</b> to send this to the server.</div>
-          </div>
           <div class="btn-row">
             <button class="secondary small" id="btnSaveJson">Save JSON</button>
             <button class="secondary small" id="btnLoadJson">Load JSON</button>
             <button class="secondary small" id="btnClearAnchors">Clear all</button>
           </div>
           <input type="file" id="loadJsonInput" accept=".json" style="display:none">
-          <div class="help-text">Draw a polygon on the map. Double-click to finish. Click a name to rename it, ✎ to edit the shape, ▲▼ to reorder. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
+          <div class="help-text">Click a name to rename it, ▲▼ to reorder. <b>🗺 View on Map</b> opens the map on its own page — select a Location first to open zoomed to it; ✎ and <b>+ Draw</b> go there too, because a shape needs the map. In the condition columns a blank means <i>not recorded</i>, which is not the same as zero; a window may run past midnight (22:00 to 06:00); loading time is how long the work is expected to take, not the min-dwell the geofence uses to decide a visit happened. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
         </div>
 
         <!-- Sequence setup left this page on 18/09/2026. The order trucks pass
@@ -3764,6 +3731,7 @@ function deleteAnchor(id) {
 // EDIT ANCHOR (polygon shape)
 // ============================================================
 function startEditingAnchor(id) {
+  goToLocMap(id);                      // the shape is on the map, so go there
   // If already editing another, save it first
   if (STATE.editingAnchorId && STATE.editingAnchorId !== id) {
     finishEditAnchor();
@@ -3975,73 +3943,60 @@ function moveAnchor(id, dir) {
 
 /* ===== THE PLACE'S WORKING CONDITIONS (20/09/2026) =====
    What a Location IS, as opposed to where its edges are: when it can be used,
-   what is done there, how many bays and how long the work takes. Held on the
-   anchor like name and colour, sent with Save, and deliberately not part of
-   the shape's version history - none of it can change how a past ping was
-   judged, and pretending otherwise would manufacture versions.
+   what is done there, how many bays and how long the work takes. Columns in
+   the list, edited in place - they were a panel behind a ⚙ for half a day,
+   which hid four facts behind a click each and let no two Locations be
+   compared. A table compares them; that is what a table is for.
+
+   Held on the anchor like name and colour, sent with Save, and deliberately
+   not part of the shape's version history: none of it can change how a past
+   ping was judged, and pretending otherwise would manufacture versions.
 
    Nothing reads these yet. They are recorded now so the planner and the
    law-check have somewhere true to read them from later. */
-const LOC_TYPE_LABEL = {
-  '': '', load: 'Load', unload: 'Unload', load_unload: 'Load/Unload',
-  border: 'Border', highway: 'Highway'
-};
-STATE.condOpenId = null;
 STATE.condDirty = false;
-let COND_BOUND = false;
 
-function openConditions(id) {
-  // The same button closes it, so a second press puts the panel away.
-  STATE.condOpenId = (String(STATE.condOpenId) === String(id)) ? null : String(id);
-  renderConditions();
-}
-
-function condAnchor() {
-  return STATE.anchors.filter(x => String(x.id) === String(STATE.condOpenId))[0] || null;
-}
-
-function condEdit(apply) {
-  const a = condAnchor();
-  if (!a) return;
+// An edit to any cell is unsaved work until Save is pressed, exactly like a
+// zone drawn and not yet applied.
+function condEdit(a, apply) {
   apply(a);
   STATE.condDirty = true;
   saveAnchorsToStorage();
   try { paintSaveButton(); } catch (e) {}
 }
 
-function bindConditions() {
-  if (COND_BOUND) return;
-  const $id = (x) => document.getElementById(x);
-  const box = $id('condBox');
-  if (!box) return;
-  COND_BOUND = true;
-  $id('condClose2').addEventListener('click', () => { STATE.condOpenId = null; renderConditions(); });
-  $id('condType').addEventListener('change', (e) =>
-    condEdit(a => { a.locType = e.target.value || ''; }));
-  $id('condOpen').addEventListener('change', (e) =>
-    condEdit(a => { a.windowOpen = e.target.value || ''; }));
-  $id('condClose').addEventListener('change', (e) =>
-    condEdit(a => { a.windowClose = e.target.value || ''; }));
-  // A blank number is "not recorded", which is not zero - so it stays null.
-  $id('condBays').addEventListener('change', (e) =>
-    condEdit(a => { a.loadingBays = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); }));
-  $id('condLoadMin').addEventListener('change', (e) =>
-    condEdit(a => { a.loadingTimeMin = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); }));
+// A blank number means "not recorded", which is not zero - so it stays null.
+function condNum(v) {
+  if (v === '' || v == null) return null;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? null : Math.max(0, n);
 }
 
-function renderConditions() {
-  bindConditions();
-  const box = document.getElementById('condBox');
-  if (!box) return;
-  const a = condAnchor();
-  if (!a) { box.hidden = true; return; }
-  box.hidden = false;
-  document.getElementById('condWho').textContent = a.name || '';
-  document.getElementById('condType').value = a.locType || '';
-  document.getElementById('condOpen').value = a.windowOpen || '';
-  document.getElementById('condClose').value = a.windowClose || '';
-  document.getElementById('condBays').value = (a.loadingBays != null ? a.loadingBays : '');
-  document.getElementById('condLoadMin').value = (a.loadingTimeMin != null ? a.loadingTimeMin : '');
+/* ===== THE MAP IS ITS OWN PAGE (user, 20/09/2026) =====
+   Everything that needs to see or draw a shape comes here; the Location list
+   stays a list. */
+function goToLocMap(focusId) {
+  const b = document.querySelector('#pageNav button[data-page="locmap"]');
+  if (b) b.click();
+  const who = document.getElementById('mapWho');
+  const a = focusId ? STATE.anchors.filter(x => String(x.id) === String(focusId))[0] : null;
+  if (who) who.textContent = a ? a.name : '';
+  // Leaflet measured a hidden container while this page was not showing, so
+  // it has to be told the size again - and the zoom redone after it knows.
+  setTimeout(() => {
+    try { map.invalidateSize(); } catch (e) {}
+    if (a) { try { selectAnchor(String(a.id)); } catch (e) {} }
+  }, 80);
+}
+
+function goToLocations() {
+  const b = document.querySelector('#pageNav button[data-page="anchors"]');
+  if (b) b.click();
+}
+
+function selectedAnchorId() {
+  const li = document.querySelector('#anchorList li.selected');
+  return li ? li.dataset.id : null;
 }
 
 function renderAnchorList() {
@@ -4050,7 +4005,9 @@ function renderAnchorList() {
   if (STATE.anchors.length) {
     const headRow = document.createElement('li');
     headRow.className = 'anchor-list-head';
-    headRow.innerHTML = '<span></span><span></span><span>Name</span><span></span><span></span><span></span><span></span>';
+    headRow.innerHTML = '<span></span><span></span><span>Name</span>'
+      + '<span>Location type</span><span>Window time</span><span>Loading bay</span>'
+      + '<span>Loading time (min)</span><span></span><span></span><span></span>';
     ul.appendChild(headRow);
   }
   STATE.anchors.forEach((a, idx) => {
@@ -4069,9 +4026,30 @@ function renderAnchorList() {
         <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
       </label>
       <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span>
+      <span class="cell-type">
+        <select data-act="c-type" title="What is done here">
+          ${['', 'load', 'unload', 'load_unload', 'border', 'highway'].map(v =>
+            `<option value="${v}"${(a.locType || '') === v ? ' selected' : ''}>${
+              {'': '—', load: 'Load', unload: 'Unload', load_unload: 'Load/Unload',
+               border: 'Border', highway: 'Highway'}[v]}</option>`).join('')}
+        </select>
+      </span>
+      <span class="cell-window">
+        <input type="time" data-act="c-open" title="Opens" value="${a.windowOpen || ''}">
+        <span>to</span>
+        <input type="time" data-act="c-close" title="Closes" value="${a.windowClose || ''}">
+      </span>
+      <span class="cell-bays">
+        <input type="number" min="0" step="1" data-act="c-bays" placeholder="—"
+               title="How many loading bays" value="${a.loadingBays != null ? a.loadingBays : ''}">
+      </span>
+      <span class="cell-load">
+        <input type="number" min="0" step="1" data-act="c-load" placeholder="—"
+               title="How long the work here is expected to take, in minutes"
+               value="${a.loadingTimeMin != null ? a.loadingTimeMin : ''}">
+      </span>
       ${overrideMark}
-      <button class="edit-btn" data-act="cond" title="Conditions — type, window, bays, loading time">⚙</button>
-      <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
+      <button class="edit-btn" data-act="edit" title="Edit shape — opens the map">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
     `;
     li.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, -1); });
@@ -4088,9 +4066,23 @@ function renderAnchorList() {
       e.stopPropagation();
       startEditingAnchor(a.id);
     });
-    li.querySelector('[data-act="cond"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openConditions(a.id);
+    // The condition cells. Every one stops the click so that typing in a row
+    // does not also select it and fly the map to it.
+    const cond = {
+      'c-type':  (a, v) => { a.locType = v || ''; },
+      'c-open':  (a, v) => { a.windowOpen = v || ''; },
+      'c-close': (a, v) => { a.windowClose = v || ''; },
+      'c-bays':  (a, v) => { a.loadingBays = condNum(v); },
+      'c-load':  (a, v) => { a.loadingTimeMin = condNum(v); },
+    };
+    Object.keys(cond).forEach(act => {
+      const el = li.querySelector(`[data-act="${act}"]`);
+      if (!el) return;
+      el.addEventListener('click', (e) => e.stopPropagation());
+      el.addEventListener('change', (e) => {
+        e.stopPropagation();
+        condEdit(a, (x) => cond[act](x, e.target.value));
+      });
     });
     const colorSwatch = li.querySelector('[data-act="color"]');
     if (colorSwatch) {
@@ -7032,7 +7024,14 @@ document.getElementById('btnClearAnchors').addEventListener('click', () => {
   recomputeVisits();
 });
 
-document.getElementById('btnDraw').addEventListener('click', startDrawingPolygon);
+document.getElementById('btnDraw').addEventListener('click', () => {
+  goToLocMap(null);                    // nothing to draw on until the map shows
+  setTimeout(startDrawingPolygon, 120);
+});
+document.getElementById('btnMapDraw').addEventListener('click', startDrawingPolygon);
+document.getElementById('btnMapBack').addEventListener('click', goToLocations);
+document.getElementById('btnViewMap').addEventListener('click',
+  () => goToLocMap(selectedAnchorId()));
 
 // ============================================================
 // HELPERS
@@ -7466,7 +7465,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
       g.classList.remove('open');
     });
     // Per-page refresh hooks
-    if (t === 'anchors') { setTimeout(() => map.invalidateSize(), 60); }
+    if (t === 'locmap') { setTimeout(() => map.invalidateSize(), 60); }
     if (t === 'data') { renderTable(); renderSequenceTable(); renderTimeline(); }
     if (t === 'fleet') { renderFleetUI(); }
     if (t === 'plan') { renderDinPlan(); }
@@ -7615,7 +7614,6 @@ async function syncAnchorsFromServer() {
   STATE.retiredAnchorIds = [];
   saveAnchorsToStorage(); saveRolesToStorage();
   renderAnchorList(); renderAnchorFilter();
-  try { renderConditions(); } catch (e) {}
   try { populateLegAnchorDropdowns(); } catch (e) {}
   try { recomputeVisits(); } catch (e) {}
   if (unsaved.length) toast(unsaved.length + ' zone' + (unsaved.length === 1 ? '' : 's') + ' drawn here ' + (unsaved.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
