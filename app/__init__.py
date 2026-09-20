@@ -316,6 +316,8 @@ def _ensure_routeleg_schema():
     for c in ("from_anchor_id", "to_anchor_id"):
         if c not in cols:
             _add_column_racing("route_leg", "%s INTEGER" % c)
+    if "via" not in cols:
+        _add_column_racing("route_leg", "via VARCHAR(40) DEFAULT ''")
 
 
 def _ensure_snapshot_schema():

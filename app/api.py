@@ -6,6 +6,8 @@ import json
 from functools import wraps
 from datetime import datetime, date
 import openpyxl
+import re
+
 from flask import Blueprint, request, jsonify, abort, Response
 from flask_login import login_required, current_user
 from sqlalchemy import func
@@ -237,6 +239,7 @@ def routes():
                     "points": r.points, "speed": spd, "road_km": km,
                     "from_anchor_id": r.from_anchor_id,
                     "to_anchor_id": r.to_anchor_id,
+                    "via": r.via or "",
                     # A leg the planner calls by name cannot be deleted from
                     # the page: taking it away would silently zero a driving
                     # time the plan depends on.
@@ -268,10 +271,15 @@ def route_leg_create():
              Anchor.query.filter(Anchor.retired_at.is_(None)).all()}
     if a_id not in names or b_id not in names:
         return jsonify(error="that Location is not a zone in service"), 400
-    key = "a%d_a%d" % (a_id, b_id)
+    # More than one way between the same two stops is normal here, so the via
+    # is part of what makes a leg distinct.
+    via = (d.get("via") or "").strip()[:40]
+    slug = re.sub(r"[^a-z0-9]+", "", via.lower())
+    key = "a%d_a%d" % (a_id, b_id) + ("__" + slug if slug else "")
     if RouteLeg.query.filter_by(leg_key=key).first():
-        return jsonify(error="a leg from %s to %s already exists"
-                             % (names[a_id], names[b_id])), 409
+        return jsonify(error="a leg from %s to %s%s already exists"
+                             % (names[a_id], names[b_id],
+                                (" via " + via) if via else "")), 409
     try:
         km = float(d.get("road_km")) if str(d.get("road_km") or "").strip() else None
         spd = float(d.get("speed") or 40.0)
@@ -282,8 +290,9 @@ def route_leg_create():
     if spd <= 0:
         return jsonify(error="a speed has to be above zero"), 400
     r = RouteLeg(leg_key=key,
-                 label="%s → %s" % (names[a_id], names[b_id]),
-                 from_anchor_id=a_id, to_anchor_id=b_id,
+                 label="%s → %s%s" % (names[a_id], names[b_id],
+                                          (" (via %s)" % via) if via else ""),
+                 from_anchor_id=a_id, to_anchor_id=b_id, via=via,
                  road_km=km, speed=spd)
     db.session.add(r)
     db.session.commit()

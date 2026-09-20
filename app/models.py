@@ -250,6 +250,12 @@ class RouteLeg(db.Model):
     # planner walking a route's stops needs in order to find it.
     from_anchor_id = db.Column(db.Integer, index=True)
     to_anchor_id = db.Column(db.Integer, index=True)
+    # Which way round, when there is more than one way between the same two
+    # stops - "A Luoi" against "Dakrong". The corridor has always had this: two
+    # legs home from the port, one via QL9 and one via QL49, told apart by hand
+    # in their keys. A leg added from the page says it properly, so the pair of
+    # stops plus the via is what has to be unique, not the pair alone.
+    via = db.Column(db.String(40), default="")
 
 
 class Notice(db.Model):
