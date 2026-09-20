@@ -366,6 +366,19 @@ def _ensure_anchor_schema():
         _add_column_racing("anchor", "caption VARCHAR(60) DEFAULT ''")
     if "retired_at" not in cols:
         _add_column_racing("anchor", "retired_at DATETIME")
+    # The place's working conditions (20/09/2026). Blank and NULL are the
+    # honest defaults: an existing zone has not been told any of this yet, and
+    # "not recorded" must not read as "zero bays" or "midnight to midnight".
+    if "loc_type" not in cols:
+        _add_column_racing("anchor", "loc_type VARCHAR(20) DEFAULT ''")
+    if "window_open" not in cols:
+        _add_column_racing("anchor", "window_open VARCHAR(5) DEFAULT ''")
+    if "window_close" not in cols:
+        _add_column_racing("anchor", "window_close VARCHAR(5) DEFAULT ''")
+    if "loading_bays" not in cols:
+        _add_column_racing("anchor", "loading_bays INTEGER")
+    if "loading_time_min" not in cols:
+        _add_column_racing("anchor", "loading_time_min INTEGER")
     from .geofence import ensure_versions
     try:
         ensure_versions()

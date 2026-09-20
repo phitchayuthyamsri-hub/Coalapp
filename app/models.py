@@ -171,6 +171,24 @@ class Anchor(db.Model):
     polygon = db.Column(db.JSON, nullable=False)
     min_dwell_min = db.Column(db.Integer, default=5)
     role = db.Column(db.String(20), default="")  # xppl/loading/border/ql49/ql49b/ql49p/port/detour
+
+    # -- working conditions of the PLACE (20/09/2026) -----------------------
+    # What the site is and when it can be used. These describe the place, not
+    # its shape, so they change in place and are deliberately NOT versioned:
+    # none of them can alter how a past ping was judged, which is the only
+    # thing AnchorVersion exists to protect.
+    #
+    # loading_time_min is NOT min_dwell_min above. min_dwell_min is the
+    # geofence threshold - how long a truck must sit inside before the engine
+    # calls it a visit at all. loading_time_min is how long the work there is
+    # expected to take. One is a measuring rule, the other is a fact about the
+    # site, and they are easy to confuse, so they are named apart.
+    loc_type = db.Column(db.String(20), default="")     # load/unload/load_unload/border/highway
+    window_open = db.Column(db.String(5), default="")   # "HH:MM"; both blank = open all day
+    window_close = db.Column(db.String(5), default="")  # may be < open: a window over midnight
+    loading_bays = db.Column(db.Integer)                # NULL = not recorded, which is not 0
+    loading_time_min = db.Column(db.Integer)            # planned minutes of work on site
+
     # A retired zone stops matching from this moment and never before. It is
     # kept, not deleted, because the visits it produced are still history.
     retired_at = db.Column(db.DateTime)

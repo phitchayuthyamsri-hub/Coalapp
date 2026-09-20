@@ -1416,7 +1416,7 @@ input[type="date"] { width: 100%; }
 .anchor-list { overflow-x: auto; }
 .anchor-list li, .anchor-list-head {
   display: grid;
-  grid-template-columns: 22px 14px minmax(140px, 1fr) 16px 16px 16px;
+  grid-template-columns: 22px 14px minmax(140px, 1fr) 16px 16px 16px 16px;
   align-items: center;
   gap: 5px;
   width: max-content;
@@ -1437,6 +1437,34 @@ input[type="date"] { width: 100%; }
   top: 0;
   z-index: 2;
 }
+/* The place's working conditions (20/09/2026). Opened from the ⚙ on a row and
+   shown under the list rather than inside it: the list scrolls at 220px, and
+   four labelled fields do not fit in a scrolling strip. */
+.cond-box {
+  border: 1px solid var(--line, #e5e5ea);
+  border-radius: 6px;
+  padding: 9px 10px;
+  margin: 0 0 8px 0;
+  background: var(--panel2, #fafafc);
+}
+.cond-box[hidden] { display: none; }
+.cond-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 600; margin-bottom: 8px;
+}
+.cond-head .cond-who { color: var(--ink); }
+.cond-head button { margin-left: auto; }
+.cond-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+.cond-grid label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.cond-grid input, .cond-grid select { width: 100%; box-sizing: border-box; }
+.cond-window { display: flex; align-items: center; gap: 5px; }
+.cond-window span { font-size: 10px; color: var(--muted); }
+.cond-note { font-size: 10px; color: var(--muted); margin-top: 7px; line-height: 1.5; }
+
 .anchor-list li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rc-hidden { visibility: hidden; }
 .anchor-list li:last-child { border-bottom: none; }
@@ -2360,6 +2388,45 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
           <ul class="anchor-list" id="anchorList"></ul>
+          <div class="cond-box" id="condBox" hidden>
+            <div class="cond-head">
+              Conditions — <span class="cond-who" id="condWho"></span>
+              <button class="small secondary" id="condClose2">Close</button>
+            </div>
+            <div class="cond-grid">
+              <div>
+                <label for="condType">Location type</label>
+                <select id="condType">
+                  <option value="">— not set —</option>
+                  <option value="load">Load</option>
+                  <option value="unload">Unload</option>
+                  <option value="load_unload">Load/Unload</option>
+                  <option value="border">Border</option>
+                  <option value="highway">Highway</option>
+                </select>
+              </div>
+              <div>
+                <label>Window time</label>
+                <div class="cond-window">
+                  <input type="time" id="condOpen" title="Opens">
+                  <span>to</span>
+                  <input type="time" id="condClose" title="Closes">
+                </div>
+              </div>
+              <div>
+                <label for="condBays">Loading bay</label>
+                <input type="number" id="condBays" min="0" step="1" placeholder="not set">
+              </div>
+              <div>
+                <label for="condLoadMin">Loading time (minutes)</label>
+                <input type="number" id="condLoadMin" min="0" step="1" placeholder="not set">
+              </div>
+            </div>
+            <div class="cond-note">Blank means not recorded, which is not the same as zero. A window
+              may run past midnight (22:00 to 06:00). Loading time is how long the work is expected to
+              take — it is not the min-dwell the geofence uses to decide a visit happened.
+              Press <b>Save</b> to send this to the server.</div>
+          </div>
           <div class="btn-row">
             <button class="secondary small" id="btnSaveJson">Save JSON</button>
             <button class="secondary small" id="btnLoadJson">Load JSON</button>
@@ -3906,13 +3973,84 @@ function moveAnchor(id, dir) {
   renderAnchorFilter();
 }
 
+/* ===== THE PLACE'S WORKING CONDITIONS (20/09/2026) =====
+   What a Location IS, as opposed to where its edges are: when it can be used,
+   what is done there, how many bays and how long the work takes. Held on the
+   anchor like name and colour, sent with Save, and deliberately not part of
+   the shape's version history - none of it can change how a past ping was
+   judged, and pretending otherwise would manufacture versions.
+
+   Nothing reads these yet. They are recorded now so the planner and the
+   law-check have somewhere true to read them from later. */
+const LOC_TYPE_LABEL = {
+  '': '', load: 'Load', unload: 'Unload', load_unload: 'Load/Unload',
+  border: 'Border', highway: 'Highway'
+};
+STATE.condOpenId = null;
+STATE.condDirty = false;
+let COND_BOUND = false;
+
+function openConditions(id) {
+  // The same button closes it, so a second press puts the panel away.
+  STATE.condOpenId = (String(STATE.condOpenId) === String(id)) ? null : String(id);
+  renderConditions();
+}
+
+function condAnchor() {
+  return STATE.anchors.filter(x => String(x.id) === String(STATE.condOpenId))[0] || null;
+}
+
+function condEdit(apply) {
+  const a = condAnchor();
+  if (!a) return;
+  apply(a);
+  STATE.condDirty = true;
+  saveAnchorsToStorage();
+  try { paintSaveButton(); } catch (e) {}
+}
+
+function bindConditions() {
+  if (COND_BOUND) return;
+  const $id = (x) => document.getElementById(x);
+  const box = $id('condBox');
+  if (!box) return;
+  COND_BOUND = true;
+  $id('condClose2').addEventListener('click', () => { STATE.condOpenId = null; renderConditions(); });
+  $id('condType').addEventListener('change', (e) =>
+    condEdit(a => { a.locType = e.target.value || ''; }));
+  $id('condOpen').addEventListener('change', (e) =>
+    condEdit(a => { a.windowOpen = e.target.value || ''; }));
+  $id('condClose').addEventListener('change', (e) =>
+    condEdit(a => { a.windowClose = e.target.value || ''; }));
+  // A blank number is "not recorded", which is not zero - so it stays null.
+  $id('condBays').addEventListener('change', (e) =>
+    condEdit(a => { a.loadingBays = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); }));
+  $id('condLoadMin').addEventListener('change', (e) =>
+    condEdit(a => { a.loadingTimeMin = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); }));
+}
+
+function renderConditions() {
+  bindConditions();
+  const box = document.getElementById('condBox');
+  if (!box) return;
+  const a = condAnchor();
+  if (!a) { box.hidden = true; return; }
+  box.hidden = false;
+  document.getElementById('condWho').textContent = a.name || '';
+  document.getElementById('condType').value = a.locType || '';
+  document.getElementById('condOpen').value = a.windowOpen || '';
+  document.getElementById('condClose').value = a.windowClose || '';
+  document.getElementById('condBays').value = (a.loadingBays != null ? a.loadingBays : '');
+  document.getElementById('condLoadMin').value = (a.loadingTimeMin != null ? a.loadingTimeMin : '');
+}
+
 function renderAnchorList() {
   const ul = document.getElementById('anchorList');
   ul.innerHTML = '';
   if (STATE.anchors.length) {
     const headRow = document.createElement('li');
     headRow.className = 'anchor-list-head';
-    headRow.innerHTML = '<span></span><span></span><span>Name</span><span></span><span></span><span></span>';
+    headRow.innerHTML = '<span></span><span></span><span>Name</span><span></span><span></span><span></span><span></span>';
     ul.appendChild(headRow);
   }
   STATE.anchors.forEach((a, idx) => {
@@ -3932,6 +4070,7 @@ function renderAnchorList() {
       </label>
       <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span>
       ${overrideMark}
+      <button class="edit-btn" data-act="cond" title="Conditions — type, window, bays, loading time">⚙</button>
       <button class="edit-btn" data-act="edit" title="Edit shape">✎</button>
       <button class="x" data-act="del" title="Delete">×</button>
     `;
@@ -3948,6 +4087,10 @@ function renderAnchorList() {
     li.querySelector('[data-act="edit"]').addEventListener('click', (e) => {
       e.stopPropagation();
       startEditingAnchor(a.id);
+    });
+    li.querySelector('[data-act="cond"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openConditions(a.id);
     });
     const colorSwatch = li.querySelector('[data-act="color"]');
     if (colorSwatch) {
@@ -4709,7 +4852,10 @@ function saveAnchorsToStorage() {
   try {
     const data = STATE.anchors.map(a => ({
       id: a.id, name: a.name, polygon: a.polygon, color: a.color, colorOverride: a.colorOverride || null,
-      caption: a.caption || '', category: a.category || '', aliasOf: a.aliasOf || '', routeHidden: !!a.routeHidden, minDwellMin: (a.minDwellMin != null ? a.minDwellMin : 5)
+      caption: a.caption || '', category: a.category || '', aliasOf: a.aliasOf || '', routeHidden: !!a.routeHidden, minDwellMin: (a.minDwellMin != null ? a.minDwellMin : 5),
+      locType: a.locType || '', windowOpen: a.windowOpen || '', windowClose: a.windowClose || '',
+      loadingBays: (a.loadingBays != null ? a.loadingBays : null),
+      loadingTimeMin: (a.loadingTimeMin != null ? a.loadingTimeMin : null)
     }));
     localStorage.setItem(LS_KEY, JSON.stringify(data));
   } catch (e) { console.warn('Save failed', e); }
@@ -7454,7 +7600,11 @@ async function syncAnchorsFromServer() {
     const a = { id, name: d.name, polygon: d.polygon, color: d.color || '#34c759',
       colorOverride: p.colorOverride || undefined, caption: d.caption || '', category: d.category || '',
       aliasOf: p.aliasOf || '', routeHidden: !!p.routeHidden,
-      minDwellMin: (d.min_dwell_min != null ? d.min_dwell_min : 5), layer: null, labelMarker: null };
+      minDwellMin: (d.min_dwell_min != null ? d.min_dwell_min : 5),
+      locType: d.loc_type || '', windowOpen: d.window_open || '', windowClose: d.window_close || '',
+      loadingBays: (d.loading_bays != null ? d.loading_bays : null),
+      loadingTimeMin: (d.loading_time_min != null ? d.loading_time_min : null),
+      layer: null, labelMarker: null };
     STATE.anchors.push(a);
     drawAnchorOnMap(a);
     if (d.role) roles[d.role] = id;
@@ -7465,12 +7615,18 @@ async function syncAnchorsFromServer() {
   STATE.retiredAnchorIds = [];
   saveAnchorsToStorage(); saveRolesToStorage();
   renderAnchorList(); renderAnchorFilter();
+  try { renderConditions(); } catch (e) {}
   try { populateLegAnchorDropdowns(); } catch (e) {}
   try { recomputeVisits(); } catch (e) {}
   if (unsaved.length) toast(unsaved.length + ' zone' + (unsaved.length === 1 ? '' : 's') + ' drawn here ' + (unsaved.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
 }
 function unsavedZoneCount() {
-  return STATE.anchors.filter(a => String(a.id).startsWith('anc_')).length + (STATE.retiredAnchorIds || []).length;
+  // A changed condition counts as one piece of unsaved work: it lights the
+  // Save button and makes the browser ask before the tab closes, the same as
+  // a zone drawn and not yet applied.
+  return STATE.anchors.filter(a => String(a.id).startsWith('anc_')).length
+       + (STATE.retiredAnchorIds || []).length
+       + (STATE.condDirty ? 1 : 0);
 }
 // Leaving with an unapplied zone is the one way to lose it now; the browser
 // asks first.
@@ -7482,7 +7638,11 @@ async function pushAnchorsToServer() {
   const idMap = {};
   for (const a of STATE.anchors) {
     const body = { name: a.name, color: a.color, category: a.category || '', caption: a.caption || '',
-                   polygon: a.polygon, min_dwell_min: (a.minDwellMin != null ? a.minDwellMin : 5) };
+                   polygon: a.polygon, min_dwell_min: (a.minDwellMin != null ? a.minDwellMin : 5),
+                   loc_type: a.locType || '',
+                   window_open: a.windowOpen || '', window_close: a.windowClose || '',
+                   loading_bays: (a.loadingBays != null ? a.loadingBays : ''),
+                   loading_time_min: (a.loadingTimeMin != null ? a.loadingTimeMin : '') };
     const isNew = String(a.id).startsWith('anc_');
     const r = await fetch(isNew ? '/api/anchors' : '/api/anchors/' + a.id,
                           { method: isNew ? 'POST' : 'PUT', headers: hdr, body: JSON.stringify(body) });
@@ -7496,6 +7656,7 @@ async function pushAnchorsToServer() {
     await fetch('/api/anchors/' + id, { method: 'DELETE' });
   }
   STATE.retiredAnchorIds = [];
+  STATE.condDirty = false;          // everything on this page is now on the server
   // Roles are not sent. Sequence Setup left this page on 18/09/2026: the
   // engine's mapping stays on the server exactly as it is, until monitoring
   // reads a truck's stops from its route.

@@ -76,7 +76,71 @@ def as_api(a):
             "category": a.category or "", "caption": a.caption or "",
             "role": a.role or "", "polygon": a.polygon,
             "min_dwell_min": a.min_dwell_min if a.min_dwell_min is not None else 5,
+            "loc_type": a.loc_type or "",
+            "window_open": a.window_open or "",
+            "window_close": a.window_close or "",
+            "loading_bays": a.loading_bays,
+            "loading_time_min": a.loading_time_min,
             "retired_at": a.retired_at.strftime("%Y-%m-%d %H:%M") if a.retired_at else None}
+
+
+# -- the place's working conditions (20/09/2026) ------------------------------
+# Labels, not judgements: like name and colour they change in place and write
+# no version, because none of them can change how a past ping was judged.
+LOC_TYPES = ("", "load", "unload", "load_unload", "border", "highway")
+
+
+def _hhmm(v):
+    """A clock time as "HH:MM", or "" for no window.
+
+    Refused rather than quietly blanked when it is neither: a window someone
+    typed and the server silently dropped is worse than an error, because the
+    page would go on showing it until the next reload.
+    """
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    parts = s.split(":")
+    if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
+        raise ValueError("a window time reads HH:MM, or is blank for all day")
+    h, m = int(parts[0]), int(parts[1])
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError("a window time reads HH:MM, or is blank for all day")
+    return "%02d:%02d" % (h, m)
+
+
+def _whole(v, what):
+    """A whole number at or above zero, or None for "not recorded"."""
+    if v is None or str(v).strip() == "":
+        return None
+    try:
+        n = int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        raise ValueError("%s is a whole number" % what)
+    if n < 0:
+        raise ValueError("%s cannot be negative" % what)
+    return n
+
+
+def apply_conditions(a, d):
+    """Set whatever conditions the caller sent, leaving the rest alone.
+
+    The open and close times are NOT checked against each other: a window that
+    runs 22:00 to 06:00 is a night shift, not a mistake.
+    """
+    if "loc_type" in d:
+        t = (d.get("loc_type") or "").strip().lower()
+        if t not in LOC_TYPES:
+            raise ValueError("unknown location type %r" % t)
+        a.loc_type = t
+    if "window_open" in d:
+        a.window_open = _hhmm(d.get("window_open"))
+    if "window_close" in d:
+        a.window_close = _hhmm(d.get("window_close"))
+    if "loading_bays" in d:
+        a.loading_bays = _whole(d.get("loading_bays"), "loading bays")
+    if "loading_time_min" in d:
+        a.loading_time_min = _whole(d.get("loading_time_min"), "loading time")
 
 
 # -- writing ------------------------------------------------------------------
@@ -136,6 +200,7 @@ def create(d, who):
                caption=(d.get("caption") or "")[:60],
                polygon=poly, min_dwell_min=int(d.get("min_dwell_min") or 5),
                role=(d.get("role") or "")[:20])
+    apply_conditions(a, d)
     db.session.add(a)
     db.session.flush()
     db.session.add(AnchorVersion(anchor_id=a.id, polygon=poly,
@@ -146,8 +211,9 @@ def create(d, who):
 
 
 def update(a, d, who):
-    """Apply what the caller sent. Name, colour, category, caption and role
-    change in place - they are labels, not judgements. A changed polygon or
+    """Apply what the caller sent. Name, colour, category, caption, role and
+    the place's working conditions change in place - they are labels, not
+    judgements. A changed polygon or
     dwell is a new VERSION from now, and an unchanged one is not: pressing
     Apply on a zone you did not move must not manufacture history.
 
@@ -162,6 +228,7 @@ def update(a, d, who):
         a.caption = (d.get("caption") or "")[:60]
     if "role" in d:
         a.role = (d.get("role") or "")[:20]
+    apply_conditions(a, d)
 
     new_poly = d.get("polygon") if "polygon" in d else None
     if new_poly is not None and not _valid_polygon(new_poly):
