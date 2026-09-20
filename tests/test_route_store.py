@@ -67,8 +67,11 @@ as_user("mon1")
 check("a monitor may read", c.get("/api/route-seqs").status_code, 200)
 check("...but not create", c.post("/api/route-seqs", json={"name": "X"}).status_code, 403)
 as_user("planner1")
+check("a planner may not create either - admin only since 20/09",
+      c.post("/api/route-seqs", json={"name": "Z"}).status_code, 403)
+as_user("boss")
 r = c.post("/api/route-seqs", json={"name": "XPPL → Chan May", "sequence": []})
-check("a planner may create", r.status_code, 200)
+check("an admin may create", r.status_code, 200)
 RID = r.get_json()["id"]
 check("...and the answer carries the routes", len(r.get_json()["routes"]), 1)
 check("a second route with the same name is refused",
@@ -133,6 +136,9 @@ check("an unknown route is a 404",
 
 print("\ndeleting a route with trucks on it")
 as_user("planner1")
+check("a planner may not delete one",
+      c.delete("/api/route-seqs/%d" % RID).status_code, 403)
+as_user("boss")
 r = c.delete("/api/route-seqs/%d" % RID)
 check("is refused while a truck is locked to it", r.status_code, 409)
 check("...naming the truck", r.get_json()["trucks"], ["20H01385"])
