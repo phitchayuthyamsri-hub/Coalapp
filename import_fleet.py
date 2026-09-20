@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 """Import the Bac Nam fleet list: plates, drivers, phones, and the fixed route.
 
-    python import_fleet.py <file.xlsx>            # say what would change
-    python import_fleet.py <file.xlsx> --apply    # do it
+    python import_fleet.py <file.xlsx>               # say what would change
+    python import_fleet.py <file.xlsx> --apply       # do it
+    python import_fleet.py <file.xlsx> --no-routes   # plates only, leave routes alone
 
 The workbook is the company's own, kept in Vietnamese, one sheet per revision.
 The newest registration sheet is the fleet; the rest are history and are not
@@ -83,12 +84,18 @@ def main():
         return 2
     path = sys.argv[1]
     apply = "--apply" in sys.argv
+    # Trucks without their routes. Prod has no A Ngo Warehouse zone, so two of
+    # the three runs cannot exist there yet - but the trucks still need to be
+    # in the fleet, because the GPS poller only asks for plates it finds in the
+    # truck table. Coverage first; the routes can follow the zone.
+    no_routes = "--no-routes" in sys.argv
     fleet = read_sheet(path)
 
     app = create_app()
     with app.app_context():
-        routes = {r.name: r for r in Route.query.all()}
-        missing = sorted({v for v in ROUTE_MAP.values() if v not in routes})
+        routes = {} if no_routes else {r.name: r for r in Route.query.all()}
+        missing = [] if no_routes else sorted(
+            {v for v in ROUTE_MAP.values() if v not in routes})
         if missing:
             print("These routes are not on the Route page yet, so the trucks that")
             print("run them cannot be pointed at one. Build them first:")
@@ -101,8 +108,8 @@ def main():
 
         for row in fleet:
             key = norm_plate(row["plate"])
-            want_route = ROUTE_MAP.get(row["route"])
-            if row["route"] and not want_route:
+            want_route = None if no_routes else ROUTE_MAP.get(row["route"])
+            if row["route"] and not no_routes and not want_route:
                 unmapped.add(row["route"])
             t = trucks.get(key)
             if t is None:
@@ -125,6 +132,8 @@ def main():
                 unchanged += 1
 
         print("Fleet sheet: %s" % SHEET)
+        if no_routes:
+            print("  (--no-routes: plates, drivers and phones only)")
         print("  rows read        : %d" % len(fleet))
         print("  already correct  : %d" % unchanged)
         print("  to add           : %d" % len(new))
@@ -164,7 +173,7 @@ def main():
             if want:
                 t.route_id = routes[want].id
         # The company's own wording for each run, kept where the run is.
-        for vi, en in ROUTE_MAP.items():
+        for vi, en in ({} if no_routes else ROUTE_MAP).items():
             r = routes.get(en)
             if r is not None and (r.note or "") != vi:
                 r.note = vi[:300]
