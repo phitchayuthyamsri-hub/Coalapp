@@ -97,21 +97,38 @@ check('a backhaul route says why its Trucks cell is empty',
 check('the add-a-Location picker fits its content',
       /\.leg-add select \{[\s\S]{0,60}?flex: 0 0 auto; width: auto;/.test(html), true);
 
-// Distance and speed per leg feed every plan, and had no screen at all
-// between the Roads tab being retired on 19/09 and this.
-console.log('\nthe corridor legs');
-const legRow = rows.find(r => r.includes('cell-hours'));
-check('the legs have a table', /<table class="grid-table" id="legList">/.test(html), true);
-check('a row per leg with five cells', (legRow || '').match(/<td[ >]/g).length, 5);
-// The cell is built by concatenation, so the act name is what to look for.
-check('distance is editable', /\['l-km', 'road_km'\]/.test(html), true);
-check('speed is editable', /\['l-speed', 'speed'\]/.test(html), true);
+// The planning figures moved here whole (user, 20/09). They sat on
+// Operations > Planner while the routes they describe sat here, so the same
+// corridor was described in two places. The STORE never moved - planner.py
+// still reads PlanSetting and RouteLeg - only the screen did.
+console.log('\nthe planning figures');
+check('they have a table on this page',
+      /<table class="grid-table" id="figureList">/.test(html), true);
+check('read from the planner own endpoint',
+      /fetch\('\/api\/shift\/settings'\)/.test(html), true);
+check('...and written back to the same one',
+      /fetch\('\/api\/shift\/settings', \{[\s\S]{0,80}?method: 'POST'/.test(html), true);
+check('who may edit is the server answer, not a guess',
+      /STATE\.figuresCanEdit = !!j\.can_edit/.test(html), true);
+check('a leg distance is editable here', /legkm:/.test(html), true);
 check('the driving time is shown, not worked out by eye',
-      /function hoursText\(km, speed\)/.test(html), true);
-check('the API answers with the distance', /"road_km": km/.test(api), true);
-check('...and the hours it becomes', /"hours": \(km \/ spd\) if spd else 0\.0/.test(api), true);
-check('changing a leg is admin-only, like the routes it feeds',
-      /def route_update\(leg_key\):[\s\S]*?if not _may_edit_routes\(\):/.test(api), true);
+      /function figHours\(km, speed\)/.test(html), true);
+
+const shiftApi = fs.readFileSync(path.join(root, 'app', 'shift_routes.py'), 'utf8');
+check('the endpoint takes a distance now',
+      /key\.startswith\("legkm:"\)/.test(shiftApi), true);
+check('a blank distance clears it rather than reading as zero',
+      /if val == "":[\s\S]{0,200}?r\.road_km = None/.test(shiftApi), true);
+check('changing figures stays a planner-or-admin job',
+      /Only a planner or an admin may change planning figures/.test(shiftApi), true);
+
+const planner = fs.readFileSync(path.join(root, 'app', 'templates', 'dispatch_planner.html'), 'utf8');
+check('the planner page no longer edits them',
+      /<div id="settings"><\/div>/.test(planner), false);
+check('...and says where they went',
+      /moved to <b>Setting &rarr; Route<\/b>/.test(planner), true);
+check('its map survived the move',
+      /data-tab="figures">Corridor map</.test(planner), true);
 
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

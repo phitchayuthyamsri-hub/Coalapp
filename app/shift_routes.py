@@ -701,9 +701,12 @@ def get_settings():
                                          r.points[i + 1][0], r.points[i + 1][1])
                      for i in range(len(r.points) - 1))
         out.append({"key": "leg:" + r.leg_key, "value": str(r.speed),
-                    "label": r.leg_key.replace("_", " → "),
+                    "label": r.label or r.leg_key.replace("_", " → "),
                     "unit": "km/h", "group": "speed", "kind": "leg",
                     "km": round(km, 1),
+                    # NULL means nobody has said; the km above may have been
+                    # summed off a drawn line, which is not the same thing.
+                    "km_stored": (None if r.road_km is None else float(r.road_km)),
                     "hours": round(km / r.speed, 2) if r.speed else None})
     return jsonify(settings=out, can_edit=(_role() in ("planner", "admin")))
 
@@ -720,7 +723,28 @@ def save_settings():
     changed = []
     for key, val in (d.get("values") or {}).items():
         val = str(val).strip()
-        if key.startswith("leg:"):
+        if key.startswith("legkm:"):
+            # The distance belongs beside the speed: the plan uses the two as
+            # one number (hours), so editing them in different places is how
+            # they drift apart.
+            r = RouteLeg.query.filter_by(leg_key=key[6:]).first()
+            if not r:
+                continue
+            if val == "":
+                if r.road_km is not None:
+                    changed.append("%s km cleared" % key[6:])
+                    r.road_km = None
+                continue
+            try:
+                km = float(val)
+            except ValueError:
+                return jsonify(error="Distance for %s must be a number" % key[6:]), 400
+            if km < 0:
+                return jsonify(error="Distance for %s cannot be negative" % key[6:]), 400
+            if r.road_km != km:
+                changed.append("%s %s -> %s km" % (key[6:], r.road_km, km))
+                r.road_km = km
+        elif key.startswith("leg:"):
             r = RouteLeg.query.filter_by(leg_key=key[4:]).first()
             if not r:
                 continue

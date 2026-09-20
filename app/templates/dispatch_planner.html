@@ -251,7 +251,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <nav class="tabs">
     <button class="tab on" data-tab="revision">Revision</button>
     <button class="tab" data-tab="week">Week</button>
-    <button class="tab" data-tab="figures">Planning figures</button>
+    <button class="tab" data-tab="figures">Corridor map</button>
   </nav>
   <div class="spacer"></div>
   <a href="/shift-board">Supervisor</a>
@@ -386,13 +386,10 @@ to these times, and the revision is measured against them.">Issue this week</but
   </div>
 
   <div class="card">
-    <h2>Planning figures</h2>
-    <p class="hint">Every number here is an estimate the operation will correct.
-      Change one, save, and the plan recalculates &mdash; no deployment.</p>
-    <div id="settings"></div>
-    <div class="row" style="margin-top:14px">
-      <button id="saveSet">Save figures</button><span class="msg" id="setMsg"></span>
-    </div>
+    <p class="hint">The planning figures moved to <b>Setting &rarr; Route</b> on 20/09/2026, beside the
+      routes they describe &mdash; turnarounds, the hours a border or a berth is open, and each leg's
+      distance and speed. The same store and the same rule about who may change them; one screen instead
+      of two describing the same corridor. The map below still draws what they say.</p>
   </div>
 </section>
 
@@ -1199,6 +1196,9 @@ function rowHtml(x){
 }
 
 function renderSettings(){
+  // The figures editor left this page on 20/09/2026; SET is still loaded
+  // because the map's stop labels and leg times are drawn from it.
+  if (!$('#settings')) return;
   const by = {};
   SET.settings.forEach(x => { (by[x.group] = by[x.group] || []).push(x); });
   $('#settings').innerHTML = GROUPS.map(function(g){
@@ -1228,7 +1228,7 @@ async function loadSettings(){
   renderSettings();
 }
 
-$('#saveSet').onclick = async function(){
+if ($('#saveSet')) $('#saveSet').onclick = async function(){
   const vals = {};
   document.querySelectorAll('#settings [data-k]').forEach(i => {
     vals[i.dataset.k] = String(i.value).trim();
