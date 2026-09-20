@@ -329,11 +329,16 @@ def _map_corridor_legs_to_stops():
     needs to find a leg by its ends. DIST_LEGS already records each leg's ends
     as engine ROLES, and every zone carries a role, so the two line up.
 
-    ql49b_ql49p is the exception and is left unmapped on purpose: it is the
-    stretch INSIDE QL49, between a border-side point and a port-side one, and
-    there is a single QL49 zone. A route that stops at QL49 once uses the leg
-    from QL49 to the port instead, which measures that stretch already.
+    The two QL49 legs are left unmapped on purpose. The corridor splits QL49
+    into a border-side point and a port-side one; the map has a single QL49
+    zone. So ql49b_ql49p measures a stretch between two points that are one
+    stop here, and ql49p_port measures only the part of QL49-to-the-port that
+    comes after it - 66.70 km of the 116 the operation measured end to end.
+    Mapping either would have a route walk 238 km where the corridor walks
+    289. A route that stops at QL49 once uses the operation's own
+    QL49-to-Chan-May leg instead.
     """
+    SPLIT_QL49 = {"ql49b_ql49p", "ql49p_port"}
     from .models import Anchor, RouteLeg
     from .engine import DIST_LEGS
     try:
@@ -346,9 +351,11 @@ def _map_corridor_legs_to_stops():
     by_role.setdefault("ql49p", by_role.get("ql49"))
     mapped = 0
     for spec in DIST_LEGS:
+        if spec["key"] in SPLIT_QL49:
+            continue
         a, b = by_role.get(spec["from"]), by_role.get(spec["to"])
         if not a or not b or a == b:
-            continue                       # ql49b_ql49p lands here, as intended
+            continue
         r = RouteLeg.query.filter_by(leg_key=spec["key"]).first()
         if r is not None and (r.from_anchor_id != a or r.to_anchor_id != b):
             r.from_anchor_id, r.to_anchor_id = a, b
