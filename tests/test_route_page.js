@@ -235,5 +235,36 @@ check('the synced fleet blob carries it too',
       /"route": names\.get\(t\.route_id, ""\)/.test(
         fs.readFileSync(path.join(root, 'sync_tool_state.py'), 'utf8')), true);
 
+// Sorting, run rather than read. Every column is clickable, but the comparator
+// used to name the TEXT columns and subtract everything else - so a column
+// added later subtracted one string from another, got NaN, and the rows simply
+// did not move. Driver and Route did that on the day they arrived.
+console.log('\nthe fleet table sorts');
+const cmpSrc = (html.match(/const FLEET_NUMERIC = \[[\s\S]*?\n  \}\);/) || [''])[0];
+check('the comparator names the numbers, not the text',
+      /FLEET_NUMERIC = \['added', 'ytd', 'month', 'avg'\]/.test(cmpSrc), true);
+if (cmpSrc) {
+  const body = 'const rows=ROWS;const STATE={fleetSort:{key:KEY,dir:DIR}};'
+             + cmpSrc + ';return rows.map(r=>r[KEY]);';
+  const run = (rows, key, dir) =>
+    new Function('ROWS', 'KEY', 'DIR', body)(rows.slice(), key, dir);
+  const sample = [
+    { plate: '20H01410', route: 'Mine : Chan May', driver: 'Bee', ytd: 3 },
+    { plate: '20C10615', route: '',                driver: 'Ann', ytd: 11 },
+    { plate: '20H00701', route: 'A Ngo : Chan May', driver: 'Cy', ytd: 2 },
+    { plate: '20H00709', route: 'Mine : A Ngo',    driver: '',    ytd: 7 },
+  ];
+  check('route sorts A-Z', run(sample, 'route', 1).join('|'),
+        'A Ngo : Chan May|Mine : A Ngo|Mine : Chan May|');
+  check('...and reverses', run(sample, 'route', -1).join('|'),
+        'Mine : Chan May|Mine : A Ngo|A Ngo : Chan May|');
+  check('a blank route stays last either way',
+        run(sample, 'route', 1)[3] === '' && run(sample, 'route', -1)[3] === '', true);
+  check('driver sorts too', run(sample, 'driver', 1).join('|'), 'Ann|Bee|Cy|');
+  check('plates still sort naturally', run(sample, 'plate', 1).join('|'),
+        '20C10615|20H00701|20H00709|20H01410');
+  check('numbers still sort as numbers', run(sample, 'ytd', -1).join('|'), '11|7|3|2');
+}
+
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

@@ -5622,13 +5622,22 @@ function renderFleetUI() {
   });
 
   // Sort
+  // Name the NUMBERS, and let everything else sort as text. The other way
+  // round - listing the text columns - meant every column added later fell
+  // through to subtracting one string from another, which is NaN, and a
+  // comparator that returns NaN leaves the rows where they were. Driver and
+  // Route did exactly that on the day they arrived.
+  const FLEET_NUMERIC = ['added', 'ytd', 'month', 'avg'];
   const { key, dir } = STATE.fleetSort;
   rows.sort((a, b) => {
-    let va = a[key], vb = b[key];
-    if (key === 'plate' || key === 'status' || key === 'phone' || key === 'gps' || key === 'effFrom' || key === 'effTo') {
-      va = String(va || ''); vb = String(vb || ''); return va < vb ? -dir : va > vb ? dir : 0;
-    }
-    va = va || 0; vb = vb || 0; return (va - vb) * dir;
+    const va = a[key], vb = b[key];
+    if (FLEET_NUMERIC.includes(key)) return ((va || 0) - (vb || 0)) * dir;
+    // Blank last whichever way it is sorted: an unset route is not "before A".
+    const sa = String(va == null ? '' : va), sb = String(vb == null ? '' : vb);
+    if (!sa && !sb) return 0;
+    if (!sa) return 1;
+    if (!sb) return -1;
+    return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' }) * dir;
   });
 
   body.innerHTML = rows.map(r => `
