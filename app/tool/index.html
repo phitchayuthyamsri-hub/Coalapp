@@ -4912,22 +4912,6 @@ async function idbAddDataset(meta, pings) {
   });
 }
 
-async function idbGetAllPings() {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('pings', 'readonly');
-    const r = tx.objectStore('pings').getAll();
-    r.onsuccess = () => resolve(r.result.map(rec => ({
-      plate: rec.plate,
-      dt: new Date(rec.t),
-      lat: rec.lat, lng: rec.lng,
-      status: rec.status, speed: rec.speed,
-      fileId: rec.fileId
-    })));
-    r.onerror = (e) => reject(e.target.error);
-  });
-}
-
 async function idbGetDatasets() {
   const db = await idbOpen();
   return new Promise((resolve, reject) => {
@@ -5020,38 +5004,6 @@ async function idbDeleteByDateRange(startMs, endMs) {
     tx.oncomplete = () => resolve(deleted);
     tx.onerror = (e) => reject(e.target.error);
   });
-}
-
-// Rebuild STATE.pings + derived fileInfo from the whole store, then re-render
-async function rebuildFromStore() {
-  const pings = await idbGetAllPings();
-  pings.sort((a, b) => {
-    if (a.plate < b.plate) return -1;
-    if (a.plate > b.plate) return 1;
-    return a.dt - b.dt;
-  });
-  STATE.pings = pings;
-  if (pings.length) {
-    const plates = new Set();
-    let minDate = null, maxDate = null;
-    for (const p of pings) {
-      plates.add(p.plate);
-      if (!minDate || p.dt < minDate) minDate = p.dt;
-      if (!maxDate || p.dt > maxDate) maxDate = p.dt;
-    }
-    STATE.fileInfo = { name: null, rows: pings.length, plates, minDate, maxDate };
-  } else {
-    STATE.fileInfo = null;
-  }
-  renderFileInfo();
-  await renderDatasetList();
-  // The Route column offers what is on the Route page, so make sure that
-  // list has been read at least once - the fleet page may be opened first.
-  if (!(STATE.routes || []).length) { try { loadRoutes(); } catch (e) {} }
-  if (typeof renderFleetUI === 'function') renderFleetUI();
-  initFiltersFromFile();
-  renderTruckFilter();
-  recomputeVisits();
 }
 
 // Imported-sources list (timing-only model). Shows file · date span · #visits,
@@ -7517,8 +7469,14 @@ function loadTiming() {
   } catch (e) { console.warn('Timing load failed:', e); return false; }
 }
 
-// Legacy entry point: build visits from STATE.pings (used only if raw pings present).
+// Rebuild visits from raw pings - which only a hand-dropped GPS file supplies
+// now. The server's cron computes the visits this page normally shows and
+// publishes them as the timing store, so with nothing raw loaded there is
+// nothing to rebuild FROM: re-render what is already here instead. Replacing
+// it with buildVisits([]) would empty the table, and persistTiming would then
+// push that emptiness into the store the whole team reads.
 function recomputeVisits() {
+  if (!STATE.pings || !STATE.pings.length) { finalizeVisits(); return; }
   STATE.visits = buildVisits(STATE.pings, STATE.anchors);
   finalizeVisits();
 }

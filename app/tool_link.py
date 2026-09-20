@@ -160,29 +160,6 @@ def _status(only):
     return {"plates": plates, "disp": disp, "dates": sorted(dates), "cell": cell}
 
 
-@bp.get("/api/tool/pings")
-@login_required
-def tool_pings():
-    """GPS positions, in the record shape the IndexedDB store holds."""
-    only = _own_plates()
-    days = request.args.get("days", type=int) or 400   # the whole history; it is only a few thousand rows
-    since = datetime.utcnow() + timedelta(hours=7) - timedelta(days=days)
-    rows = (GpsPing.query.filter(GpsPing.dt >= since)
-            .order_by(GpsPing.plate, GpsPing.dt).all())
-    out = []
-    for p in rows:
-        key = engine.norm_plate(p.plate)
-        if only is not None and key not in only:
-            continue
-        out.append({"plate": key, "t": int(p.dt.timestamp() * 1000),
-                    "lat": p.lat, "lng": p.lng,
-                    "status": p.status or "", "speed": p.speed or 0.0})
-    return Response(json.dumps({"pings": out, "count": len(out),
-                                "fileId": SEED_FILE_ID}),
-                    mimetype="application/json",
-                    headers={"Cache-Control": "no-store"})
-
-
 @bp.get("/api/tool/seed.js")
 @login_required
 def tool_seed_js():
@@ -244,53 +221,13 @@ SEED_JS = r"""
     });
   }
 
-  function syncPings() {
-    var got;
-    return fetch('/api/tool/pings', {credentials: 'same-origin'})
-      .then(function (r) { return r.json(); })
-      .then(function (j) { got = j; return open(); })
-      .then(function (db) {
-        return new Promise(function (res, rej) {
-          var tx = db.transaction(['pings', 'datasets'], 'readwrite');
-          var ps = tx.objectStore('pings');
-          // Replace the previous server batch rather than piling copies up;
-          // anything the operator dropped by hand keeps its own fileId.
-          var cur = ps.openCursor(), added = 0;
-          cur.onsuccess = function (e) {
-            var c = e.target.result;
-            if (c) {
-              if (c.value && c.value.fileId === FILE_ID) c.delete();
-              c.continue();
-              return;
-            }
-            (got.pings || []).forEach(function (p) {
-              ps.put({key: p.plate + '|' + p.t, fileId: FILE_ID, plate: p.plate,
-                      t: p.t, lat: p.lat, lng: p.lng,
-                      status: p.status, speed: p.speed});
-              added++;
-            });
-            tx.objectStore('datasets').put({
-              id: FILE_ID, name: 'Coalapp (live)', rows: added,
-              added: Date.now(), from: '', to: ''});
-          };
-          tx.oncomplete = function () { res(added); };
-          tx.onerror = function (e) { rej(e.target.error); };
-        });
-      });
-  }
-
-  function go() {
-    syncPings().then(function (n) {
-      console.log('[tool-link] ' + n + ' positions from the database');
-      // Ask the tool to re-read its own store. If that hook is not there,
-      // leave the page alone rather than reloading under the operator.
-      if (typeof window.rebuildFromStore === 'function') {
-        try { window.rebuildFromStore(); } catch (e) { console.warn(e); }
-      }
-    }).catch(function (e) { console.warn('[tool-link] ping sync failed', e); });
-  }
-
-  if (document.readyState === 'complete') setTimeout(go, 0);
-  else window.addEventListener('load', function () { setTimeout(go, 0); });
+  // Raw pings are not sent any more (20/09/2026). The tool's own model is
+  // timing-only - "visits + sequences + source log; NO raw pings" - and the
+  // cron already computes exactly that server-side and publishes it as
+  // actualGpsTiming_v1, which the shared-store bridge puts into localStorage
+  // before this script runs. Downloading the whole ping history on top of it
+  // only rebuilt, in the browser, what the browser had just been handed:
+  // 3.2 MB and 28,000 IndexedDB writes per page load, to arrive at the same
+  // 146 KB answer. The fleet table sat behind all of it.
 })();
 """
