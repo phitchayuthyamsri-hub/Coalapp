@@ -64,6 +64,25 @@ console.log('\nevery condition cell has a handler');
   check(act, inMarkup && inHandler, true);
 });
 
+// A bay and a work time mean nothing at a border or on a highway, so those
+// two cells are not typed in there - and what is stored has to match what is
+// shown, or a highway would carry a hidden bay count into the database.
+console.log('\nbay and time only where work is done');
+check('the two cells are gated on the type',
+      (body[1].match(/DOES_WORK\(a\) \?/g) || []).length, 2);
+check('a gate that lists exactly the three working types',
+      /WORK_TYPES = \['load', 'unload', 'load_unload'\]/.test(html), true);
+check('changing the type clears what no longer applies',
+      /if \(!DOES_WORK\(a\)\) \{ a\.loadingBays = null; a\.loadingTimeMin = null; \}/.test(html), true);
+check('...and redraws the row so the cells change',
+      /if \(act === 'c-type'\) renderAnchorList\(\);/.test(html), true);
+check('the columns say Load/Unload, not Loading',
+      /<th rowspan="2">Load\/Unload bay<\/th>/.test(head[1]), true);
+check('no spinner arrows on the numbers',
+      /-webkit-inner-spin-button \{\s*\n?\s*-webkit-appearance: none;/.test(html), true);
+check('the clock on a time input is brightened',
+      /calendar-picker-indicator \{[\s\S]{0,120}?filter: invert\(1\)/.test(html), true);
+
 console.log('\nthe map is its own page');
 check('the map page exists', /data-page-panel="locmap"/.test(html), true);
 check('there is still exactly one map element',

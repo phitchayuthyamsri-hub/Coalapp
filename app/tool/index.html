@@ -1464,6 +1464,22 @@ input[type="date"] { width: 100%; }
   color: var(--ink);
 }
 .anchor-list td.cell-num input { width: 68px; text-align: right; }
+/* No spinner arrows (user, 20/09): these are typed, not nudged. */
+.anchor-list td.cell-num input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.anchor-list td.cell-num input[type="number"]::-webkit-outer-spin-button,
+.anchor-list td.cell-num input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* The clock on a time input is drawn dark by the browser, which on this dark
+   theme left it all but invisible. Inverted, it reads as near-white. */
+.anchor-list td input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.9);
+  opacity: 0.95;
+  cursor: pointer;
+}
+/* A column that does not apply to this Location: shown, but not typed in. */
+.anchor-list td .na { color: var(--muted); padding-left: 2px; }
 .anchor-list td.cell-window { white-space: nowrap; }
 .anchor-list td.cell-window span { font-size: 9px; color: var(--muted); padding: 0 4px; }
 .rc-hidden { visibility: hidden; }
@@ -2413,7 +2429,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="secondary small" id="btnClearAnchors">Clear all</button>
           </div>
           <input type="file" id="loadJsonInput" accept=".json" style="display:none">
-          <div class="help-text">Click a name to rename it, ▲▼ to reorder. <b>🗺 View on Map</b> opens the map on its own page — select a Location first to open zoomed to it; ✎ and <b>+ Draw</b> go there too, because a shape needs the map. In the condition columns a blank means <i>not recorded</i>, which is not the same as zero. <b>Window time</b> is per direction: <i>To port</i> is the laden run towards Chan May, <i>To mine</i> the return towards XPPL. A Location may be open one way and unrestricted the other — leave the direction that has no window blank. A window may run past midnight (22:00 to 06:00). Loading time is how long the work is expected to take, not the min-dwell the geofence uses to decide a visit happened. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
+          <div class="help-text">Click a name to rename it, ▲▼ to reorder. <b>🗺 View on Map</b> opens the map on its own page — select a Location first to open zoomed to it; ✎ and <b>+ Draw</b> go there too, because a shape needs the map. In the condition columns a blank means <i>not recorded</i>, which is not the same as zero. <b>Window time</b> is per direction: <i>To port</i> is the laden run towards Chan May, <i>To mine</i> the return towards XPPL. A Location may be open one way and unrestricted the other — leave the direction that has no window blank. A window may run past midnight (22:00 to 06:00). <b>Load/Unload bay</b> and <b>time</b> apply only to a Load, Unload or Load/Unload stop — at a border or on a highway they read <i>—</i>. The time is how long that work is expected to take, not the min-dwell the geofence uses to decide a visit happened. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
         </div>
 
         <!-- Sequence setup left this page on 18/09/2026. The order trucks pass
@@ -3911,6 +3927,12 @@ function condEdit(a, apply) {
   try { paintSaveButton(); } catch (e) {}
 }
 
+// A bay and a work time only mean something where something is loaded or
+// unloaded. At a border or on a highway the truck passes through, so those
+// two columns are shown as - and cannot be typed in (user, 20/09).
+const WORK_TYPES = ['load', 'unload', 'load_unload'];
+function DOES_WORK(a) { return WORK_TYPES.includes(a.locType || ''); }
+
 // A blank number means "not recorded", which is not zero - so it stays null.
 function condNum(v) {
   if (v === '' || v == null) return null;
@@ -3960,7 +3982,7 @@ function renderAnchorList() {
     head.innerHTML =
         '<tr><th rowspan="2">No#</th><th rowspan="2"></th><th rowspan="2">Name</th>'
       + '<th rowspan="2">Location type</th><th colspan="2" class="grouped">Window time</th>'
-      + '<th rowspan="2">Loading bay</th><th rowspan="2">Loading time (min)</th>'
+      + '<th rowspan="2">Load/Unload bay</th><th rowspan="2">Load/Unload time (min)</th>'
       + '<th rowspan="2"></th><th rowspan="2"></th><th rowspan="2"></th></tr>'
       + '<tr><th class="sub">To port</th><th class="sub">To mine</th></tr>';
   }
@@ -3991,14 +4013,16 @@ function renderAnchorList() {
       <td class="cell-window">
         <input type="time" data-act="c-back-open" title="Opens, heading back to the mine" value="${a.windowBackOpen || ''}"><span>to</span><input type="time" data-act="c-back-close" title="Closes, heading back to the mine" value="${a.windowBackClose || ''}">
       </td>
-      <td class="cell-num">
+      <td class="cell-num">${DOES_WORK(a) ? `
         <input type="number" min="0" step="1" data-act="c-bays" placeholder="—"
-               title="How many loading bays" value="${a.loadingBays != null ? a.loadingBays : ''}">
+               title="How many load/unload bays" value="${a.loadingBays != null ? a.loadingBays : ''}">`
+        : '<span class="na" title="Only a Load, Unload or Load/Unload stop has bays">—</span>'}
       </td>
-      <td class="cell-num">
+      <td class="cell-num">${DOES_WORK(a) ? `
         <input type="number" min="0" step="1" data-act="c-load" placeholder="—"
-               title="How long the work here is expected to take, in minutes"
-               value="${a.loadingTimeMin != null ? a.loadingTimeMin : ''}">
+               title="How long the load or unload here is expected to take, in minutes"
+               value="${a.loadingTimeMin != null ? a.loadingTimeMin : ''}">`
+        : '<span class="na" title="Nothing is loaded or unloaded at this stop">—</span>'}
       </td>
       <td class="act">${overrideMark}</td>
       <td class="act"><button class="edit-btn" data-act="edit" title="Edit this Location's shape — opens the map page">✎</button></td>
@@ -4019,7 +4043,10 @@ function renderAnchorList() {
     // The condition cells. Every one stops the click so that typing in a row
     // does not also select it and fly the map to it.
     const cond = {
-      'c-type':  (a, v) => { a.locType = v || ''; },
+      'c-type':  (a, v) => {
+        a.locType = v || '';
+        if (!DOES_WORK(a)) { a.loadingBays = null; a.loadingTimeMin = null; }
+      },
       'c-out-open':   (a, v) => { a.windowOutOpen = v || ''; },
       'c-out-close':  (a, v) => { a.windowOutClose = v || ''; },
       'c-back-open':  (a, v) => { a.windowBackOpen = v || ''; },
@@ -4034,6 +4061,9 @@ function renderAnchorList() {
       el.addEventListener('change', (e) => {
         e.stopPropagation();
         condEdit(a, (x) => cond[act](x, e.target.value));
+        // The type decides whether the last two columns exist at all, so the
+        // row has to be drawn again to show or hide them.
+        if (act === 'c-type') renderAnchorList();
       });
     });
     const colorSwatch = li.querySelector('[data-act="color"]');
