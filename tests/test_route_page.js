@@ -239,6 +239,18 @@ check('the synced fleet blob carries it too',
 // used to name the TEXT columns and subtract everything else - so a column
 // added later subtracted one string from another, got NaN, and the rows simply
 // did not move. Driver and Route did that on the day they arrived.
+// STATE.routes was already taken: the corridor legs, keyed by leg key, since
+// long before the Route page existed. Naming the named routes the same thing
+// replaced an object with an array, broke every leg that read it, and left the
+// Fleet page rendering nothing at all.
+console.log('\nthe two route states stay apart');
+check('the named routes have their own name',
+      /STATE\.routeDefs = \[\];/.test(html), true);
+check('...and the legs keep theirs',
+      /STATE\.routes: \{ legKey/.test(html), true);
+check('nothing treats the leg map as a list',
+      /STATE\.routes\.(filter|slice|forEach|length)\b/.test(html), false);
+
 console.log('\nthe fleet table sorts');
 const cmpSrc = (html.match(/const FLEET_NUMERIC = \[[\s\S]*?\n  \}\);/) || [''])[0];
 check('the comparator names the numbers, not the text',

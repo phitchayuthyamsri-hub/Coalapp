@@ -4240,7 +4240,7 @@ function routeMapPickList() {
   if (!sel) return;
   // The way out first, because that is the run a route usually describes.
   const order = { fronthaul: 0, any: 1, backhaul: 2 };
-  const rs = STATE.routes.slice().sort((a, b) =>
+  const rs = STATE.routeDefs.slice().sort((a, b) =>
     (order[a.kind || 'any'] - order[b.kind || 'any'])
     || String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
   const keep = sel.value;
@@ -4321,12 +4321,16 @@ function refreshRouteMap() {
    page works. Creating and deleting are NOT staged: a new route needs an id
    from the server before its legs can be edited, and a delete has to be able
    to say which trucks are locked to it. */
-STATE.routes = [];
+// NOT STATE.routes - that is the corridor LEGS, keyed by leg key, and has
+// been since long before this page existed. Naming the named routes the
+// same thing replaced an object with an array and broke every leg that
+// read it, which is how the Fleet page came up empty.
+STATE.routeDefs = [];
 STATE.routeDirty = false;
 STATE.legsOpenId = null;
 
 function routeById(id) {
-  return STATE.routes.filter(r => String(r.id) === String(id))[0] || null;
+  return STATE.routeDefs.filter(r => String(r.id) === String(id))[0] || null;
 }
 
 function routesDirty(on) {
@@ -4349,7 +4353,7 @@ async function loadRoutes() {
     MAY_EDIT_ROUTES = !!(me.is_admin || me.role === 'admin');
     const r = await fetch('/api/route-seqs');
     if (!r.ok) return;
-    STATE.routes = await r.json();
+    STATE.routeDefs = await r.json();
   } catch (e) { return; }
   ['btnNewRoute', 'btnSaveRoutes'].forEach(id => {
     const b = document.getElementById(id);
@@ -4377,14 +4381,14 @@ function renderRoutes() {
   const head = table.querySelector('thead'), body = table.querySelector('tbody');
   head.innerHTML = '';
   body.innerHTML = '';
-  if (!STATE.routes.length) {
+  if (!STATE.routeDefs.length) {
     body.innerHTML = '<tr><td class="na" style="border:0;padding:10px 2px">'
       + 'No routes yet — press <b>+ New route</b> to name one.</td></tr>';
     return;
   }
   head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Type</th><th>Stops, in order</th>'
     + '<th>Trucks</th><th></th><th></th></tr>';
-  STATE.routes.forEach((r, idx) => {
+  STATE.routeDefs.forEach((r, idx) => {
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
     const kind = r.kind || 'any';
@@ -4567,7 +4571,7 @@ async function createRoute() {
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || 'could not create it');
-    STATE.routes = j.routes || STATE.routes;
+    STATE.routeDefs = j.routes || STATE.routeDefs;
     document.getElementById('newRouteRow').hidden = true;
     renderRoutes();
     renderLegs();
@@ -4591,7 +4595,7 @@ async function deleteRoute(r) {
       j = await res.json().catch(() => ({}));
     }
     if (!res.ok) throw new Error(j.error || 'could not delete it');
-    STATE.routes = j.routes || [];
+    STATE.routeDefs = j.routes || [];
     if (String(STATE.legsOpenId) === String(r.id)) STATE.legsOpenId = null;
     renderRoutes();
     renderLegs();
@@ -4603,7 +4607,7 @@ async function saveRoutes() {
   const btn = document.getElementById('btnSaveRoutes');
   btn.disabled = true;
   try {
-    for (const r of STATE.routes) {
+    for (const r of STATE.routeDefs) {
       const body = {
         name: r.name,
         kind: r.kind || 'any',
@@ -5521,7 +5525,7 @@ function statusPill(st) {
 // The way OUT only, the same list the declaration list offers: a backhaul is
 // not a truck's property, because which way it comes home varies by trip.
 function fleetRouteOptions() {
-  return (STATE.routes || []).filter(r => (r.kind || 'any') !== 'backhaul')
+  return (STATE.routeDefs || []).filter(r => (r.kind || 'any') !== 'backhaul')
     .map(r => r.name)
     .sort((a, b) => String(a).localeCompare(String(b), undefined,
                                             { numeric: true, sensitivity: 'base' }));
