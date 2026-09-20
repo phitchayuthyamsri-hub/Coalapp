@@ -76,5 +76,17 @@ check('the server has the same one',
 check('Save and New are hidden without it',
       /\['btnNewRoute', 'btnSaveRoutes'\][\s\S]{0,200}?MAY_EDIT_ROUTES \? '' : 'none'/.test(html), true);
 
+// A backhaul is not declared per truck (user, 20/09): which way a truck comes
+// home varies by trip, and the engine already works it out from where it went.
+// So the declaration list must not offer one for the truck's single slot -
+// otherwise a truck can be declared as running its cycle backwards.
+console.log('\nthe backhaul is not declared per truck');
+const sub = fs.readFileSync(path.join(root, 'app', 'templates', 'subcontractor.html'), 'utf8');
+check('the declaration list drops backhaul routes from the picker',
+      /ROUTES\.filter\(r => \(r\.kind \|\| 'any'\) !== 'backhaul'\)/.test(sub), true);
+check('...and the column says it is the way out', /label:'Route out'/.test(sub), true);
+check('a backhaul route says why its Trucks cell is empty',
+      /kind === 'backhaul' \?[\s\S]{0,120}?not declared/.test(html), true);
+
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

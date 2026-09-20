@@ -471,8 +471,15 @@ function draw(){
   const cols = [
     {key:'plate',    label:'Truck',          width:'92px',  ro:true},
     {key:'driver',   label:'Driver',         width:'130px', ro:true},
-    {key:'route',    label:'Route',          width:'140px', list: ROUTES.map(r => r.name).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'})),
-     hint:'one route per truck'},
+    // The way OUT only (20/09/2026). A route is one direction now, and a
+    // backhaul is not declared per truck: which way a truck comes home varies
+    // by trip, and the engine already works that out from where it went. So
+    // offering backhaul routes here would only invite a truck to be declared
+    // as running its cycle backwards.
+    {key:'route',    label:'Route out',      width:'140px',
+     list: ROUTES.filter(r => (r.kind || 'any') !== 'backhaul').map(r => r.name)
+             .sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'})),
+     hint:'the way out - one per truck. The way home is not declared.'},
     {key:'status',   label:'Status',         width:'120px', list:STATUS},
     {key:'load',     label:'Loaded / Empty', width:'96px',  list:['Loaded','Empty']},
     {key:'location', label:'Location',       width:'125px', list:PLACES},

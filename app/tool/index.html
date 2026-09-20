@@ -2769,7 +2769,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <i>Any</i>. Mine to Port is one route; Port to Mine is another. The type is a label, not a rule:
         nothing is refused for disagreeing with it. The name is just a name — it need not describe the stops.
         Click a name to rename it, ✎ to build its stops, × to delete it. Renames, types and stops are held
-        here until you press <b>Save</b>; creating and deleting a route happen at once.</div>
+        here until you press <b>Save</b>; creating and deleting a route happen at once.
+        <b>Trucks</b> shows who is declared onto a route on the declaration list — the way <i>out</i> only.
+        A backhaul is not declared per truck: which way a truck comes home varies by trip.</div>
     </div>
   </div>
 </div>
@@ -4084,7 +4086,8 @@ function renderRoutes() {
       <td><span class="name" title="Click to rename">${escapeHtml(r.name)}</span></td>
       <td class="cell-kind">${typeCell}</td>
       <td class="cell-leg">${stopsText(r.sequence)}</td>
-      <td class="cell-trucks">${r.trucks && r.trucks.length ? escapeHtml(r.trucks.join(', ')) : '—'}</td>
+      <td class="cell-trucks">${r.trucks && r.trucks.length ? escapeHtml(r.trucks.join(', '))
+        : (kind === 'backhaul' ? '<span class="na" title="Which way a truck comes home varies by trip, so the backhaul is not declared on the declaration list">not declared</span>' : '—')}</td>
       <td class="act">${MAY_EDIT_ROUTES ? '<button class="edit-btn" data-act="legs" title="Build the stops on this route">✎</button>' : ''}</td>
       <td class="act">${MAY_EDIT_ROUTES ? '<button class="x" data-act="del" title="Delete this route">×</button>' : ''}</td>
     `;
