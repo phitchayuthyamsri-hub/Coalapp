@@ -1394,42 +1394,35 @@ input[type="date"] { width: 100%; }
   margin-top: 4px;
 }
 
+/* A real table since 20/09/2026. It was a grid of <li>, so every row sized its
+   own columns and the header only lined up because every width was pinned in
+   advance. A table sizes each column to what is in it and keeps the header
+   over the right values - which is also how it fits its content instead of
+   stretching across the page, as asked. */
+.anchor-table-wrap { overflow-x: auto; margin: 0 0 8px 0; }
 .anchor-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 8px 0;
-  /* It used to be a 220px strip beside the map. The map has its own page now,
-     so the list grows to whatever the window gives it. */
-  max-height: none;
-  overflow-y: auto;
-  border: 1px solid #f0f0f2;
-  border-radius: 5px;
+  width: auto;                 /* fit-to-content, not the whole page */
+  border-collapse: collapse;
+  font-size: 11px;
+  background: var(--panel);
 }
-.anchor-list:empty {
+.anchor-empty {
   border: 1px dashed #d2d2d7;
+  border-radius: 5px;
   padding: 14px;
   text-align: center;
   font-size: 11px;
   color: var(--muted);
   background: #fafafc;
 }
-.anchor-list:empty::before { content: "No anchors yet. Click + Draw to add one."; }
-
-.anchor-list { overflow-x: auto; }
-.anchor-list li, .anchor-list-head {
-  display: grid;
-  grid-template-columns: 22px 14px minmax(170px, 1.3fr)
-                         132px 164px 92px 116px 16px 16px 16px;
-  align-items: center;
-  gap: 5px;
-  width: max-content;
-  min-width: 100%;
-  padding: 5px 6px;
-  border-bottom: 1px solid #f5f5f7;
-  cursor: pointer;
+.anchor-list th, .anchor-list td {
+  border: 1px solid var(--line, #e5e5ea);
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;         /* a cell never wraps: the window stays one row */
 }
-.anchor-list-head {
-  cursor: default;
+.anchor-list thead th {
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1439,16 +1432,42 @@ input[type="date"] { width: 100%; }
   position: sticky;
   top: 0;
   z-index: 2;
+  cursor: default;
 }
-.anchor-list li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.rc-hidden { visibility: hidden; }
-.anchor-list li:last-child { border-bottom: none; }
-.anchor-list li:hover { background: var(--panel2); }
-.anchor-list li.selected { background: #e8f1fc; }
+.anchor-list tbody tr { cursor: pointer; }
+.anchor-list tbody tr:hover { background: var(--panel2); }
+.anchor-list tbody tr.selected { background: #e8f1fc; }
 /* Light rows in a dark theme: the text must not inherit the theme's light
    colour, or the name of the very zone you just drew is invisible. */
-.anchor-list li.selected, .anchor-list li.selected .name,
-.anchor-list li.editing, .anchor-list li.editing .name { color: #111; }
+.anchor-list tbody tr.selected, .anchor-list tbody tr.selected .name,
+.anchor-list tbody tr.editing, .anchor-list tbody tr.editing .name { color: #111; }
+.anchor-list td.rowno {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.anchor-list td.act { text-align: center; padding: 3px 4px; }
+.anchor-list td.cell-swatch { padding: 3px 4px; }
+/* The cells people type in. They size to their content, so a column is only
+   as wide as what it holds. */
+.anchor-list td select,
+.anchor-list td input {
+  width: auto;
+  box-sizing: border-box;
+  font-size: 10px;
+  padding: 2px 3px;
+  border: 1px solid var(--line, #e5e5ea);
+  border-radius: 4px;
+  background: var(--panel, #fff);
+  color: var(--ink);
+}
+.anchor-list td.cell-num input { width: 68px; text-align: right; }
+.anchor-list td.cell-window { white-space: nowrap; }
+.anchor-list td.cell-window span { font-size: 9px; color: var(--muted); padding: 0 4px; }
+.rc-hidden { visibility: hidden; }
+#btnSaveAnchors.attention { background: #fcd34d; color: #111; font-weight: 700; }
+.anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+  color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .anchor-list .name { cursor: text; }
 /* The row is a grid and .anchor-meta is display:contents, so every direct
    child of the row is a cell. Anything decorating the name has to live inside
@@ -2061,6 +2080,10 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
   min-height: 0;
   padding: 10px;
 }
+[data-page-panel="anchors"] .anchors-side { align-items: flex-start; }
+[data-page-panel="anchors"] .anchors-side > .panel { width: max-content; max-width: 100%; }
+[data-page-panel="anchors"] .help-text { max-width: 78ch; white-space: normal; }
+
 .locmap-layout {
   display: flex;
   flex-direction: column;
@@ -2073,7 +2096,6 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 .locmap-bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .locmap-bar .locmap-who { font-size: 12px; font-weight: 600; color: var(--ink); }
 .locmap-bar .locmap-hint { font-size: 10px; color: var(--muted); margin-left: auto; }
-.anchors-layout .map-container { height: 100%; min-height: 0; }
 .anchors-side { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 
 .page-pad { padding: 10px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -2116,8 +2138,6 @@ th[data-gsort]:hover, th[data-fsort]:hover, th[data-ssort]:hover { color: #0071e
 .dir-haul { font-size:10px; color:var(--muted); }
 
 /* anchor reorder buttons */
-.anchor-move { display:inline-flex; flex-direction:column; gap:1px; margin-right:4px; }
-.anchor-move button { padding:0 4px; font-size:9px; line-height:1.1; background:#e8e8ed; color:#1d1d1f; }
 .anchor-row-tools { display:flex; align-items:center; gap:4px; }
 .anchor-meta { display: contents; }
 .anchor-meta .am-caption { font-size:11px; padding:2px 5px; width:100%; border:1px solid #d2d2d7; border-radius:4px; }
@@ -2164,16 +2184,6 @@ th[data-gsort]:hover, th[data-fsort]:hover, th[data-ssort]:hover { color: #0071e
 .role-map .row select { width: 100% !important; }
 
 /* Draggable splitter between map and side panel on the Parameter page. */
-#paneSplitter {
-  cursor: col-resize;
-  width: 6px;
-  margin: 0 -2px;
-  border-radius: 3px;
-  background: transparent;
-  transition: background .15s;
-  z-index: 5;
-}
-#paneSplitter:hover, #paneSplitter.dragging { background: #0a84ff55; }
 
 /* ===== DARK THEME (Assignment Chart palette) — final overrides ===== */
 header { background: var(--head); }
@@ -2222,8 +2232,8 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 .tab-bar { border-color: var(--line); }
 .help-text, .count, .sub, .note, .empty-state { color: var(--muted); }
 .anchor-list li:hover, .ms-dropdown .ms-item:hover, .tab-btn:hover,
-.fleet-scope-seg button:hover, .anchor-list-head { background: var(--panel2) !important; }
-.anchor-list-head { color: var(--muted); }
+.fleet-scope-seg button:hover, .anchor-list thead th { background: var(--panel2) !important; }
+.anchor-list thead th { color: var(--muted); }
 .anchor-list li, .anchor-meta .am-caption, .anchor-meta .am-cat,
 .anchor-meta .am-role, .anchor-meta .am-alias { border-color: var(--line); color: var(--ink); }
 .anchor-meta .am-alias { background: #2a2410 !important; }
@@ -2382,7 +2392,6 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
              nothing reads them any more. Panel kept in the markup - its buttons
              bind at boot unguarded.
              Re-enable by restoring: <button class="tab-btn" data-atab="expected">Expected</button> -->
-        <button class="small secondary" id="btnToggleMap" style="margin-left:auto">Hide map</button>
       </div>
 
       <!-- ANCHORS TAB -->
@@ -2393,7 +2402,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="small" id="btnDraw">+ Draw</button>
             <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
-          <ul class="anchor-list" id="anchorList"></ul>
+          <div class="anchor-table-wrap">
+            <table class="anchor-list" id="anchorList"><thead></thead><tbody></tbody></table>
+          </div>
           <div class="btn-row">
             <button class="secondary small" id="btnSaveJson">Save JSON</button>
             <button class="secondary small" id="btnLoadJson">Load JSON</button>
@@ -3400,63 +3411,7 @@ function refreshAnchorColors() {
 // ============================================================
 const map = L.map('map').setView([16.3, 107.4], 9);
 
-// Draggable splitter: resize map vs side panel; width persists.
-(function () {
-  const layout = document.querySelector('.anchors-layout');
-  const split = document.getElementById('paneSplitter');
-  if (!layout || !split) return;
-  const KEY = 'anchorsPaneSideW_v1';
-  const saved = parseInt(localStorage.getItem(KEY) || '', 10);
-  if (saved && saved >= 240 && saved <= 1200) layout.style.gridTemplateColumns = `1fr 6px ${saved}px`;
-  let dragging = false;
-  split.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    dragging = true;
-    split.classList.add('dragging');
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const rect = layout.getBoundingClientRect();
-    let sideW = Math.round(rect.right - e.clientX - 10);   // 10 = layout right padding
-    sideW = Math.max(240, Math.min(rect.width - 260, sideW));
-    layout.style.gridTemplateColumns = `1fr 6px ${sideW}px`;
-  });
-  window.addEventListener('mouseup', () => {
-    if (!dragging) return;
-    dragging = false;
-    split.classList.remove('dragging');
-    document.body.style.userSelect = '';
-    document.body.style.cursor = '';
-    const m = layout.style.gridTemplateColumns.match(/(\d+)px$/);
-    if (m) localStorage.setItem(KEY, m[1]);
-    try { map.invalidateSize(); } catch (e) {}
-  });
-})();
 
-// Show/hide the map (Anchors page). Hiding gives the side panel full width.
-(function () {
-  const btn = document.getElementById('btnToggleMap');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    const mc = document.querySelector('.anchors-layout .map-container');
-    const layout = document.querySelector('.anchors-layout');
-    const split = document.getElementById('paneSplitter');
-    if (!mc || !layout) return;
-    const hidden = mc.style.display === 'none';
-    mc.style.display = hidden ? '' : 'none';
-    if (split) split.style.display = hidden ? '' : 'none';
-    if (hidden) {
-      const saved = parseInt(localStorage.getItem('anchorsPaneSideW_v1') || '360', 10) || 360;
-      layout.style.gridTemplateColumns = `1fr 6px ${saved}px`;
-    } else {
-      layout.style.gridTemplateColumns = `0 0 1fr`;   // side panel takes the page
-    }
-    btn.textContent = hidden ? 'Hide map' : 'Show map';
-    if (hidden) setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 50);
-  });
-})();
 // Google's road tiles, straight from the tile server - no Maps API and no key.
 // OpenStreetMap's tiles do not load from the office network, and the fallback
 // below is a grey canvas, which is what the Parameter page had become.
@@ -3749,7 +3704,7 @@ function startEditingAnchor(id) {
   showEditToolbar(a);
 
   // Mark in list
-  document.querySelectorAll('#anchorList li').forEach(li => {
+  document.querySelectorAll('#anchorList tbody tr').forEach(li => {
     li.classList.toggle('editing', li.dataset.id === id);
   });
 
@@ -3778,7 +3733,7 @@ function finishEditAnchor() {
   STATE.editingAnchorId = null;
   hideEditToolbar();
 
-  document.querySelectorAll('#anchorList li').forEach(li => li.classList.remove('editing'));
+  document.querySelectorAll('#anchorList tbody tr').forEach(li => li.classList.remove('editing'));
 
   saveAnchorsToStorage();
   recomputeVisits();
@@ -3798,7 +3753,7 @@ function cancelEditAnchor() {
 
   STATE.editingAnchorId = null;
   hideEditToolbar();
-  document.querySelectorAll('#anchorList li').forEach(li => li.classList.remove('editing'));
+  document.querySelectorAll('#anchorList tbody tr').forEach(li => li.classList.remove('editing'));
 }
 
 function showEditToolbar(a) {
@@ -3844,7 +3799,7 @@ function selectAnchor(id) {
   const a = STATE.anchors.find(x => x.id === id);
   if (!a) return;
   map.fitBounds(a.layer.getBounds(), { padding: [40, 40], maxZoom: 16 });
-  document.querySelectorAll('#anchorList li').forEach(li => {
+  document.querySelectorAll('#anchorList tbody tr').forEach(li => {
     li.classList.toggle('selected', li.dataset.id === id);
   });
 }
@@ -3929,17 +3884,6 @@ function openColorPopover(anchor, swatchEl) {
   setTimeout(() => document.addEventListener('mousedown', _colorPopOutside, true), 0);
 }
 
-function moveAnchor(id, dir) {
-  const i = STATE.anchors.findIndex(a => a.id === id);
-  if (i < 0) return;
-  const j = i + dir;
-  if (j < 0 || j >= STATE.anchors.length) return;
-  const [a] = STATE.anchors.splice(i, 1);
-  STATE.anchors.splice(j, 0, a);
-  saveAnchorsToStorage();
-  renderAnchorList();
-  renderAnchorFilter();
-}
 
 /* ===== THE PLACE'S WORKING CONDITIONS (20/09/2026) =====
    What a Location IS, as opposed to where its edges are: when it can be used,
@@ -3995,65 +3939,60 @@ function goToLocations() {
 }
 
 function selectedAnchorId() {
-  const li = document.querySelector('#anchorList li.selected');
+  const li = document.querySelector('#anchorList tbody tr.selected');
   return li ? li.dataset.id : null;
 }
 
 function renderAnchorList() {
-  const ul = document.getElementById('anchorList');
+  const table = document.getElementById('anchorList');
+  const head = table.querySelector('thead');
+  const ul = table.querySelector('tbody');       // rows go here
+  head.innerHTML = '';
   ul.innerHTML = '';
+  const wrap = table.closest('.anchor-table-wrap');
+  if (wrap) wrap.classList.toggle('anchor-empty', !STATE.anchors.length);
   if (STATE.anchors.length) {
-    const headRow = document.createElement('li');
-    headRow.className = 'anchor-list-head';
-    headRow.innerHTML = '<span></span><span></span><span>Name</span>'
-      + '<span>Location type</span><span>Window time</span><span>Loading bay</span>'
-      + '<span>Loading time (min)</span><span></span><span></span><span></span>';
-    ul.appendChild(headRow);
+    head.innerHTML = '<tr><th>No#</th><th></th><th>Name</th>'
+      + '<th>Location type</th><th>Window time</th><th>Loading bay</th>'
+      + '<th>Loading time (min)</th><th></th><th></th><th></th></tr>';
   }
   STATE.anchors.forEach((a, idx) => {
-    const li = document.createElement('li');
+    const li = document.createElement('tr');
     li.dataset.id = a.id;
     if (idx === 0) try { paintSaveButton(); } catch (e) {}
     const overrideMark = `<button class="reset-color${a.colorOverride ? '' : ' rc-hidden'}" data-act="reset-color" title="Reset to default">⟲</button>`;
-    const upDis = idx === 0 ? 'disabled' : '';
-    const downDis = idx === STATE.anchors.length - 1 ? 'disabled' : '';
     li.innerHTML = `
-      <span class="anchor-move">
-        <button data-act="up" title="Move up" ${upDis}>▲</button>
-        <button data-act="down" title="Move down" ${downDis}>▼</button>
-      </span>
-      <label class="swatch-wrap" title="Click to change color">
-        <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
-      </label>
-      <span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span>
-      <span class="cell-type">
+      <td class="rowno">${idx + 1}</td>
+      <td class="cell-swatch">
+        <label class="swatch-wrap" title="Click to change color">
+          <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
+        </label>
+      </td>
+      <td><span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span></td>
+      <td class="cell-type">
         <select data-act="c-type" title="What is done here">
           ${['', 'load', 'unload', 'load_unload', 'border', 'highway'].map(v =>
             `<option value="${v}"${(a.locType || '') === v ? ' selected' : ''}>${
               {'': '—', load: 'Load', unload: 'Unload', load_unload: 'Load/Unload',
                border: 'Border', highway: 'Highway'}[v]}</option>`).join('')}
         </select>
-      </span>
-      <span class="cell-window">
-        <input type="time" data-act="c-open" title="Opens" value="${a.windowOpen || ''}">
-        <span>to</span>
-        <input type="time" data-act="c-close" title="Closes" value="${a.windowClose || ''}">
-      </span>
-      <span class="cell-bays">
+      </td>
+      <td class="cell-window">
+        <input type="time" data-act="c-open" title="Opens" value="${a.windowOpen || ''}"><span>to</span><input type="time" data-act="c-close" title="Closes" value="${a.windowClose || ''}">
+      </td>
+      <td class="cell-num">
         <input type="number" min="0" step="1" data-act="c-bays" placeholder="—"
                title="How many loading bays" value="${a.loadingBays != null ? a.loadingBays : ''}">
-      </span>
-      <span class="cell-load">
+      </td>
+      <td class="cell-num">
         <input type="number" min="0" step="1" data-act="c-load" placeholder="—"
                title="How long the work here is expected to take, in minutes"
                value="${a.loadingTimeMin != null ? a.loadingTimeMin : ''}">
-      </span>
-      ${overrideMark}
-      <button class="edit-btn" data-act="edit" title="Edit shape — opens the map">✎</button>
-      <button class="x" data-act="del" title="Delete">×</button>
+      </td>
+      <td class="act">${overrideMark}</td>
+      <td class="act"><button class="edit-btn" data-act="edit" title="Edit this Location's shape — opens the map page">✎</button></td>
+      <td class="act"><button class="x" data-act="del" title="Delete this Location">×</button></td>
     `;
-    li.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, -1); });
-    li.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveAnchor(a.id, 1); });
     const nameEl = li.querySelector('.name');
     const startRename = (e) => { if (e) e.stopPropagation(); beginRenameAnchor(li, a); };
     nameEl.addEventListener('click', startRename);
