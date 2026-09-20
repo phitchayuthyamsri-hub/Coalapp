@@ -151,6 +151,7 @@ def create_app(config_class=Config):
         _ensure_listrow_schema()
         _ensure_daily_list_schema()
         _ensure_truck_schema()
+        _ensure_route_schema()
         _ensure_subcontractors()
         _ensure_plan_settings()
         _ensure_routeleg_schema()
@@ -407,6 +408,38 @@ def _ensure_truck_schema():
         db.session.commit()
     if "route_id" not in cols:
         _add_column_racing("truck", "route_id INTEGER")
+
+
+def _ensure_route_schema():
+    """A route grew two legs on 20/09/2026: fronthaul out, backhaul home.
+
+    Whatever the single `sequence` held was the run to the port, so it becomes
+    the fronthaul. The backhaul starts empty, which reads as "not described
+    yet" rather than "retraces the way out" - the second is a guess, and this
+    is the sort of guess that is never revisited.
+    """
+    from sqlalchemy import inspect
+    from .models import Route
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("route")]
+    except Exception:
+        return
+    fresh = "fronthaul" not in cols
+    if fresh:
+        _add_column_racing("route", "fronthaul JSON")
+    if "backhaul" not in cols:
+        _add_column_racing("route", "backhaul JSON")
+    if not fresh:
+        return
+    moved = 0
+    for r in Route.query.all():
+        if not (r.fronthaul or []) and (r.sequence or []):
+            r.fronthaul = list(r.sequence)
+            r.backhaul = r.backhaul or []
+            moved += 1
+    if moved:
+        db.session.commit()
 
 
 def _ensure_daily_list_schema():

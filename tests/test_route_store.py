@@ -70,7 +70,7 @@ as_user("planner1")
 check("a planner may not create either - admin only since 20/09",
       c.post("/api/route-seqs", json={"name": "Z"}).status_code, 403)
 as_user("boss")
-r = c.post("/api/route-seqs", json={"name": "XPPL → Chan May", "sequence": []})
+r = c.post("/api/route-seqs", json={"name": "XPPL → Chan May", "fronthaul": []})
 check("an admin may create", r.status_code, 200)
 RID = r.get_json()["id"]
 check("...and the answer carries the routes", len(r.get_json()["routes"]), 1)
@@ -78,22 +78,39 @@ check("a second route with the same name is refused",
       c.post("/api/route-seqs", json={"name": "xppl → chan may"}).status_code, 409)
 check("a nameless route is refused", c.post("/api/route-seqs", json={"name": " "}).status_code, 400)
 
-print("\nthe sequence")
+print("\nthe fronthaul")
 seq = [zones["xppl"], zones["border"], zones["ql49"], zones["port"]]
-r = c.put("/api/route-seqs/%d" % RID, json={"sequence": seq})
+r = c.put("/api/route-seqs/%d" % RID, json={"fronthaul": seq})
 check("locations go in, in order", r.status_code, 200)
 got = next(x for x in r.get_json()["routes"] if x["id"] == RID)
-check("...and come back in that order", [s["id"] for s in got["sequence"]], seq)
-check("...with their names", got["sequence"][0]["name"], "XPPL Mine")
-check("a location twice is refused",
-      c.put("/api/route-seqs/%d" % RID, json={"sequence": seq + [zones["xppl"]]}).status_code, 400)
+check("...and come back in that order", [s["id"] for s in got["fronthaul"]], seq)
+check("...with their names", got["fronthaul"][0]["name"], "XPPL Mine")
+check("a location twice in one leg is refused",
+      c.put("/api/route-seqs/%d" % RID, json={"fronthaul": seq + [zones["xppl"]]}).status_code, 400)
 check("an unknown location is refused",
-      c.put("/api/route-seqs/%d" % RID, json={"sequence": [999]}).status_code, 400)
+      c.put("/api/route-seqs/%d" % RID, json={"fronthaul": [999]}).status_code, 400)
+
+print("\nthe backhaul is its own leg (user, 20/09)")
+# The way home need not retrace the way out, and the stops it shares with the
+# fronthaul are passed a second time - which is why they are not a clash.
+back = [zones["port"], zones["ql49"], zones["border"], zones["xppl"]]
+r = c.put("/api/route-seqs/%d" % RID, json={"backhaul": back})
+check("the way home goes in", r.status_code, 200)
+got = next(x for x in r.get_json()["routes"] if x["id"] == RID)
+check("...in its own order", [s["id"] for s in got["backhaul"]], back)
+check("...and the fronthaul is untouched", [s["id"] for s in got["fronthaul"]], seq)
+check("the same location in both legs is fine",
+      set(s["id"] for s in got["fronthaul"]) & set(s["id"] for s in got["backhaul"]) != set(), True)
+check("a new route starts with neither leg described",
+      c.post("/api/route-seqs", json={"name": "Bare"}).get_json()["routes"][0]["backhaul"], [])
+
 with app.app_context():
     a = Anchor.query.get(zones["ql49"])
     geofence.retire(a, "tester")
 check("a retired zone cannot be added to a route",
-      c.put("/api/route-seqs/%d" % RID, json={"sequence": [zones["ql49"]]}).status_code, 400)
+      c.put("/api/route-seqs/%d" % RID, json={"fronthaul": [zones["ql49"]]}).status_code, 400)
+check("...nor to the way home",
+      c.put("/api/route-seqs/%d" % RID, json={"backhaul": [zones["ql49"]]}).status_code, 400)
 with app.app_context():
     # Un-retire it for the rest of the test. Retiring clears the role by design
     # (geofence.retire), and that is this test's doing, not the route code's -
@@ -107,7 +124,7 @@ r = c.put("/api/route-seqs/%d" % RID, json={"name": "Corridor A"})
 check("renaming works", next(x for x in r.get_json()["routes"] if x["id"] == RID)["name"], "Corridor A")
 
 print("\none truck, one route")
-r2 = c.post("/api/route-seqs", json={"name": "Ango → Chan May", "sequence": []}).get_json()["id"]
+r2 = c.post("/api/route-seqs", json={"name": "Ango → Chan May", "fronthaul": []}).get_json()["id"]
 as_user("mon1")
 check("a monitor may not lock a truck",
       c.put("/api/trucks/20H01381/route", json={"route_id": RID}).status_code, 403)

@@ -70,14 +70,30 @@ class Truck(db.Model):
 
 
 class Route(db.Model):
-    """A named sequence of Locations: the order a truck on this route is
-    expected to pass through them. Built on the Route page from the zones on
-    the Location page. Monitoring will read a truck's stops from its route
-    and nowhere else; until that lands, the server's fixed role mapping still
-    drives the engine."""
+    """A named route: the Locations a truck passes through, out and back.
+
+    Two legs since 20/09/2026. A corridor is not one line: the FRONTHAUL is
+    the laden run to the port, the BACKHAUL is the way home, and the way home
+    need not retrace the way out - it may take the detour instead of the
+    highway. The engine has always thought this way (its distance spine is
+    fronthaul/backhaul, and it infers backhaul_type from where a truck went);
+    a route can now say it outright rather than leave it to be deduced.
+
+    The same Location may appear in BOTH legs and usually does - QL49 is
+    passed on the way out and again on the way back, which is exactly why its
+    window times are per direction. Within one leg a Location appears once.
+
+    Built on the Route page from the zones on the Location page. Monitoring
+    will read a truck's stops from its route and nowhere else; until that
+    lands, the server's fixed role mapping still drives the engine."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
-    sequence = db.Column(db.JSON, default=list)      # [anchor_id, ...] in order
+    fronthaul = db.Column(db.JSON, default=list)     # [anchor_id, ...] to the port
+    backhaul = db.Column(db.JSON, default=list)      # [anchor_id, ...] back to the mine
+    # Superseded by the two legs above. Kept until the split has been through
+    # prod: its contents are copied into fronthaul at boot, and a column that
+    # still holds the old answer is worth more than one deleted early.
+    sequence = db.Column(db.JSON, default=list)
     note = db.Column(db.String(300), default="")
     created_by = db.Column(db.String(80), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
