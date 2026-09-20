@@ -5547,10 +5547,20 @@ function fleetRouteCell(r) {
     + '</select>';
 }
 
+let _routeDefsAsked = false;
+
 function renderFleetUI() {
   const body = document.getElementById('fleetBody');
   const sumEl = document.getElementById('fleetSummary');
   if (!body || !sumEl) return;
+  // The Route cell offers what the Route page holds. Ask for it once, the
+  // first time this table is drawn - the seed used to do it on the way past,
+  // and stopped when the ping sync it lived in was removed. Without the list
+  // the cell still shows the truck's route, as text, rather than a picker.
+  if (!_routeDefsAsked && !(STATE.routeDefs || []).length) {
+    _routeDefsAsked = true;
+    try { loadRoutes(); } catch (e) {}
+  }
   const plates = allFleetPlates();
   const counts = { online: 0, maintenance: 0, breakdown: 0, deactivated: 0 };
   plates.forEach(p => { counts[effectiveStatus(p)]++; });
