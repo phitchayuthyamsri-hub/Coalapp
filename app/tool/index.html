@@ -2148,6 +2148,11 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .page-pad { overflow-y: auto; }
 :is([data-page-panel="perf"],[data-page-panel="daily"]) #tabPerf { flex: 0 0 auto; }
 [data-page-panel="guide"] .page-pad { overflow-y: auto; }
+/* The Route page grew a second panel of two dozen figures on 20/09 and
+   ran off the bottom of the window: .page-pad is a flex child with
+   min-height 0, so whatever does not fit is simply not reachable unless
+   the page says it may scroll. */
+[data-page-panel="route"] .page-pad { overflow-y: auto; }
 .guide-wrap { max-width: 860px; margin: 0 auto; padding-bottom: 40px; }
 .lang-toggle { margin-left: auto; display: inline-flex; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; overflow: hidden; align-self: center; }
 .lang-toggle button { background: transparent; color: #cfd8df; border: none; padding: 4px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }

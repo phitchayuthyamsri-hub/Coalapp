@@ -127,6 +127,8 @@ check('the planner page no longer edits them',
       /<div id="settings"><\/div>/.test(planner), false);
 check('...and says where they went',
       /moved to <b>Setting &rarr; Route<\/b>/.test(planner), true);
+check('the page can scroll, now that it holds two panels',
+      /\[data-page-panel="route"\] \.page-pad \{ overflow-y: auto; \}/.test(html), true);
 check('its map survived the move',
       /data-tab="figures">Corridor map</.test(planner), true);
 
