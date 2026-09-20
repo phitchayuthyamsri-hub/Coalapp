@@ -130,10 +130,16 @@ check('the list of which figures moved lives in one place',
       /LOCATION_DERIVED = \{/.test(plannerPy), true);
 check('...and the API hands it to the page',
       /"from_location": LOCATION_DERIVED\.get\(p\.key\)/.test(shiftPy), true);
-check('the page shows those, but does not edit them',
-      /Answered by Setting . Location/.test(html), true);
+check('the moved figures are off the screen entirely',
+      /Answered by Setting . Location/.test(html), false);
+check('...and the three that are left stay editable',
+      /own\.forEach\(f => \{[\s\S]{0,400}?figInput\(f\.key/.test(html), true);
+check('border clearance is one of them, having nowhere else to live',
+      /"clear_h": hours\("clearance_hours", 3\.0\)/.test(plannerPy), true);
+check('...so it is not claimed by a Location',
+      /"clearance_hours":/.test(plannerPy), false);
 ['border_open', 'ql49_in_open', 'port_open', 'mine_bays', 'load_hours', 'unload_hours',
- 'clearance_hours', 'port_bays', 'mine_247'].forEach(k =>
+ 'port_bays', 'mine_247'].forEach(k =>
   check(`"${k}" comes from a Location`, new RegExp('"' + k + '":').test(plannerPy), true));
 check('rest before turning again stays a figure',
       /"turn_gap_h": hours\("turn_gap_hours", 0\.0\)/.test(plannerPy), true);

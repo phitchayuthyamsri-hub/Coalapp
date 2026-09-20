@@ -41,7 +41,6 @@ LOCATION_DERIVED = {
     "port_bays": "the port - Load/Unload bay",
     "port_open": "the port - Window time, To port",
     "port_close": "the port - Window time, To port",
-    "clearance_hours": "the border - Load/Unload time",
     "border_open": "the border - Window time, To port",
     "border_close": "the border - Window time, To port",
     "border_out_open": "the border - Window time, To mine",
@@ -141,7 +140,9 @@ def load_config():
         # Not a place's property: rest before turning again is the truck's.
         "turn_gap_h": hours("turn_gap_hours", 0.0),
         "unload_h": mins(z.get("port"), "unload_hours", 0.5),
-        "clear_h": mins(z.get("border"), "clearance_hours", 3.0),
+        # Stays a figure: a Border Location has no Load/Unload time field
+        # to hold it, so there is nowhere else for it to be said.
+        "clear_h": hours("clearance_hours", 3.0),
         "mine_bays": bays(mine_work, "mine_bays", 2),
         "port_bays": bays(z.get("port"), "port_bays", 1),
         # A mine with no window in either direction is a mine that never shuts.

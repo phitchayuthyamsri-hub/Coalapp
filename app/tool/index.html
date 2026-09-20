@@ -2802,9 +2802,10 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <table class="grid-table" id="figureList"><thead></thead><tbody></tbody></table>
       </div>
       <div class="help-text">What is left once the places answer for themselves. Turnarounds, opening hours
-        and bays are read from <b>Setting → Location</b> now — the figure below each one is only what the
-        planner falls back to while that Location is blank, so it is shown but not edited here.
-        Changing a figure belongs to whoever answers for the plan — a planner or an admin.</div>
+        and bays are read from <b>Setting → Location</b>, and distances from <b>KM &amp; time travel</b> above;
+        these three are what neither describes. Border clearance stays here because a <i>Border</i> Location
+        has no Load/Unload time to hold it. Changing one belongs to whoever answers for the plan — a planner
+        or an admin.</div>
     </div>
   </div>
 </div>
@@ -4139,8 +4140,7 @@ function renderFigures() {
   if (b) b.style.display = STATE.figuresCanEdit ? '' : 'none';
 
   const own = STATE.figures.filter(f => f.kind === 'setting' && !f.from_location);
-  const moved = STATE.figures.filter(f => f.kind === 'setting' && f.from_location);
-  head.innerHTML = '<tr><th>Figure</th><th>Value</th><th>Unit</th><th>Read from</th></tr>';
+  head.innerHTML = '<tr><th>Figure</th><th>Value</th><th>Unit</th></tr>';
 
   own.forEach(f => {
     const tr = document.createElement('tr');
@@ -4150,30 +4150,11 @@ function renderFigures() {
         ? figInput(f.key, figValue(f, f.key, f.value))
         : escapeHtml(String(f.value))}</td>
       <td class="cell-unit">${escapeHtml(f.unit || '')}</td>
-      <td class="cell-unit">here</td>
     `;
     bindFigInputs(tr);
     body.appendChild(tr);
   });
 
-  if (moved.length) {
-    const hdr = document.createElement('tr');
-    hdr.innerHTML = '<td colspan="4" class="fig-group">Answered by Setting → Location</td>';
-    body.appendChild(hdr);
-    moved.forEach(f => {
-      const tr = document.createElement('tr');
-      // Shown, not edited: the stored figure is only the fallback for a
-      // Location that has not been filled in, so editing it here would be
-      // editing the thing the planner does not consult.
-      tr.innerHTML = `
-        <td>${escapeHtml(f.label || f.key)}</td>
-        <td class="cell-num"><span class="na">${escapeHtml(String(f.value))}</span></td>
-        <td class="cell-unit">${escapeHtml(f.unit || '')}</td>
-        <td class="cell-unit">${escapeHtml(f.from_location)}</td>
-      `;
-      body.appendChild(tr);
-    });
-  }
   figuresDirty();
 }
 
