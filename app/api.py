@@ -235,8 +235,78 @@ def routes():
         spd = float(r.speed or 0.0)
         out.append({"leg_key": r.leg_key, "label": r.label,
                     "points": r.points, "speed": spd, "road_km": km,
+                    "from_anchor_id": r.from_anchor_id,
+                    "to_anchor_id": r.to_anchor_id,
+                    # A leg the planner calls by name cannot be deleted from
+                    # the page: taking it away would silently zero a driving
+                    # time the plan depends on.
+                    "fixed": r.from_anchor_id is None or r.to_anchor_id is None,
                     "hours": (km / spd) if spd else 0.0})
     return jsonify(out)
+
+
+@bp.post("/routes")
+@login_required
+def route_leg_create():
+    """A leg between two Locations: how far, and how fast it is driven.
+
+    Named by the two stops rather than by hand, so a planner walking a route
+    can find the leg between consecutive stops without knowing what anyone
+    called it.
+    """
+    if not _may_edit_routes():
+        return jsonify(error="Only an admin may add a leg"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    try:
+        a_id = int(d.get("from_anchor_id"))
+        b_id = int(d.get("to_anchor_id"))
+    except (TypeError, ValueError):
+        return jsonify(error="a leg runs between two Locations"), 400
+    if a_id == b_id:
+        return jsonify(error="a leg has to run between two different Locations"), 400
+    names = {a.id: a.name for a in
+             Anchor.query.filter(Anchor.retired_at.is_(None)).all()}
+    if a_id not in names or b_id not in names:
+        return jsonify(error="that Location is not a zone in service"), 400
+    key = "a%d_a%d" % (a_id, b_id)
+    if RouteLeg.query.filter_by(leg_key=key).first():
+        return jsonify(error="a leg from %s to %s already exists"
+                             % (names[a_id], names[b_id])), 409
+    try:
+        km = float(d.get("road_km")) if str(d.get("road_km") or "").strip() else None
+        spd = float(d.get("speed") or 40.0)
+    except (TypeError, ValueError):
+        return jsonify(error="the distance and the speed are numbers"), 400
+    if km is not None and km < 0:
+        return jsonify(error="a distance cannot be negative"), 400
+    if spd <= 0:
+        return jsonify(error="a speed has to be above zero"), 400
+    r = RouteLeg(leg_key=key,
+                 label="%s → %s" % (names[a_id], names[b_id]),
+                 from_anchor_id=a_id, to_anchor_id=b_id,
+                 road_km=km, speed=spd)
+    db.session.add(r)
+    db.session.commit()
+    return jsonify(ok=True, leg_key=key)
+
+
+@bp.delete("/routes/<leg_key>")
+@login_required
+def route_leg_delete(leg_key):
+    """Only a leg added from the page. The six the planner calls by name stay:
+    deleting one would zero a driving time the plan quietly depends on."""
+    if not _may_edit_routes():
+        return jsonify(error="Only an admin may delete a leg"), 403
+    r = RouteLeg.query.filter_by(leg_key=leg_key).first()
+    if not r:
+        return jsonify(error="unknown leg"), 404
+    if r.from_anchor_id is None or r.to_anchor_id is None:
+        return jsonify(error="%s is one of the corridor's own legs and the "
+                             "planner asks for it by name - it cannot be "
+                             "deleted here" % (r.label or leg_key)), 409
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @bp.put("/routes/<leg_key>")

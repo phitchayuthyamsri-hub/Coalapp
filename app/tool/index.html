@@ -2112,6 +2112,7 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
   font-weight: 600; margin-bottom: 9px; }
 .legs-head .legs-who { color: var(--ink); }
 .legs-head button { margin-left: auto; }
+.legs-arrow { color: var(--muted); font-size: 11px; }
 .legs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 .leg h3 { margin: 0 0 6px; font-size: 11px; font-weight: 700; }
 .leg h3 span { font-weight: 400; color: var(--muted); }
@@ -2808,8 +2809,19 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 
     <div class="panel">
       <h2>KM &amp; time travel
+        <button class="small" id="btnAddLeg" title="Add a leg between two Locations">+ New leg</button>
         <button class="small" id="btnSaveFigures" title="Send the distances and speeds to the server; the plan recalculates from them">💾 Save</button>
       </h2>
+      <div class="new-route-row" id="newLegRow" hidden>
+        <select id="legFrom" title="From"></select>
+        <span class="legs-arrow">→</span>
+        <select id="legTo" title="To"></select>
+        <input type="number" id="legKm" min="0" step="0.01" placeholder="km" style="width:90px">
+        <input type="number" id="legSpeed" min="1" step="1" value="40" placeholder="km/h" style="width:80px">
+        <button class="small go" id="btnCreateLeg">Add</button>
+        <button class="small secondary" id="btnCancelLeg">Cancel</button>
+        <span class="msg" id="newLegMsg"></span>
+      </div>
       <div class="grid-table-wrap">
         <table class="grid-table" id="legTable"><thead></thead><tbody></tbody></table>
       </div>
@@ -4117,6 +4129,83 @@ function figValue(f, key, fallback) {
   return (STATE.figuresDirty[key] != null) ? STATE.figuresDirty[key] : fallback;
 }
 
+/* -- adding a leg (20/09/2026) --------------------------------------------
+   A leg is a distance and a speed between two Locations. The six the corridor
+   started with are called by name from the planner and cannot be removed here;
+   anything added from this page says which two stops it joins, which is what a
+   planner walking a route's stops will need to find it. */
+function fillLegPickers() {
+  const from = document.getElementById('legFrom');
+  const to = document.getElementById('legTo');
+  if (!from || !to) return;
+  const opts = (STATE.anchors || [])
+    .filter(a => !String(a.id).startsWith('anc_'))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined,
+                                                 { numeric: true, sensitivity: 'base' }))
+    .map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>').join('');
+  const keepF = from.value, keepT = to.value;
+  from.innerHTML = '<option value="">— from —</option>' + opts;
+  to.innerHTML = '<option value="">— to —</option>' + opts;
+  if (keepF) from.value = keepF;
+  if (keepT) to.value = keepT;
+}
+
+async function createLeg() {
+  const msg = document.getElementById('newLegMsg');
+  const from = document.getElementById('legFrom').value;
+  const to = document.getElementById('legTo').value;
+  const km = document.getElementById('legKm').value;
+  const speed = document.getElementById('legSpeed').value;
+  if (!from || !to) {
+    msg.className = 'msg err';
+    msg.textContent = 'pick both ends';
+    return;
+  }
+  msg.className = 'msg';
+  msg.textContent = 'adding…';
+  try {
+    const res = await fetch('/api/routes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_anchor_id: from, to_anchor_id: to,
+                             road_km: km, speed: speed })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'could not add it');
+    document.getElementById('newLegRow').hidden = true;
+    document.getElementById('legKm').value = '';
+    await loadFigures();
+    toast('Leg added — the plan will use it');
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  }
+}
+
+async function deleteLeg(key, label) {
+  if (!confirm('Delete the leg "' + (label || key) + '"?')) return;
+  try {
+    const res = await fetch('/api/routes/' + encodeURIComponent(key), { method: 'DELETE' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'could not delete it');
+    await loadFigures();
+    toast('Leg deleted');
+  } catch (e) { toast(e.message, true); }
+}
+
+function bindLegAdd() {
+  const add = document.getElementById('btnAddLeg');
+  if (!add) return;
+  const row = document.getElementById('newLegRow');
+  add.addEventListener('click', () => {
+    fillLegPickers();
+    row.hidden = false;
+    document.getElementById('newLegMsg').textContent = '';
+  });
+  document.getElementById('btnCancelLeg').addEventListener('click', () => { row.hidden = true; });
+  document.getElementById('btnCreateLeg').addEventListener('click', createLeg);
+}
+
 // KM & time travel: the legs, which belong to nobody's Location.
 function renderLegTable() {
   const table = document.getElementById('legTable');
@@ -4130,7 +4219,7 @@ function renderLegTable() {
     return;
   }
   head.innerHTML = '<tr><th>No#</th><th>Leg</th><th>Distance (km)</th>'
-    + '<th>Speed (km/h)</th><th>Driving time</th></tr>';
+    + '<th>Speed (km/h)</th><th>Driving time</th><th></th></tr>';
   legs.forEach((f, idx) => {
     const kmKey = 'legkm:' + String(f.key).slice(4);
     const km = figValue(f, kmKey, f.km_stored != null ? f.km_stored : '');
@@ -4146,8 +4235,13 @@ function renderLegTable() {
         ? figInput(f.key, spd, { number: true, step: '1' })
         : escapeHtml(String(spd))}</td>
       <td class="cell-hours">${figHours(km, spd)}</td>
+      <td class="act">${(STATE.figuresCanEdit && !f.fixed)
+        ? '<button class="x" data-del-leg="' + escapeHtml(String(f.key).slice(4)) + '" title="Delete this leg">×</button>'
+        : ''}</td>
     `;
     bindFigInputs(tr);
+    const del = tr.querySelector('[data-del-leg]');
+    if (del) del.addEventListener('click', () => deleteLeg(del.dataset.delLeg, f.label));
     body.appendChild(tr);
   });
 }
@@ -4554,6 +4648,7 @@ function bindRoutePage() {
   if (rp) rp.addEventListener('change', drawRouteMap);
   const sf = document.getElementById('btnSaveFigures');
   if (sf) sf.addEventListener('click', saveFigures);
+  bindLegAdd();
 }
 
 async function createRoute() {

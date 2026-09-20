@@ -312,6 +312,10 @@ def _ensure_routeleg_schema():
     if "road_km" not in cols:
         db.session.execute(text("ALTER TABLE route_leg ADD COLUMN road_km FLOAT"))
         db.session.commit()
+    # A leg added from the Route page says which two Locations it joins.
+    for c in ("from_anchor_id", "to_anchor_id"):
+        if c not in cols:
+            _add_column_racing("route_leg", "%s INTEGER" % c)
 
 
 def _ensure_snapshot_schema():

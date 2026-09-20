@@ -244,6 +244,12 @@ class RouteLeg(db.Model):
     # when the number is already known.
     road_km = db.Column(db.Float)
     speed = db.Column(db.Float, default=40.0)
+    # Which two Locations this leg runs between (20/09/2026). The six original
+    # legs are keyed by fixed names the planner calls by hand and carry NULLs
+    # here; a leg added since says which stops it joins, which is what a
+    # planner walking a route's stops needs in order to find it.
+    from_anchor_id = db.Column(db.Integer, index=True)
+    to_anchor_id = db.Column(db.Integer, index=True)
 
 
 class Notice(db.Model):
