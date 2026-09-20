@@ -27,7 +27,7 @@ from datetime import datetime
 from app import create_app
 from app import engine
 from app import geofence
-from app.models import db, Truck, GpsPing, Anchor, KVStore
+from app.models import db, Truck, GpsPing, Anchor, KVStore, Route
 
 FLEET_KEY = "actualGpsFleet_v2"
 TIMING_KEY = "actualGpsTiming_v1"
@@ -50,6 +50,7 @@ def _kv_set(key, obj):
 
 def build_fleet():
     """The tool keys its fleet on the plate; everything else hangs off that."""
+    names = {r.id: r.name for r in Route.query.all()}
     out = {}
     for t in Truck.query.order_by(Truck.plate).all():
         out[t.plate] = {
@@ -63,6 +64,9 @@ def build_fleet():
             "driver": t.driver or "",
             "effFrom": t.eff_from or "",
             "effTo": t.eff_to or "",
+            # Which run this truck makes. The name, not the id: the tool keys
+            # everything on names a person would recognise.
+            "route": names.get(t.route_id, ""),
         }
     return out
 

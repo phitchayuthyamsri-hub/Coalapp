@@ -3352,7 +3352,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <thead><tr>
             <th data-fsort="plate">Plate</th>
             <th data-fsort="status">Status</th>
+            <th data-fsort="driver">Driver</th>
             <th data-fsort="phone">Phone</th>
+            <th data-fsort="route">Route</th>
             <th data-fsort="effFrom">Effective From</th>
             <th data-fsort="effTo">Effective To</th>
             <th data-fsort="gps">GPS Company</th>
@@ -4357,6 +4359,9 @@ async function loadRoutes() {
   renderRoutes();
   renderLegs();
   try { refreshRouteMap(); } catch (e) {}
+  // The Fleet page's Route column is drawn from this list, and the fleet may
+  // have been drawn before it arrived.
+  try { if (typeof renderFleetUI === 'function') renderFleetUI(); } catch (e) {}
 }
 
 const ROUTE_KIND_LABEL = { fronthaul: 'Fronthaul', backhaul: 'Backhaul', any: 'Any' };
@@ -5040,6 +5045,9 @@ async function rebuildFromStore() {
   }
   renderFileInfo();
   await renderDatasetList();
+  // The Route column offers what is on the Route page, so make sure that
+  // list has been read at least once - the fleet page may be opened first.
+  if (!(STATE.routes || []).length) { try { loadRoutes(); } catch (e) {} }
   if (typeof renderFleetUI === 'function') renderFleetUI();
   initFiltersFromFile();
   renderTruckFilter();
@@ -5410,8 +5418,10 @@ function setTruckStatus(plate, status) {
 // Per-plate metadata accessor (phone / GPS provider / effective dates).
 function fleetMeta(plate) {
   const p = normPlate(plate);
-  if (!STATE.fleet[p]) STATE.fleet[p] = { status: 'online', added: Date.now(), phone: '', gps: '', effFrom: '', effTo: '' };
+  if (!STATE.fleet[p]) STATE.fleet[p] = { status: 'online', added: Date.now(), phone: '', gps: '', driver: '', route: '', effFrom: '', effTo: '' };
   const m = STATE.fleet[p];
+  if (m.driver == null) m.driver = '';
+  if (m.route == null) m.route = '';
   if (m.phone == null) m.phone = '';
   if (m.gps == null) m.gps = '';
   if (m.effFrom == null) m.effFrom = '';
@@ -5426,6 +5436,7 @@ function setFleetField(plate, key, val) {
   // fleet blob from it every few minutes, so an edit kept only here was
   // silently wiped. Fields the truck table owns are written through to it.
   const api = {phone: 'phone', gps: 'gps_provider', driver: 'driver',
+               route: 'route',
                effFrom: 'eff_from', effTo: 'eff_to', status: 'status'}[key];
   if (api) {
     const body = {plate: plate}; body[api] = val || '';
@@ -5547,6 +5558,34 @@ function statusPill(st) {
   return `<span class="pill ${cls}">${FLEET_STATUS_LABEL[st] || st}</span>`;
 }
 
+// Which run a truck makes, on the page that lists the trucks. It was only
+// ever visible the other way round - the Route page lists the plates on each
+// route - which answers "who runs this?" but not "what does this one run?".
+// The way OUT only, the same list the declaration list offers: a backhaul is
+// not a truck's property, because which way it comes home varies by trip.
+function fleetRouteOptions() {
+  return (STATE.routes || []).filter(r => (r.kind || 'any') !== 'backhaul')
+    .map(r => r.name)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined,
+                                            { numeric: true, sensitivity: 'base' }));
+}
+
+function fleetRouteCell(r) {
+  const opts = fleetRouteOptions();
+  if (!opts.length) {
+    // No routes built yet, or none reachable - say so rather than show an
+    // empty dropdown that looks broken.
+    return '<span class="na" title="No routes on Setting → Route yet">'
+      + escapeHtml(r.route || '—') + '</span>';
+  }
+  return '<select class="fleet-fld" data-plate="' + escapeHtml(r.plate) + '" data-k="route"'
+    + ' style="font-size:11px;padding:2px 4px">'
+    + '<option value="">— none —</option>'
+    + opts.map(n => '<option value="' + escapeHtml(n) + '"'
+        + (n === (r.route || '') ? ' selected' : '') + '>' + escapeHtml(n) + '</option>').join('')
+    + '</select>';
+}
+
 function renderFleetUI() {
   const body = document.getElementById('fleetBody');
   const sumEl = document.getElementById('fleetSummary');
@@ -5587,7 +5626,9 @@ function renderFleetUI() {
     <tr>
       <td>${escapeHtml(r.plate)}</td>
       <td>${statusPill(r.status)}</td>
+      <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="driver" value="${escapeHtml(r.driver || '')}" placeholder="driver" style="width:140px;font-size:11px;padding:2px 4px"></td>
       <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="phone" value="${escapeHtml(r.phone)}" placeholder="+66…" style="width:120px;font-size:11px;padding:2px 4px"></td>
+      <td>${fleetRouteCell(r)}</td>
       <td><input type="date" class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="effFrom" value="${escapeHtml(r.effFrom)}" style="font-size:11px;padding:2px 4px"></td>
       <td><input type="date" class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="effTo" value="${escapeHtml(r.effTo)}" title="blank = ongoing (Now)" style="font-size:11px;padding:2px 4px">${r.effTo ? '' : ' <span style="font-size:10px;color:#86868b">→ Now</span>'}</td>
       <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="gps" value="${escapeHtml(r.gps)}" placeholder="GPS provider" style="width:110px;font-size:11px;padding:2px 4px"></td>

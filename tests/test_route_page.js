@@ -183,5 +183,35 @@ check('the stops are numbered in order',
 check('a route with no stops says so rather than drawing nothing',
       /has no stops yet . build them with/.test(html), true);
 
+// The Fleet page answers "what does THIS truck run?"; the Route page answers
+// "who runs this route?". Both are wanted, and only the second existed.
+console.log('\nthe fleet page shows the route');
+const fleetHead = html.match(/<th data-fsort="plate">[\s\S]*?<th>Action<\/th>/);
+// The fleet row is built by mapping over rows, not by setting tr.innerHTML,
+// so it is not in the list gathered above.
+const fleetRow = (html.match(/body\.innerHTML = rows\.map\(r => `([\s\S]*?)`\)/) || [])[1];
+if (!fleetHead || !fleetRow) {
+  console.log('  FAIL  could not find the fleet header or row');
+  process.exit(1);
+}
+check('the fleet table has a Route column',
+      /<th data-fsort="route">Route<\/th>/.test(fleetHead[0]), true);
+check('...and a Driver column, which it never had',
+      /<th data-fsort="driver">Driver<\/th>/.test(fleetHead[0]), true);
+check('header and row agree on the count',
+      (fleetRow.match(/<td[ >]/g) || []).length,
+      (fleetHead[0].match(/<th[ >]/g) || []).length);
+check('the route cell offers the way out only',
+      /fleetRouteOptions[\s\S]{0,200}?!== 'backhaul'/.test(html), true);
+check('...and says so rather than showing an empty dropdown',
+      /No routes on Setting . Route yet/.test(html), true);
+check('a changed route is sent like every other field',
+      /route: 'route',/.test(html), true);
+check('the server keeps the declaration list rule for it',
+      /if "route" in d:[\s\S]{0,200}?_may_lock_truck\(\)/.test(api), true);
+check('the synced fleet blob carries it too',
+      /"route": names\.get\(t\.route_id, ""\)/.test(
+        fs.readFileSync(path.join(root, 'sync_tool_state.py'), 'utf8')), true);
+
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

@@ -119,10 +119,13 @@ def upload_subfleet():
 @login_required
 def fleet():
     trucks = Truck.query.order_by(Truck.plate).all()
+    names = {r.id: r.name for r in Route.query.all()}
     return jsonify([{"plate": t.plate, "status": t.status,
                      "driver": t.driver or "", "phone": t.phone,
                      "gps_provider": t.gps_provider, "eff_from": t.eff_from,
-                     "eff_to": t.eff_to} for t in trucks])
+                     "eff_to": t.eff_to,
+                     "route": names.get(t.route_id, ""),
+                     "route_id": t.route_id} for t in trucks])
 
 
 @bp.post("/fleet")
@@ -139,9 +142,22 @@ def fleet_upsert():
     t.gps_provider = d.get("gps_provider", t.gps_provider or "")
     t.eff_from = d.get("eff_from", t.eff_from or "")
     t.eff_to = d.get("eff_to", t.eff_to or "")
+    if "route" in d:
+        # Which run a truck makes is the declaration list's decision, so it
+        # keeps the declaration list's rule rather than the fleet page's.
+        if not _may_lock_truck():
+            return jsonify(error="Your role may not set a truck's route"), 403
+        want = (d.get("route") or "").strip()
+        if not want:
+            t.route_id = None
+        else:
+            r = Route.query.filter(func.lower(Route.name) == want.lower()).first()
+            if r is None:
+                return jsonify(error="unknown route %s" % want), 400
+            t.route_id = r.id
     db.session.add(t)
     changed = [k for k in ("status", "driver", "phone", "gps_provider",
-                           "eff_from", "eff_to") if k in d]
+                           "eff_from", "eff_to", "route") if k in d]
     db.session.add(ActivityEvent(user_id=current_user.id,
                                  username=current_user.username, action="edit",
                                  detail="Fleet %s: %s changed"
