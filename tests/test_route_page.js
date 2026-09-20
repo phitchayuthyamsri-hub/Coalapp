@@ -160,8 +160,28 @@ check('...and says where they went',
       /moved to <b>Setting &rarr; Route<\/b>/.test(planner), true);
 check('the page can scroll, now that it holds two panels',
       /\[data-page-panel="route"\] \.page-pad \{ overflow-y: auto; \}/.test(html), true);
-check('its map survived the move',
-      /data-tab="figures">Corridor map</.test(planner), true);
+// The tab button survives inside the retirement comment, as this repo's
+// convention keeps it, so look for the retirement itself.
+check('the corridor map is retired there',
+      /Corridor map retired 20.09.2026/.test(planner), true);
+check('...and the planner says where it went',
+      /corridor map both moved to <b>Setting &rarr; Route<\/b>/.test(planner), true);
+
+// The map came here too (user, 20/09), with a picker: a route is a list of
+// places in an order, and that is easier to check on a map than in a row.
+console.log('\nthe route map');
+check('the page has a map of its own', /<div id="routeMap"><\/div>/.test(html), true);
+check('...a second Leaflet instance, not the Location one',
+      /ROUTE_MAP = L\.map\(host/.test(html), true);
+check('...built on first use, because a hidden map measures as zero',
+      /function ensureRouteMap\(\) \{[\s\S]{0,40}?if \(ROUTE_MAP\) return ROUTE_MAP;/.test(html), true);
+check('a button picks which route is drawn', /<select id="routeMapPick"/.test(html), true);
+check('...offering the way out first',
+      /const order = \{ fronthaul: 0, any: 1, backhaul: 2 \}/.test(html), true);
+check('the stops are numbered in order',
+      /className: 'route-stop-pin'/.test(html), true);
+check('a route with no stops says so rather than drawing nothing',
+      /has no stops yet . build them with/.test(html), true);
 
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

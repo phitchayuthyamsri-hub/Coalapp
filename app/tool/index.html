@@ -2129,6 +2129,16 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 .leg-add select { flex: 0 0 auto; width: auto; max-width: 100%; font-size: 11px; padding: 3px 5px;
   border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
 
+#routeMap { height: 380px; border: 1px solid var(--line); border-radius: 6px; }
+#routeMapPick { font-size: 11px; padding: 3px 6px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--panel); color: var(--ink); max-width: 100%; }
+.route-stop-pin { white-space: nowrap; }
+.route-stop-pin .n { display: inline-block; min-width: 15px; text-align: center;
+  background: #0a84ff; color: #fff; font-size: 9px; font-weight: 700;
+  border-radius: 999px; padding: 1px 4px; }
+.route-stop-pin .t { background: rgba(17,26,43,.88); color: #e7ecf5; font-size: 10px;
+  border-radius: 4px; padding: 1px 5px; margin-left: 3px; }
+
 .locmap-layout {
   display: flex;
   flex-direction: column;
@@ -2783,6 +2793,17 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         here until you press <b>Save</b>; creating and deleting a route happen at once.
         <b>Trucks</b> shows who is declared onto a route on the declaration list — the way <i>out</i> only.
         A backhaul is not declared per truck: which way a truck comes home varies by trip.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Route map
+        <select id="routeMapPick" title="Which route to draw"></select>
+        <span class="help-text" id="routeMapNote" style="margin-left:6px"></span>
+      </h2>
+      <div id="routeMap"></div>
+      <div class="help-text">The chosen route, in the order a truck passes through it. The line is drawn
+        straight between stops rather than along the road — a route says which places and in what order,
+        not what shape the road is. The road's length is in <b>KM &amp; time travel</b> below.</div>
     </div>
 
     <div class="panel">
@@ -4193,6 +4214,102 @@ async function saveFigures() {
   }
 }
 
+/* ===== THE ROUTE MAP (20/09/2026) =====
+   One route drawn in the order a truck passes through it. It came off
+   Operations > Planner, where a corridor map sat on the same tab as the
+   figures - by then the figures had moved here and the map was describing
+   routes it could not see.
+
+   Its own Leaflet instance, built the first time the page is opened rather
+   than at boot: a map in a hidden panel measures itself as zero and has to be
+   told its size again anyway. */
+let ROUTE_MAP = null, ROUTE_MAP_LAYER = null;
+
+function anchorCentre(a) {
+  const p = a && a.polygon;
+  if (!p || !p.length) return null;
+  let lat = 0, lng = 0;
+  p.forEach(pt => { lat += pt[0]; lng += pt[1]; });
+  return [lat / p.length, lng / p.length];
+}
+
+function routeMapPickList() {
+  const sel = document.getElementById('routeMapPick');
+  if (!sel) return;
+  // The way out first, because that is the run a route usually describes.
+  const order = { fronthaul: 0, any: 1, backhaul: 2 };
+  const rs = STATE.routes.slice().sort((a, b) =>
+    (order[a.kind || 'any'] - order[b.kind || 'any'])
+    || String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }));
+  const keep = sel.value;
+  sel.innerHTML = rs.map(r => '<option value="' + r.id + '">' + escapeHtml(r.name)
+    + ' — ' + (ROUTE_KIND_LABEL[r.kind || 'any'] || r.kind) + '</option>').join('');
+  if (keep && rs.some(r => String(r.id) === String(keep))) sel.value = keep;
+  else if (rs.length) sel.value = String(rs[0].id);
+}
+
+function ensureRouteMap() {
+  if (ROUTE_MAP) return ROUTE_MAP;
+  const host = document.getElementById('routeMap');
+  if (!host || typeof L === 'undefined') return null;
+  ROUTE_MAP = L.map(host, { zoomControl: true });
+  L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+              { subdomains: '0123', attribution: '© Google', maxZoom: 20 }).addTo(ROUTE_MAP);
+  ROUTE_MAP.setView([16.4, 107.2], 8);
+  ROUTE_MAP_LAYER = L.layerGroup().addTo(ROUTE_MAP);
+  return ROUTE_MAP;
+}
+
+function drawRouteMap() {
+  const map = ensureRouteMap();
+  if (!map) return;
+  ROUTE_MAP_LAYER.clearLayers();
+  const sel = document.getElementById('routeMapPick');
+  const r = routeById(sel && sel.value);
+  const note = document.getElementById('routeMapNote');
+  if (!r) { if (note) note.textContent = 'No routes yet.'; return; }
+  const stops = (r.sequence || []);
+  if (!stops.length) {
+    if (note) note.textContent = r.name + ' has no stops yet — build them with ✎ above.';
+    return;
+  }
+  if (note) note.textContent = '';
+
+  const pts = [];
+  stops.forEach((s, i) => {
+    const a = (STATE.anchors || []).filter(x => String(x.id) === String(s.id))[0];
+    const c = anchorCentre(a);
+    if (!c) return;
+    pts.push(c);
+    if (a.polygon && a.polygon.length > 2) {
+      L.polygon(a.polygon, { color: effectiveColor(a.id, a.name), weight: 2,
+                             fillOpacity: 0.15 }).addTo(ROUTE_MAP_LAYER);
+    }
+    L.marker(c, {
+      icon: L.divIcon({
+        className: 'route-stop-pin',
+        html: '<span class="n">' + (i + 1) + '</span><span class="t">' + escapeHtml(s.name) + '</span>',
+        iconSize: null
+      })
+    }).addTo(ROUTE_MAP_LAYER);
+  });
+  if (pts.length > 1) {
+    // A straight line between stops, not the road: the road's shape is not
+    // what a route says. Its LENGTH is, and that is in KM & time travel.
+    L.polyline(pts, { color: '#0a84ff', weight: 3, opacity: 0.85,
+                      dashArray: '6,6' }).addTo(ROUTE_MAP_LAYER);
+  }
+  if (pts.length) {
+    try { map.fitBounds(L.latLngBounds(pts).pad(0.25)); } catch (e) {}
+  }
+}
+
+function refreshRouteMap() {
+  routeMapPickList();
+  const m = ensureRouteMap();
+  if (m) setTimeout(() => { try { m.invalidateSize(); } catch (e) {} drawRouteMap(); }, 60);
+}
+
 /* ===== ROUTES: TWO LEGS, ONE TABLE (20/09/2026) =====
    A route is a name and two ordered lists of Locations: the fronthaul out to
    the port and the backhaul home. The name is only a name - nothing is read
@@ -4239,6 +4356,7 @@ async function loadRoutes() {
   routesDirty(false);
   renderRoutes();
   renderLegs();
+  try { refreshRouteMap(); } catch (e) {}
 }
 
 const ROUTE_KIND_LABEL = { fronthaul: 'Fronthaul', backhaul: 'Backhaul', any: 'Any' };
@@ -4423,6 +4541,8 @@ function bindRoutePage() {
     if (e.key === 'Enter') { e.preventDefault(); createRoute(); }
   });
   document.getElementById('btnSaveRoutes').addEventListener('click', saveRoutes);
+  const rp = document.getElementById('routeMapPick');
+  if (rp) rp.addEventListener('change', drawRouteMap);
   const sf = document.getElementById('btnSaveFigures');
   if (sf) sf.addEventListener('click', saveFigures);
 }
@@ -8019,7 +8139,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'locmap') { setTimeout(() => map.invalidateSize(), 60); }
     // The Route page reads from the server each time it is opened: its
     // stops are Locations, and those may have changed on the other page.
-    if (t === 'route') { try { loadRoutes(); loadFigures(); } catch (e) {} }
+    if (t === 'route') { try { loadRoutes(); loadFigures(); refreshRouteMap(); } catch (e) {} }
     if (t === 'data') { renderTable(); renderSequenceTable(); renderTimeline(); }
     if (t === 'fleet') { renderFleetUI(); }
     if (t === 'plan') { renderDinPlan(); }

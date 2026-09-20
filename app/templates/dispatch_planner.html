@@ -251,7 +251,11 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <nav class="tabs">
     <button class="tab on" data-tab="revision">Revision</button>
     <button class="tab" data-tab="week">Week</button>
-    <button class="tab" data-tab="figures">Corridor map</button>
+    <!-- Corridor map retired 20/09/2026: it moved to Setting > Route, where the
+         routes it draws are defined, and where the planning figures had already
+         gone. The panel below stays in the markup - openMap() and drawMap() bind
+         at boot unguarded - it is just no longer reachable.
+         Re-enable by restoring: <button class="tab" data-tab="figures">Corridor map</button> -->
   </nav>
   <div class="spacer"></div>
   <a href="/shift-board">Supervisor</a>
@@ -386,10 +390,10 @@ to these times, and the revision is measured against them.">Issue this week</but
   </div>
 
   <div class="card">
-    <p class="hint">The planning figures moved to <b>Setting &rarr; Route</b> on 20/09/2026, beside the
-      routes they describe &mdash; turnarounds, the hours a border or a berth is open, and each leg's
-      distance and speed. The same store and the same rule about who may change them; one screen instead
-      of two describing the same corridor. The map below still draws what they say.</p>
+    <p class="hint">The planning figures and the corridor map both moved to <b>Setting &rarr; Route</b>
+      on 20/09/2026, beside the routes they describe &mdash; turnarounds, the hours a border or a berth is
+      open, each leg's distance and speed, and a map of whichever route you pick. One screen instead of two
+      describing the same corridor.</p>
   </div>
 </section>
 
@@ -433,6 +437,8 @@ function measure(){
 window.addEventListener('resize', measure);
 
 // -- tabs --------------------------------------------------------------------
+// 'figures' is still a tab id so the panel and its stored preference keep
+// working; nothing offers it any more (see the tab bar).
 const TABS = ['revision', 'week', 'figures'];
 function showTab(name){
   if (TABS.indexOf(name) < 0) name = TABS[0];   // covers the old 'plan' key too
