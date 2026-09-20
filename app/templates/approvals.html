@@ -70,6 +70,7 @@
      second bar inside the frame's own, and the reader had to work out which
      one moved what. Horizontal stays, because the table is genuinely wide. */
   .wrap-t{overflow-x:visible;border:1px solid var(--line);border-radius:10px}
+  td.c-route{white-space:nowrap}
   .note{padding:10px 13px;border-radius:9px;font-size:12.5px;margin:0 0 12px;line-height:1.55}
   .n-info{background:#12213a;border:1px solid #1d3a63;color:#a8c8ff}
   .n-warn{background:#2a1f10;border:1px solid #5a4020;color:var(--amber)}
@@ -208,6 +209,7 @@ function draw(){
       return '<tr class="' + cls + '">' + rowNo(n)
         + '<td class="plate">' + esc(r.plate) + trailLink(r.plate) + '</td>'
         + '<td><span class="st s-' + esc(r.state) + '">' + esc(r.state) + '</span></td>'
+        + '<td class="c-route">' + (r.route ? esc(r.route) : '—') + '</td>'
         + '<td>' + esc(r.status || '—')
           + (r.reason ? '<span class="why">' + esc(r.reason) + '</span>' : '') + '</td>'
         + '<td>' + esc(r.load || '—') + '</td>'
@@ -238,6 +240,7 @@ function draw(){
           + esc(l.reject_reason) + '</div>' : '')
       + '<div class="wrap-t"><table><thead><tr>' + noHead()
       + '<th style="width:92px">Truck</th><th style="width:80px">State</th>'
+      + '<th style="width:130px">Route</th>'
       + '<th style="width:110px">Status</th><th style="width:70px">Load</th>'
       + '<th style="width:110px">Location</th><th style="width:120px">At mine</th>'
       + '<th style="width:100px">Back in service</th><th>Remark</th>'

@@ -498,6 +498,9 @@ function drawTrack(){
     {key:'plate', label:'Truck',         rowspan:2},
     {key:'phone', label:'Phone',         rowspan:2, get: r => r.phone || ''},
     {key:'sub',   label:'Sub',           rowspan:2, get: r => r.sub || ''},
+    // The run this truck is declared onto. Not r.route - that is the way home
+    // the planner chose for this loop.
+    {key:'routename', label:'Route',      rowspan:2, get: r => r.route_name || ''},
     {key:'remark', label:'Team remark',  rowspan:2,
      get: r => remarkOf(r).text || '',
      fget: r => (remarkOf(r).text ? 'has remark' : 'blank')}
@@ -555,6 +558,8 @@ function drawTrack(){
           + '<td class="plate">' + esc(r.plate) + '</td>'
           + '<td class="tel">' + phoneCell(r) + '</td>'
           + '<td class="c-sub" style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
+          + '<td class="c-route">' + (r.route_name ? esc(r.route_name)
+              : '<span style="color:var(--mut)">—</span>') + '</td>'
           + '<td class="rmk"><input class="rmk-in" maxlength="300"'
             + ' data-plate="' + esc(r.plate) + '"'
             + ' value="' + esc(rm.text || '') + '"'

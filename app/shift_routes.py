@@ -1804,6 +1804,8 @@ def track():
     # that was never promised.
     not_planned = sorted(set(listed) - set(by_plate.keys()))
     rows = []
+    _ttrucks = {engine.norm_plate(t.plate): t for t in Truck.query.all()}
+    _troutes = {x.id: x.name for x in _Route.query.all()}
     for plate in sorted(by_plate.keys()):
         p = by_plate.get(plate)
         plan = (p or {}).get("t") or {}
@@ -1882,6 +1884,13 @@ def track():
             "phone": phone or DEFAULT_DRIVER_PHONE,
             "phone_known": bool(phone),
             "planned": bool(p), "route": (p or {}).get("route"),
+            # The truck's STANDING route, which is not the same thing as
+            # "route" above - that one is the way home the corridor planner
+            # picked, hue or ql49. Named apart so neither can be read as the
+            # other.
+            "route_name": _troutes.get(_ttrucks[engine.norm_plate(plate)].route_id, "")
+                          if engine.norm_plate(plate) in _ttrucks
+                          and _ttrucks[engine.norm_plate(plate)].route_id else "",
             "cycle_hours": (p or {}).get("cycle_hours"),
             "fh": by_column(cells(LOC_FH, "fh")),
             "bh": by_column(cells(LOC_BH, "bh")),
@@ -2935,6 +2944,8 @@ def approvals():
 
     out = []
     for dl in q.order_by(DailyList.id).all():
+        _mtrucks = {engine.norm_plate(t.plate): t for t in Truck.query.all()}
+        _mroutes = {x.id: x.name for x in _Route.query.all()}
         rows = DailyListRow.query.filter_by(list_id=dl.id).order_by(
             DailyListRow.plate).all()
         items, counts = [], {"pending": 0, "applied": 0, "approved": 0, "denied": 0}
@@ -2957,8 +2968,13 @@ def approvals():
                     and dp.lower() != "on the road"
                     and gp.lower() != dp.lower()):
                 diffs.append("place: declared %s, GPS at %s" % (dp, gp))
+            _t = _mtrucks.get(r.key or engine.norm_plate(r.plate))
             items.append({
                 "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
+                # The truck's standing route, so the manager sees which run
+                # each truck is approving onto - the same fact the supervisor
+                # and the declaration list already show.
+                "route": _mroutes.get(_t.route_id, "") if _t and _t.route_id else "",
                 "status": r.note or "", "load": r.sheet_status or "",
                 "location": r.location or "", "reason": r.reason or "",
                 "arrive_date": r.arrive_date or "", "arrive_hhmm": r.arrive_hhmm or "",

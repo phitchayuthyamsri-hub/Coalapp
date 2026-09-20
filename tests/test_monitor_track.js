@@ -110,9 +110,10 @@ try {
      out.indexOf('data-col="fh:mine:plan"') >= 0, true);
   is('so is Actual', out.indexOf('data-col="fh:port:act"') >= 0, true);
   is('sub-headers keep their own class', /class="hd sub2"/.test(out), true);
-  // Five identifying columns, plus the row number that sits with them.
+  // Six identifying columns now - Route joined them on 20/09 - plus the row
+  // number that sits with them.
   is('the id columns still span both header rows',
-     (out.match(/rowspan="2"/g) || []).length, 6);
+     (out.match(/rowspan="2"/g) || []).length, 7);
   is('the default order follows the corridor, mine first',
      plates(), ['20H00717','20C10770','20C10615','20H00715']);
   is('every truck carries a team-remark box',
