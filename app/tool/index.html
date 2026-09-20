@@ -1399,8 +1399,8 @@ input[type="date"] { width: 100%; }
    advance. A table sizes each column to what is in it and keeps the header
    over the right values - which is also how it fits its content instead of
    stretching across the page, as asked. */
-.anchor-table-wrap { overflow-x: auto; margin: 0 0 8px 0; }
-.anchor-list {
+.grid-table-wrap { overflow-x: auto; margin: 0 0 8px 0; }
+.grid-table {
   width: auto;                 /* fit-to-content, not the whole page */
   border-collapse: collapse;
   font-size: 11px;
@@ -1415,14 +1415,14 @@ input[type="date"] { width: 100%; }
   color: var(--muted);
   background: #fafafc;
 }
-.anchor-list th, .anchor-list td {
+.grid-table th, .grid-table td {
   border: 1px solid var(--line, #e5e5ea);
   padding: 3px 6px;
   text-align: left;
   vertical-align: middle;
   white-space: nowrap;         /* a cell never wraps: the window stays one row */
 }
-.anchor-list thead th {
+.grid-table thead th {
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1434,26 +1434,26 @@ input[type="date"] { width: 100%; }
   z-index: 2;
   cursor: default;
 }
-.anchor-list thead th.grouped { text-align: center; }
-.anchor-list thead th.sub { text-transform: none; letter-spacing: 0; font-size: 9px; }
-.anchor-list tbody tr { cursor: pointer; }
-.anchor-list tbody tr:hover { background: var(--panel2); }
-.anchor-list tbody tr.selected { background: #e8f1fc; }
+.grid-table thead th.grouped { text-align: center; }
+.grid-table thead th.sub { text-transform: none; letter-spacing: 0; font-size: 9px; }
+.grid-table tbody tr { cursor: pointer; }
+.grid-table tbody tr:hover { background: var(--panel2); }
+.grid-table tbody tr.selected { background: #e8f1fc; }
 /* Light rows in a dark theme: the text must not inherit the theme's light
    colour, or the name of the very zone you just drew is invisible. */
-.anchor-list tbody tr.selected, .anchor-list tbody tr.selected .name,
-.anchor-list tbody tr.editing, .anchor-list tbody tr.editing .name { color: #111; }
-.anchor-list td.rowno {
+.grid-table tbody tr.selected, .grid-table tbody tr.selected .name,
+.grid-table tbody tr.editing, .grid-table tbody tr.editing .name { color: #111; }
+.grid-table td.rowno {
   text-align: right;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.anchor-list td.act { text-align: center; padding: 3px 4px; }
-.anchor-list td.cell-swatch { padding: 3px 4px; }
+.grid-table td.act { text-align: center; padding: 3px 4px; }
+.grid-table td.cell-swatch { padding: 3px 4px; }
 /* The cells people type in. They size to their content, so a column is only
    as wide as what it holds. */
-.anchor-list td select,
-.anchor-list td input {
+.grid-table td select,
+.grid-table td input {
   width: auto;
   box-sizing: border-box;
   font-size: 10px;
@@ -1463,34 +1463,27 @@ input[type="date"] { width: 100%; }
   background: var(--panel, #fff);
   color: var(--ink);
 }
-.anchor-list td.cell-num input { width: 68px; text-align: right; }
+.grid-table td.cell-num input { width: 68px; text-align: right; }
 /* No spinner arrows (user, 20/09): these are typed, not nudged. */
-.anchor-list td.cell-num input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-.anchor-list td.cell-num input[type="number"]::-webkit-outer-spin-button,
-.anchor-list td.cell-num input[type="number"]::-webkit-inner-spin-button {
+.grid-table td.cell-num input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.grid-table td.cell-num input[type="number"]::-webkit-outer-spin-button,
+.grid-table td.cell-num input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 /* The clock on a time input is drawn dark by the browser, which on this dark
    theme left it all but invisible. Inverted, it reads as near-white. */
-.anchor-list td input[type="time"]::-webkit-calendar-picker-indicator {
+.grid-table td input[type="time"]::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(1.9);
   opacity: 0.95;
   cursor: pointer;
 }
 /* A column that does not apply to this Location: shown, but not typed in. */
-.anchor-list td .na { color: var(--muted); padding-left: 2px; }
-.anchor-list td.cell-window { white-space: nowrap; }
-.anchor-list td.cell-window span { font-size: 9px; color: var(--muted); padding: 0 4px; }
+.grid-table td .na { color: var(--muted); padding-left: 2px; }
+.grid-table td.cell-window { white-space: nowrap; }
+.grid-table td.cell-window span { font-size: 9px; color: var(--muted); padding: 0 4px; }
 .rc-hidden { visibility: hidden; }
-#btnSaveAnchors.attention { background: #fcd34d; color: #111; font-weight: 700; }
-.anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
-  color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
 .anchor-list .name { cursor: text; }
-/* The row is a grid and .anchor-meta is display:contents, so every direct
-   child of the row is a cell. Anything decorating the name has to live inside
-   the name cell - as a sibling it adds a column and shoves the last cell onto
-   the next grid row. */
 #btnSaveAnchors.attention { background: #fcd34d; color: #111; font-weight: 700; }
 .anchor-list .unsaved { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
   color: #fcd34d; background: #3a2a10; border: 1px solid #5a4020; border-radius: 999px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
@@ -1572,15 +1565,15 @@ input[type="date"] { width: 100%; }
   font-size: 12px;
   border-radius: 3px;
 }
-.anchor-list .x {
+.grid-table .x {
   background: none;
   color: var(--muted);
   font-size: 14px;
   padding: 0 4px;
   border-radius: 3px;
 }
-.anchor-list .x:hover { background: #ff3b30; color: #fff; }
-.anchor-list .edit-btn {
+.grid-table .x:hover { background: #ff3b30; color: #fff; }
+.grid-table .edit-btn {
   background: none;
   color: var(--muted);
   font-size: 12px;
@@ -1589,12 +1582,7 @@ input[type="date"] { width: 100%; }
   border: none;
   cursor: pointer;
 }
-.anchor-list .edit-btn:hover { background: #0071e3; color: #fff; }
-.anchor-list li.editing {
-  background: #fff5e6 !important;
-  border-left: 3px solid #ff9500;
-}
-
+.grid-table .edit-btn:hover { background: #0071e3; color: #fff; }
 .filter-row {
   display: flex;
   flex-direction: column;
@@ -2209,7 +2197,7 @@ header { background: var(--head); }
 .panel, .card, .map-overlay, .table-toolbar, .role-map, .anchors-side { background: var(--panel); color: var(--ink); }
 .panel { border-color: var(--line); }
 .map-container { background: var(--panel); }
-.table-wrap, .scroller, .anchor-list, .ms-dropdown, .dataset-list { background: var(--panel); border-color: var(--line); }
+.table-wrap, .scroller, .grid-table, .ms-dropdown, .dataset-list { background: var(--panel); border-color: var(--line); }
 table { color: var(--ink); }
 thead, thead th { background: var(--head) !important; color: #fff !important; }
 /* Frozen header corner cells on seq/route tables: keep dark + white text on top */
@@ -2249,10 +2237,10 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 .tab-btn.active { color: var(--ink); }
 .tab-bar { border-color: var(--line); }
 .help-text, .count, .sub, .note, .empty-state { color: var(--muted); }
-.anchor-list li:hover, .ms-dropdown .ms-item:hover, .tab-btn:hover,
-.fleet-scope-seg button:hover, .anchor-list thead th { background: var(--panel2) !important; }
-.anchor-list thead th { color: var(--muted); }
-.anchor-list li, .anchor-meta .am-caption, .anchor-meta .am-cat,
+.grid-table tbody tr:hover, .ms-dropdown .ms-item:hover, .tab-btn:hover,
+.fleet-scope-seg button:hover, .grid-table thead th { background: var(--panel2) !important; }
+.grid-table thead th { color: var(--muted); }
+.grid-table td, .anchor-meta .am-caption, .anchor-meta .am-cat,
 .anchor-meta .am-role, .anchor-meta .am-alias { border-color: var(--line); color: var(--ink); }
 .anchor-meta .am-alias { background: #2a2410 !important; }
 .drop-zone { background: var(--panel2); border-color: var(--line); color: var(--muted); }
@@ -2420,8 +2408,8 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="small" id="btnDraw">+ Draw</button>
             <button class="small" id="btnSaveAnchors" title="Save the zones and roles to the server. New shapes judge captures from now on; history is unchanged.">💾 Save</button>
           </h2>
-          <div class="anchor-table-wrap">
-            <table class="anchor-list" id="anchorList"><thead></thead><tbody></tbody></table>
+          <div class="grid-table-wrap">
+            <table class="grid-table anchor-list" id="anchorList"><thead></thead><tbody></tbody></table>
           </div>
           <div class="btn-row">
             <button class="secondary small" id="btnSaveJson">Save JSON</button>
@@ -3612,7 +3600,7 @@ function addAnchor(name, polygon) {
   // name box on its row straight away, with the placeholder selected, so the
   // first thing typed replaces it - nobody has to discover that names can be
   // clicked on.
-  const li = document.querySelector('.anchor-list li[data-id="' + id + '"]');
+  const li = document.querySelector('#anchorList tbody tr[data-id="' + id + '"]');
   if (li) { li.scrollIntoView({ block: 'nearest' }); beginRenameAnchor(li, anchor); }
 }
 
@@ -3973,7 +3961,7 @@ function renderAnchorList() {
   const ul = table.querySelector('tbody');       // rows go here
   head.innerHTML = '';
   ul.innerHTML = '';
-  const wrap = table.closest('.anchor-table-wrap');
+  const wrap = table.closest('.grid-table-wrap');
   if (wrap) wrap.classList.toggle('anchor-empty', !STATE.anchors.length);
   if (STATE.anchors.length) {
     // Two header rows, because Window time covers two columns: a Location can

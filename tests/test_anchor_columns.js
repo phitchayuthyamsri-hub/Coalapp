@@ -39,10 +39,10 @@ check('No# is the first column', /<tr><th rowspan="2">No#<\/th>/.test(head[1]), 
 check('the row number is the first cell', /^\s*<td class="rowno">/m.test(body[1]), true);
 
 console.log('\nit is a table, and it fits its content');
-check('the list is a <table>', /<table class="anchor-list" id="anchorList">/.test(html), true);
+check('the list is a <table>', /<table class="grid-table anchor-list" id="anchorList">/.test(html), true);
 check('rows are <tr>', /createElement\('tr'\)/.test(html), true);
-check('width is auto, not stretched', /\.anchor-list \{[\s\S]{0,200}?width: auto;/.test(html), true);
-check('cells do not wrap', /\.anchor-list th, \.anchor-list td \{[\s\S]{0,300}?white-space: nowrap;/.test(html), true);
+check('width is auto, not stretched', /\.grid-table \{[\s\S]{0,200}?width: auto;/.test(html), true);
+check('cells do not wrap', /\.grid-table th, \.grid-table td \{[\s\S]{0,300}?white-space: nowrap;/.test(html), true);
 check('the reorder arrows are gone', /anchor-move|moveAnchor|data-act="up"/.test(html), false);
 
 // A window belongs to a direction (user, 20/09): one cell for the run to the
