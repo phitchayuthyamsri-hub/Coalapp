@@ -54,14 +54,14 @@ with c.session_transaction() as s:
 print("a new Location carries its conditions")
 r = c.post("/api/anchors", json={
     "name": "XPPL Mine", "polygon": SQUARE,
-    "loc_type": "load", "window_open": "6:00", "window_close": "18:30",
+    "loc_type": "load", "window_out_open": "6:00", "window_out_close": "18:30",
     "loading_bays": 4, "loading_time_min": 45})
 check("created", r.status_code, 200)
 AID = r.get_json()["id"]
 a = r.get_json()["anchor"]
 check("type", a["loc_type"], "load")
-check("window opens, padded to HH:MM", a["window_open"], "06:00")
-check("window closes", a["window_close"], "18:30")
+check("window opens, padded to HH:MM", a["window_out_open"], "06:00")
+check("window closes", a["window_out_close"], "18:30")
 check("bays", a["loading_bays"], 4)
 check("loading time", a["loading_time_min"], 45)
 
@@ -69,15 +69,17 @@ print("\nthe defaults are honest about not knowing")
 r = c.post("/api/anchors", json={"name": "Nothing said", "polygon": SQUARE})
 b = r.get_json()["anchor"]
 check("no type", b["loc_type"], "")
-check("no window", (b["window_open"], b["window_close"]), ("", ""))
+check("no window in either direction",
+      (b["window_out_open"], b["window_out_close"],
+       b["window_back_open"], b["window_back_close"]), ("", "", "", ""))
 check("bays are unknown, not zero", b["loading_bays"], None)
 check("loading time is unknown, not zero", b["loading_time_min"], None)
 
 print("\nwhat is refused")
 check("a window that is not a clock time",
-      c.put("/api/anchors/%d" % AID, json={"window_open": "half six"}).status_code, 400)
+      c.put("/api/anchors/%d" % AID, json={"window_out_open": "half six"}).status_code, 400)
 check("...an hour that does not exist",
-      c.put("/api/anchors/%d" % AID, json={"window_open": "25:00"}).status_code, 400)
+      c.put("/api/anchors/%d" % AID, json={"window_back_open": "25:00"}).status_code, 400)
 check("a type nobody offers",
       c.put("/api/anchors/%d" % AID, json={"loc_type": "teleport"}).status_code, 400)
 check("negative bays",
@@ -86,14 +88,34 @@ check("loading time that is not a number",
       c.put("/api/anchors/%d" % AID, json={"loading_time_min": "soon"}).status_code, 400)
 with app.app_context():
     a = db.session.get(Anchor, AID)
-    check("...and none of it stuck", (a.window_open, a.loc_type, a.loading_bays),
+    check("...and none of it stuck", (a.window_out_open, a.loc_type, a.loading_bays),
           ("06:00", "load", 4))
 
 print("\na window may run over midnight")
-r = c.put("/api/anchors/%d" % AID, json={"window_open": "22:00", "window_close": "06:00"})
+r = c.put("/api/anchors/%d" % AID, json={"window_out_open": "22:00", "window_out_close": "06:00"})
 check("night shift accepted", r.status_code, 200)
-check("...as given", (r.get_json()["anchor"]["window_open"],
-                      r.get_json()["anchor"]["window_close"]), ("22:00", "06:00"))
+check("...as given", (r.get_json()["anchor"]["window_out_open"],
+                      r.get_json()["anchor"]["window_out_close"]), ("22:00", "06:00"))
+
+print("\nthe two directions are separate (user, 20/09)")
+# QL49 admits traffic to the port on one schedule and traffic back on another.
+r = c.put("/api/anchors/%d" % AID, json={
+    "window_out_open": "07:00", "window_out_close": "19:00",
+    "window_back_open": "20:00", "window_back_close": "05:00"})
+w = r.get_json()["anchor"]
+check("to the port", (w["window_out_open"], w["window_out_close"]), ("07:00", "19:00"))
+check("back to the mine", (w["window_back_open"], w["window_back_close"]), ("20:00", "05:00"))
+
+# Lalay is open one way and unrestricted the other: Vietnam to Laos needs no
+# window at all. Clearing one direction must leave the other standing.
+r = c.put("/api/anchors/%d" % AID, json={"window_back_open": "", "window_back_close": ""})
+w = r.get_json()["anchor"]
+check("one direction clears", (w["window_back_open"], w["window_back_close"]), ("", ""))
+check("...and the other still stands",
+      (w["window_out_open"], w["window_out_close"]), ("07:00", "19:00"))
+check("sending one direction alone does not disturb the other",
+      c.put("/api/anchors/%d" % AID, json={"window_back_open": "15:00"}
+            ).get_json()["anchor"]["window_out_open"], "07:00")
 
 print("\nconditions are not the shape")
 with app.app_context():
@@ -107,7 +129,8 @@ with app.app_context():
           AnchorVersion.query.filter_by(anchor_id=AID).count(), before)
 check("blanking the window is allowed",
       c.put("/api/anchors/%d" % AID,
-            json={"window_open": "", "window_close": ""}).get_json()["anchor"]["window_open"], "")
+            json={"window_out_open": "", "window_out_close": ""}
+            ).get_json()["anchor"]["window_out_open"], "")
 check("clearing the bays means unknown again",
       c.put("/api/anchors/%d" % AID,
             json={"loading_bays": ""}).get_json()["anchor"]["loading_bays"], None)

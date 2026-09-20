@@ -20,16 +20,22 @@ function check(label, got, want) {
 
 // The header is cleared first (head.innerHTML = ''), so match the assignment
 // that actually builds it, not the reset just above.
-const head = html.match(/head\.innerHTML = ('<tr>[\s\S]*?);\n/);
+const head = html.match(/head\.innerHTML =\s*('<tr><th rowspan[\s\S]*?);\n/);
 const body = html.match(/li\.innerHTML = `([\s\S]*?)`;\n/);
 if (!head || !body) { console.log('  FAIL  could not find the header or the row'); process.exit(1); }
-const headCols = (head[1].match(/<th>/g) || []).length;
+// Two header rows: the ones that span both, plus the two under Window time.
+// What must match the body is the number of LEAF columns.
+const spanning = (head[1].match(/<th rowspan="2"/g) || []).length;
+const sub = (head[1].match(/<th class="sub">/g) || []).length;
+const headCols = spanning + sub;
 const bodyCols = (body[1].match(/<td[ >]/g) || []).length;
 
 console.log('the Location table agrees with itself');
-check('header cells', headCols, 10);
+check('leaf columns in the header', headCols, 11);
 check('row cells match the header', bodyCols, headCols);
-check('No# is the first column', /<tr><th>No#<\/th>/.test(head[1]), true);
+check('Window time groups two of them',
+      /<th colspan="2" class="grouped">Window time<\/th>/.test(head[1]), true);
+check('No# is the first column', /<tr><th rowspan="2">No#<\/th>/.test(head[1]), true);
 check('the row number is the first cell', /^\s*<td class="rowno">/m.test(body[1]), true);
 
 console.log('\nit is a table, and it fits its content');
@@ -39,14 +45,20 @@ check('width is auto, not stretched', /\.anchor-list \{[\s\S]{0,200}?width: auto
 check('cells do not wrap', /\.anchor-list th, \.anchor-list td \{[\s\S]{0,300}?white-space: nowrap;/.test(html), true);
 check('the reorder arrows are gone', /anchor-move|moveAnchor|data-act="up"/.test(html), false);
 
-// The window is one cell holding both times: it wrapped onto two lines while
-// it was a fixed-width grid column, which is what prompted the rewrite.
-const winCell = (body[1].match(/<td class="cell-window">[\s\S]*?<\/td>/) || [''])[0];
-check('the window is one cell', winCell !== '', true);
-check('...holding both times', (winCell.match(/type="time"/g) || []).length, 2);
+// A window belongs to a direction (user, 20/09): one cell for the run to the
+// port, one for the run back. Each holds its own open and close, on one line -
+// they wrapped onto two while this was a fixed-width grid column.
+const winCells = body[1].match(/<td class="cell-window">[\s\S]*?<\/td>/g) || [];
+check('a window cell per direction', winCells.length, 2);
+winCells.forEach((cell, i) =>
+  check(`...cell ${i + 1} holds an open and a close`,
+        (cell.match(/type="time"/g) || []).length, 2));
+check('the two directions are different fields',
+      /c-out-open/.test(body[1]) && /c-back-open/.test(body[1]), true);
 
 console.log('\nevery condition cell has a handler');
-['c-type', 'c-open', 'c-close', 'c-bays', 'c-load'].forEach(act => {
+['c-type', 'c-out-open', 'c-out-close', 'c-back-open', 'c-back-close',
+ 'c-bays', 'c-load'].forEach(act => {
   const inMarkup = html.includes(`data-act="${act}"`);
   const inHandler = new RegExp(`'${act}':`).test(html);
   check(act, inMarkup && inHandler, true);

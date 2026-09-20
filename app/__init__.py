@@ -371,10 +371,13 @@ def _ensure_anchor_schema():
     # "not recorded" must not read as "zero bays" or "midnight to midnight".
     if "loc_type" not in cols:
         _add_column_racing("anchor", "loc_type VARCHAR(20) DEFAULT ''")
-    if "window_open" not in cols:
-        _add_column_racing("anchor", "window_open VARCHAR(5) DEFAULT ''")
-    if "window_close" not in cols:
-        _add_column_racing("anchor", "window_close VARCHAR(5) DEFAULT ''")
+    # One window per direction (20/09/2026). The single pair these replace
+    # never reached prod and was never saved anywhere, so there is nothing to
+    # carry across; the old columns are dropped by hand on staging.
+    for c in ("window_out_open", "window_out_close",
+              "window_back_open", "window_back_close"):
+        if c not in cols:
+            _add_column_racing("anchor", "%s VARCHAR(5) DEFAULT ''" % c)
     if "loading_bays" not in cols:
         _add_column_racing("anchor", "loading_bays INTEGER")
     if "loading_time_min" not in cols:

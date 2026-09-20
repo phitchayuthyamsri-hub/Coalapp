@@ -184,8 +184,18 @@ class Anchor(db.Model):
     # expected to take. One is a measuring rule, the other is a fact about the
     # site, and they are easy to confuse, so they are named apart.
     loc_type = db.Column(db.String(20), default="")     # load/unload/load_unload/border/highway
-    window_open = db.Column(db.String(5), default="")   # "HH:MM"; both blank = open all day
-    window_close = db.Column(db.String(5), default="")  # may be < open: a window over midnight
+
+    # A window belongs to a DIRECTION, not to the place (user, 20/09/2026).
+    # QL49 admits traffic to the port on one schedule and traffic back on
+    # another; Lalay is open one way and unrestricted the other. One pair of
+    # times could say neither. "out" is the laden run towards Chan May, "back"
+    # is the return towards XPPL - the same words the cycle engine already
+    # uses (lalay_out_in, lalay_back_in), so there is one vocabulary, not two.
+    # All four blank = no restriction in either direction.
+    window_out_open = db.Column(db.String(5), default="")    # "HH:MM", to port
+    window_out_close = db.Column(db.String(5), default="")   # may be < open: over midnight
+    window_back_open = db.Column(db.String(5), default="")   # "HH:MM", to mine
+    window_back_close = db.Column(db.String(5), default="")
     loading_bays = db.Column(db.Integer)                # NULL = not recorded, which is not 0
     loading_time_min = db.Column(db.Integer)            # planned minutes of work on site
 

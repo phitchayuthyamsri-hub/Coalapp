@@ -1434,6 +1434,8 @@ input[type="date"] { width: 100%; }
   z-index: 2;
   cursor: default;
 }
+.anchor-list thead th.grouped { text-align: center; }
+.anchor-list thead th.sub { text-transform: none; letter-spacing: 0; font-size: 9px; }
 .anchor-list tbody tr { cursor: pointer; }
 .anchor-list tbody tr:hover { background: var(--panel2); }
 .anchor-list tbody tr.selected { background: #e8f1fc; }
@@ -2411,7 +2413,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <button class="secondary small" id="btnClearAnchors">Clear all</button>
           </div>
           <input type="file" id="loadJsonInput" accept=".json" style="display:none">
-          <div class="help-text">Click a name to rename it, ▲▼ to reorder. <b>🗺 View on Map</b> opens the map on its own page — select a Location first to open zoomed to it; ✎ and <b>+ Draw</b> go there too, because a shape needs the map. In the condition columns a blank means <i>not recorded</i>, which is not the same as zero; a window may run past midnight (22:00 to 06:00); loading time is how long the work is expected to take, not the min-dwell the geofence uses to decide a visit happened. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
+          <div class="help-text">Click a name to rename it, ▲▼ to reorder. <b>🗺 View on Map</b> opens the map on its own page — select a Location first to open zoomed to it; ✎ and <b>+ Draw</b> go there too, because a shape needs the map. In the condition columns a blank means <i>not recorded</i>, which is not the same as zero. <b>Window time</b> is per direction: <i>To port</i> is the laden run towards Chan May, <i>To mine</i> the return towards XPPL. A Location may be open one way and unrestricted the other — leave the direction that has no window blank. A window may run past midnight (22:00 to 06:00). Loading time is how long the work is expected to take, not the min-dwell the geofence uses to decide a visit happened. Press <b>Save</b> to send changes to the server: a changed shape judges captures from that moment on; what Monitor already showed does not change.</div>
         </div>
 
         <!-- Sequence setup left this page on 18/09/2026. The order trucks pass
@@ -3952,9 +3954,15 @@ function renderAnchorList() {
   const wrap = table.closest('.anchor-table-wrap');
   if (wrap) wrap.classList.toggle('anchor-empty', !STATE.anchors.length);
   if (STATE.anchors.length) {
-    head.innerHTML = '<tr><th>No#</th><th></th><th>Name</th>'
-      + '<th>Location type</th><th>Window time</th><th>Loading bay</th>'
-      + '<th>Loading time (min)</th><th></th><th></th><th></th></tr>';
+    // Two header rows, because Window time covers two columns: a Location can
+    // admit traffic to the port on one schedule and traffic back on another,
+    // or be open one way and unrestricted the other.
+    head.innerHTML =
+        '<tr><th rowspan="2">No#</th><th rowspan="2"></th><th rowspan="2">Name</th>'
+      + '<th rowspan="2">Location type</th><th colspan="2" class="grouped">Window time</th>'
+      + '<th rowspan="2">Loading bay</th><th rowspan="2">Loading time (min)</th>'
+      + '<th rowspan="2"></th><th rowspan="2"></th><th rowspan="2"></th></tr>'
+      + '<tr><th class="sub">To port</th><th class="sub">To mine</th></tr>';
   }
   STATE.anchors.forEach((a, idx) => {
     const li = document.createElement('tr');
@@ -3978,7 +3986,10 @@ function renderAnchorList() {
         </select>
       </td>
       <td class="cell-window">
-        <input type="time" data-act="c-open" title="Opens" value="${a.windowOpen || ''}"><span>to</span><input type="time" data-act="c-close" title="Closes" value="${a.windowClose || ''}">
+        <input type="time" data-act="c-out-open" title="Opens, heading to the port" value="${a.windowOutOpen || ''}"><span>to</span><input type="time" data-act="c-out-close" title="Closes, heading to the port" value="${a.windowOutClose || ''}">
+      </td>
+      <td class="cell-window">
+        <input type="time" data-act="c-back-open" title="Opens, heading back to the mine" value="${a.windowBackOpen || ''}"><span>to</span><input type="time" data-act="c-back-close" title="Closes, heading back to the mine" value="${a.windowBackClose || ''}">
       </td>
       <td class="cell-num">
         <input type="number" min="0" step="1" data-act="c-bays" placeholder="—"
@@ -4009,8 +4020,10 @@ function renderAnchorList() {
     // does not also select it and fly the map to it.
     const cond = {
       'c-type':  (a, v) => { a.locType = v || ''; },
-      'c-open':  (a, v) => { a.windowOpen = v || ''; },
-      'c-close': (a, v) => { a.windowClose = v || ''; },
+      'c-out-open':   (a, v) => { a.windowOutOpen = v || ''; },
+      'c-out-close':  (a, v) => { a.windowOutClose = v || ''; },
+      'c-back-open':  (a, v) => { a.windowBackOpen = v || ''; },
+      'c-back-close': (a, v) => { a.windowBackClose = v || ''; },
       'c-bays':  (a, v) => { a.loadingBays = condNum(v); },
       'c-load':  (a, v) => { a.loadingTimeMin = condNum(v); },
     };
@@ -4784,7 +4797,9 @@ function saveAnchorsToStorage() {
     const data = STATE.anchors.map(a => ({
       id: a.id, name: a.name, polygon: a.polygon, color: a.color, colorOverride: a.colorOverride || null,
       caption: a.caption || '', category: a.category || '', aliasOf: a.aliasOf || '', routeHidden: !!a.routeHidden, minDwellMin: (a.minDwellMin != null ? a.minDwellMin : 5),
-      locType: a.locType || '', windowOpen: a.windowOpen || '', windowClose: a.windowClose || '',
+      locType: a.locType || '',
+      windowOutOpen: a.windowOutOpen || '', windowOutClose: a.windowOutClose || '',
+      windowBackOpen: a.windowBackOpen || '', windowBackClose: a.windowBackClose || '',
       loadingBays: (a.loadingBays != null ? a.loadingBays : null),
       loadingTimeMin: (a.loadingTimeMin != null ? a.loadingTimeMin : null)
     }));
@@ -7539,7 +7554,9 @@ async function syncAnchorsFromServer() {
       colorOverride: p.colorOverride || undefined, caption: d.caption || '', category: d.category || '',
       aliasOf: p.aliasOf || '', routeHidden: !!p.routeHidden,
       minDwellMin: (d.min_dwell_min != null ? d.min_dwell_min : 5),
-      locType: d.loc_type || '', windowOpen: d.window_open || '', windowClose: d.window_close || '',
+      locType: d.loc_type || '',
+      windowOutOpen: d.window_out_open || '', windowOutClose: d.window_out_close || '',
+      windowBackOpen: d.window_back_open || '', windowBackClose: d.window_back_close || '',
       loadingBays: (d.loading_bays != null ? d.loading_bays : null),
       loadingTimeMin: (d.loading_time_min != null ? d.loading_time_min : null),
       layer: null, labelMarker: null };
@@ -7577,7 +7594,8 @@ async function pushAnchorsToServer() {
     const body = { name: a.name, color: a.color, category: a.category || '', caption: a.caption || '',
                    polygon: a.polygon, min_dwell_min: (a.minDwellMin != null ? a.minDwellMin : 5),
                    loc_type: a.locType || '',
-                   window_open: a.windowOpen || '', window_close: a.windowClose || '',
+                   window_out_open: a.windowOutOpen || '', window_out_close: a.windowOutClose || '',
+                   window_back_open: a.windowBackOpen || '', window_back_close: a.windowBackClose || '',
                    loading_bays: (a.loadingBays != null ? a.loadingBays : ''),
                    loading_time_min: (a.loadingTimeMin != null ? a.loadingTimeMin : '') };
     const isNew = String(a.id).startsWith('anc_');

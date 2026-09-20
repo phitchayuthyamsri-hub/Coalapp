@@ -77,8 +77,10 @@ def as_api(a):
             "role": a.role or "", "polygon": a.polygon,
             "min_dwell_min": a.min_dwell_min if a.min_dwell_min is not None else 5,
             "loc_type": a.loc_type or "",
-            "window_open": a.window_open or "",
-            "window_close": a.window_close or "",
+            "window_out_open": a.window_out_open or "",
+            "window_out_close": a.window_out_close or "",
+            "window_back_open": a.window_back_open or "",
+            "window_back_close": a.window_back_close or "",
             "loading_bays": a.loading_bays,
             "loading_time_min": a.loading_time_min,
             "retired_at": a.retired_at.strftime("%Y-%m-%d %H:%M") if a.retired_at else None}
@@ -126,17 +128,19 @@ def apply_conditions(a, d):
     """Set whatever conditions the caller sent, leaving the rest alone.
 
     The open and close times are NOT checked against each other: a window that
-    runs 22:00 to 06:00 is a night shift, not a mistake.
+    runs 22:00 to 06:00 is a night shift, not a mistake. Nor are the two
+    directions checked against one another - a Location open one way and
+    unrestricted the other is the case that made them separate.
     """
     if "loc_type" in d:
         t = (d.get("loc_type") or "").strip().lower()
         if t not in LOC_TYPES:
             raise ValueError("unknown location type %r" % t)
         a.loc_type = t
-    if "window_open" in d:
-        a.window_open = _hhmm(d.get("window_open"))
-    if "window_close" in d:
-        a.window_close = _hhmm(d.get("window_close"))
+    for f in ("window_out_open", "window_out_close",
+              "window_back_open", "window_back_close"):
+        if f in d:
+            setattr(a, f, _hhmm(d.get(f)))
     if "loading_bays" in d:
         a.loading_bays = _whole(d.get("loading_bays"), "loading bays")
     if "loading_time_min" in d:
