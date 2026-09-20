@@ -2754,33 +2754,22 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           Stops — <span class="legs-who" id="legsWho"></span>
           <button class="small secondary" id="legsClose">Close</button>
         </div>
-        <div class="legs-grid">
-          <div class="leg" data-leg="fronthaul">
-            <h3>Fronthaul <span>— the laden run to the port</span></h3>
-            <div class="chain" data-chain="fronthaul"></div>
-            <div class="leg-add">
-              <select data-add="fronthaul"></select>
-              <button class="small go" data-addbtn="fronthaul">Add stop</button>
-            </div>
-          </div>
-          <div class="leg" data-leg="backhaul">
-            <h3>Backhaul <span>— the way home to the mine</span></h3>
-            <div class="chain" data-chain="backhaul"></div>
-            <div class="leg-add">
-              <select data-add="backhaul"></select>
-              <button class="small go" data-addbtn="backhaul">Add stop</button>
-            </div>
-          </div>
+        <div class="chain" data-chain="sequence"></div>
+        <div class="leg-add">
+          <select data-add="sequence"></select>
+          <button class="small go" data-addbtn="sequence">Add stop</button>
         </div>
-        <div class="cond-note">A Location may appear in <b>both</b> legs — QL49 is passed going out and again coming back,
-          which is why its window times are per direction. Twice in the <i>same</i> leg is refused.
-          Leaving a leg empty means it has not been described yet.</div>
+        <div class="cond-note">One path, in the order a truck passes through it. A Location appears once
+          here — QL49 on the way out and again on the way home is not a repeat, it is two routes, one of
+          each type.</div>
       </div>
 
-      <div class="help-text">A route is a named sequence of <b>Locations</b>, in two legs. The name is just a
-        name — it does not have to match the stops, and nothing is read from it. A truck belongs to <b>one</b>
-        route, set on the declaration list. Click a name to rename it, ✎ to build its legs, × to delete it.
-        Renames and stops are held here until you press <b>Save</b>; creating and deleting a route happen at once.</div>
+      <div class="help-text">A route is one directed path: a named, ordered list of <b>Locations</b>, and a
+        <b>type</b> saying which half of a cycle it serves — <i>Fronthaul</i> out, <i>Backhaul</i> home, or
+        <i>Any</i>. Mine to Port is one route; Port to Mine is another. The type is a label, not a rule:
+        nothing is refused for disagreeing with it. The name is just a name — it need not describe the stops.
+        Click a name to rename it, ✎ to build its stops, × to delete it. Renames, types and stops are held
+        here until you press <b>Save</b>; creating and deleting a route happen at once.</div>
     </div>
   </div>
 </div>
@@ -4059,9 +4048,11 @@ async function loadRoutes() {
   renderLegs();
 }
 
-function legText(leg) {
-  if (!leg || !leg.length) return '<span class="none">not set</span>';
-  return leg.map(s => escapeHtml(s.name)).join('<span class="arrow">→</span>');
+const ROUTE_KIND_LABEL = { fronthaul: 'Fronthaul', backhaul: 'Backhaul', any: 'Any' };
+
+function stopsText(seq) {
+  if (!seq || !seq.length) return '<span class="none">no stops yet</span>';
+  return seq.map(s => escapeHtml(s.name)).join('<span class="arrow">→</span>');
 }
 
 function renderRoutes() {
@@ -4075,25 +4066,40 @@ function renderRoutes() {
       + 'No routes yet — press <b>+ New route</b> to name one.</td></tr>';
     return;
   }
-  head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Fronthaul — to port</th>'
-    + '<th>Backhaul — to mine</th><th>Trucks</th><th></th><th></th></tr>';
+  head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Type</th><th>Stops, in order</th>'
+    + '<th>Trucks</th><th></th><th></th></tr>';
   STATE.routes.forEach((r, idx) => {
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
+    const kind = r.kind || 'any';
+    const typeCell = MAY_EDIT_ROUTES
+      ? '<select data-act="r-kind">'
+        + ['fronthaul', 'backhaul', 'any'].map(v =>
+            '<option value="' + v + '"' + (kind === v ? ' selected' : '') + '>'
+            + ROUTE_KIND_LABEL[v] + '</option>').join('')
+        + '</select>'
+      : escapeHtml(ROUTE_KIND_LABEL[kind] || kind);
     tr.innerHTML = `
       <td class="rowno">${idx + 1}</td>
       <td><span class="name" title="Click to rename">${escapeHtml(r.name)}</span></td>
-      <td class="cell-leg">${legText(r.fronthaul)}</td>
-      <td class="cell-leg">${legText(r.backhaul)}</td>
+      <td class="cell-kind">${typeCell}</td>
+      <td class="cell-leg">${stopsText(r.sequence)}</td>
       <td class="cell-trucks">${r.trucks && r.trucks.length ? escapeHtml(r.trucks.join(', ')) : '—'}</td>
       <td class="act">${MAY_EDIT_ROUTES ? '<button class="edit-btn" data-act="legs" title="Build the stops on this route">✎</button>' : ''}</td>
       <td class="act">${MAY_EDIT_ROUTES ? '<button class="x" data-act="del" title="Delete this route">×</button>' : ''}</td>
     `;
-    if (MAY_EDIT_ROUTES) tr.querySelector('.name').addEventListener('click', (e) => {
-      e.stopPropagation();
-      beginRenameRoute(tr, r);
-    });
     if (MAY_EDIT_ROUTES) {
+      tr.querySelector('.name').addEventListener('click', (e) => {
+        e.stopPropagation();
+        beginRenameRoute(tr, r);
+      });
+      const kindSel = tr.querySelector('[data-act="r-kind"]');
+      kindSel.addEventListener('click', (e) => e.stopPropagation());
+      kindSel.addEventListener('change', (e) => {
+        e.stopPropagation();
+        r.kind = e.target.value;
+        routesDirty(true);
+      });
       tr.querySelector('[data-act="legs"]').addEventListener('click', (e) => {
         e.stopPropagation();
         STATE.legsOpenId = (String(STATE.legsOpenId) === String(r.id)) ? null : String(r.id);
@@ -4137,7 +4143,7 @@ function beginRenameRoute(tr, r) {
   inp.addEventListener('blur', () => done(true));
 }
 
-/* -- the legs editor ------------------------------------------------------ */
+/* -- the stop builder ------------------------------------------------------ */
 // Zones drawn on the Location page but not yet applied exist nowhere but that
 // browser, so they cannot be a stop on a route the server knows about.
 function liveLocations() {
@@ -4150,31 +4156,29 @@ function renderLegs() {
   const r = routeById(STATE.legsOpenId);
   if (!r) { box.hidden = true; return; }
   box.hidden = false;
-  document.getElementById('legsWho').textContent = r.name;
-  ['fronthaul', 'backhaul'].forEach(leg => {
-    const host = box.querySelector('[data-chain="' + leg + '"]');
-    const list = r[leg] || [];
-    host.innerHTML = list.length
-      ? list.map((s, i) => '<span class="stop"><span class="k">' + (i + 1) + '</span>' + escapeHtml(s.name)
-          + '<button data-move="' + leg + '" data-i="' + i + '" data-d="-1" title="Earlier"' + (i === 0 ? ' disabled' : '') + '>◀</button>'
-          + '<button data-move="' + leg + '" data-i="' + i + '" data-d="1" title="Later"' + (i === list.length - 1 ? ' disabled' : '') + '>▶</button>'
-          + '<button data-drop="' + leg + '" data-i="' + i + '" title="Remove from this leg">×</button></span>')
-          .join('<span class="arrow">→</span>')
-      : '<span class="none">no stops yet</span>';
-    // Only Locations this leg does not already hold: twice in ONE leg is
-    // refused by the server, so it is not offered here either. The other leg
-    // is deliberately not consulted - the same stop belongs in both.
-    const have = new Set(list.map(s => String(s.id)));
-    const sel = box.querySelector('[data-add="' + leg + '"]');
-    const opts = liveLocations().filter(a => !have.has(String(a.id)))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined,
-                                                  { numeric: true, sensitivity: 'base' }));
-    sel.innerHTML = '<option value="">— add a Location —</option>'
-      + opts.map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>').join('');
-  });
+  document.getElementById('legsWho').textContent =
+    r.name + ' · ' + (ROUTE_KIND_LABEL[r.kind || 'any'] || r.kind);
+  const list = r.sequence || [];
+  const host = box.querySelector('[data-chain="sequence"]');
+  host.innerHTML = list.length
+    ? list.map((s, i) => '<span class="stop"><span class="k">' + (i + 1) + '</span>' + escapeHtml(s.name)
+        + '<button data-move="' + i + '" data-d="-1" title="Earlier"' + (i === 0 ? ' disabled' : '') + '>◀</button>'
+        + '<button data-move="' + i + '" data-d="1" title="Later"' + (i === list.length - 1 ? ' disabled' : '') + '>▶</button>'
+        + '<button data-drop="' + i + '" title="Remove from this route">×</button></span>')
+        .join('<span class="arrow">→</span>')
+    : '<span class="none">no stops yet</span>';
+  // Only Locations this route does not already hold: one path passes a
+  // Location once, and the server refuses a repeat.
+  const have = new Set(list.map(s => String(s.id)));
+  const sel = box.querySelector('[data-add="sequence"]');
+  const opts = liveLocations().filter(a => !have.has(String(a.id)))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined,
+                                                { numeric: true, sensitivity: 'base' }));
+  sel.innerHTML = '<option value="">— add a Location —</option>'
+    + opts.map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>').join('');
+
   box.querySelectorAll('[data-move]').forEach(b => b.addEventListener('click', () => {
-    const leg = b.dataset.move, i = +b.dataset.i, j = i + (+b.dataset.d);
-    const list = r[leg];
+    const i = +b.dataset.move, j = i + (+b.dataset.d);
     if (j < 0 || j >= list.length) return;
     const moved = list.splice(i, 1)[0];
     list.splice(j, 0, moved);
@@ -4183,7 +4187,7 @@ function renderLegs() {
     renderLegs();
   }));
   box.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => {
-    r[b.dataset.drop].splice(+b.dataset.i, 1);
+    list.splice(+b.dataset.drop, 1);
     routesDirty(true);
     renderRoutes();
     renderLegs();
@@ -4193,19 +4197,17 @@ function renderLegs() {
 function bindRoutePage() {
   const box = document.getElementById('legsBox');
   if (!box) return;
-  ['fronthaul', 'backhaul'].forEach(leg => {
-    box.querySelector('[data-addbtn="' + leg + '"]').addEventListener('click', () => {
-      const r = routeById(STATE.legsOpenId);
-      const sel = box.querySelector('[data-add="' + leg + '"]');
-      if (!r || !sel.value) return;
-      const a = liveLocations().filter(x => String(x.id) === String(sel.value))[0];
-      if (!a) return;
-      r[leg] = r[leg] || [];
-      r[leg].push({ id: Number(a.id), name: a.name });
-      routesDirty(true);
-      renderRoutes();
-      renderLegs();
-    });
+  box.querySelector('[data-addbtn="sequence"]').addEventListener('click', () => {
+    const r = routeById(STATE.legsOpenId);
+    const sel = box.querySelector('[data-add="sequence"]');
+    if (!r || !sel.value) return;
+    const a = liveLocations().filter(x => String(x.id) === String(sel.value))[0];
+    if (!a) return;
+    r.sequence = r.sequence || [];
+    r.sequence.push({ id: Number(a.id), name: a.name });
+    routesDirty(true);
+    renderRoutes();
+    renderLegs();
   });
   document.getElementById('legsClose').addEventListener('click', () => {
     STATE.legsOpenId = null;
@@ -4240,7 +4242,7 @@ async function createRoute() {
     const res = await fetch('/api/route-seqs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: v, fronthaul: [], backhaul: [] })
+      body: JSON.stringify({ name: v, kind: 'any', sequence: [] })
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || 'could not create it');
@@ -4283,8 +4285,8 @@ async function saveRoutes() {
     for (const r of STATE.routes) {
       const body = {
         name: r.name,
-        fronthaul: (r.fronthaul || []).map(s => s.id),
-        backhaul: (r.backhaul || []).map(s => s.id)
+        kind: r.kind || 'any',
+        sequence: (r.sequence || []).map(s => s.id)
       };
       const res = await fetch('/api/route-seqs/' + r.id, {
         method: 'PUT',

@@ -29,11 +29,25 @@ const routeApi = api.match(/def _route_api\([\s\S]*?\n\n/);
 const sent = [...routeApi[0].matchAll(/"(\w+)":/g)].map(m => m[1]).sort();
 
 console.log('the page reads what the API sends');
-check('the API sends both legs',
-      sent.includes('fronthaul') && sent.includes('backhaul'), true);
-check('...and no longer a flat sequence', sent.includes('sequence'), false);
+check('the API sends the path and its type',
+      sent.includes('sequence') && sent.includes('kind'), true);
+check('...and not two legs on one route',
+      sent.includes('fronthaul') || sent.includes('backhaul'), false);
 sent.forEach(f => check(`the page knows about "${f}"`, html.includes(f), true));
-check('the page never reads r.sequence', /\br\.sequence\b/.test(html), false);
+check('the page never reads a leg that no longer exists',
+      /\br\.fronthaul\b|\br\.backhaul\b/.test(html), false);
+
+// Each direction is its own route (user, 20/09), so the type is a column in
+// the row, and the three kinds must match the server's list exactly.
+console.log('\nthe type');
+const kinds = (api.match(/ROUTE_KINDS = \(([^)]*)\)/) || ['', ''])[1]
+  .split(',').map(x => x.trim().replace(/['"]/g, '')).filter(Boolean).sort();
+check('the server offers three kinds', kinds.join(','), 'any,backhaul,fronthaul');
+kinds.forEach(k => check(`the page offers "${k}"`,
+                         new RegExp("'" + k + "'").test(html), true));
+check('the type is a dropdown in the row', /data-act="r-kind"/.test(html), true);
+check('a bad type is refused, not corrected',
+      /a route is a fronthaul, a backhaul, or any/.test(api), true);
 
 console.log('\nthe table');
 const head = html.match(/head\.innerHTML = ('<tr><th>No#<\/th><th>Name<\/th>[\s\S]*?);\n/);
@@ -43,8 +57,8 @@ check('header cells', (head[1].match(/<th>/g) || []).length, 7);
 check('row cells match the header', (body[1].match(/<td[ >]/g) || []).length, 7);
 check('it is the same table as Locations',
       /<table class="grid-table route-list" id="routeList">/.test(html), true);
-check('both legs have a column',
-      /Fronthaul — to port[\s\S]*?Backhaul — to mine/.test(head[1]), true);
+check('the type sits beside the stops',
+      /<th>Type<\/th><th>Stops, in order<\/th>/.test(head[1]), true);
 
 console.log('\nthe old page is not a second editor');
 check('the iframe is gone', /routeFrame|\/route\?embed=1/.test(html), false);

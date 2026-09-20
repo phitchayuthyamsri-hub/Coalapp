@@ -70,30 +70,27 @@ class Truck(db.Model):
 
 
 class Route(db.Model):
-    """A named route: the Locations a truck passes through, out and back.
+    """One directed path: a named, ordered list of Locations, and its KIND.
 
-    Two legs since 20/09/2026. A corridor is not one line: the FRONTHAUL is
-    the laden run to the port, the BACKHAUL is the way home, and the way home
-    need not retrace the way out - it may take the detour instead of the
-    highway. The engine has always thought this way (its distance spine is
-    fronthaul/backhaul, and it infers backhaul_type from where a truck went);
-    a route can now say it outright rather than leave it to be deduced.
+    Settled 20/09/2026. A corridor is not one line and the way home is not the
+    way out reversed, so each direction is its own route rather than a second
+    leg on a shared one: Mine to Port is one route, Port to Mine is another,
+    Mine to A Ngo is another again. That keeps a path a single thing that can
+    be named, reused and locked to on its own.
 
-    The same Location may appear in BOTH legs and usually does - QL49 is
-    passed on the way out and again on the way back, which is exactly why its
-    window times are per direction. Within one leg a Location appears once.
+    `kind` says which half of a cycle the path serves:
+        fronthaul   the laden run out
+        backhaul    the way home
+        any         either, or neither - a path that is just a path
 
-    Built on the Route page from the zones on the Location page. Monitoring
-    will read a truck's stops from its route and nowhere else; until that
-    lands, the server's fixed role mapping still drives the engine."""
+    It is a label on the path, not a rule about it: nothing is refused for
+    disagreeing with its kind, because a stop list cannot know which way a
+    truck meant to be going.
+    """
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
-    fronthaul = db.Column(db.JSON, default=list)     # [anchor_id, ...] to the port
-    backhaul = db.Column(db.JSON, default=list)      # [anchor_id, ...] back to the mine
-    # Superseded by the two legs above. Kept until the split has been through
-    # prod: its contents are copied into fronthaul at boot, and a column that
-    # still holds the old answer is worth more than one deleted early.
-    sequence = db.Column(db.JSON, default=list)
+    kind = db.Column(db.String(12), default="any")   # fronthaul / backhaul / any
+    sequence = db.Column(db.JSON, default=list)      # [anchor_id, ...] in order
     note = db.Column(db.String(300), default="")
     created_by = db.Column(db.String(80), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

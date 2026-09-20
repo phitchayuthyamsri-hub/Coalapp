@@ -622,7 +622,10 @@ def _may_lock_truck():
                                                        "planner", "admin")
 
 
-def _leg_api(ids, names):
+ROUTE_KINDS = ("fronthaul", "backhaul", "any")
+
+
+def _stops_api(ids, names):
     out = []
     for x in (ids or []):
         try:
@@ -635,9 +638,17 @@ def _leg_api(ids, names):
 
 def _route_api(r, trucks_by_route, names):
     return {"id": r.id, "name": r.name, "note": r.note or "",
-            "fronthaul": _leg_api(r.fronthaul, names),
-            "backhaul": _leg_api(r.backhaul, names),
+            "kind": r.kind or "any",
+            "sequence": _stops_api(r.sequence, names),
             "trucks": sorted(trucks_by_route.get(r.id, []))}
+
+
+def _clean_kind(v):
+    """Which half of a cycle this path serves. A label, not a rule."""
+    k = (v or "any").strip().lower()
+    if k not in ROUTE_KINDS:
+        raise ValueError("a route is a fronthaul, a backhaul, or any")
+    return k
 
 
 def _routes_payload():
@@ -649,12 +660,10 @@ def _routes_payload():
 
 
 def _clean_sequence(seq):
-    """Ids of zones in service, in order, no repeats WITHIN THIS LEG.
+    """Ids of zones in service, in order, no repeats.
 
-    Each leg is cleaned by itself, so a Location may appear in both - QL49 is
-    passed on the way out and again on the way back, which is the whole reason
-    its window times are per direction. Repeating one inside a single leg is
-    still a mistake.
+    One path passes a Location once. QL49 being on the way out AND the way
+    home is not a repeat: those are two routes now, one of each kind.
 
     Anything else is refused by name so the page can say which one."""
     live = {a.id for a in Anchor.query.filter(Anchor.retired_at.is_(None)).all()}
@@ -667,7 +676,7 @@ def _clean_sequence(seq):
         if i not in live:
             raise ValueError("location %d is not a zone in service" % i)
         if i in out:
-            raise ValueError("a location appears twice in the same leg")
+            raise ValueError("a location appears twice on this route")
         out.append(i)
     return out
 
@@ -690,11 +699,11 @@ def route_seq_create():
     if Route.query.filter(func.lower(Route.name) == name.lower()).first():
         return jsonify(error="a route called %s already exists" % name), 409
     try:
-        front = _clean_sequence(d.get("fronthaul"))
-        back = _clean_sequence(d.get("backhaul"))
+        seq = _clean_sequence(d.get("sequence"))
+        kind = _clean_kind(d.get("kind"))
     except ValueError as e:
         return jsonify(error=str(e)), 400
-    r = Route(name=name[:80], fronthaul=front, backhaul=back,
+    r = Route(name=name[:80], kind=kind, sequence=seq,
               note=(d.get("note") or "")[:300],
               created_by=current_user.username)
     db.session.add(r)
@@ -719,12 +728,16 @@ def route_seq_update(rid):
         if dup:
             return jsonify(error="a route called %s already exists" % name), 409
         r.name = name[:80]
-    for leg in ("fronthaul", "backhaul"):
-        if leg in d:
-            try:
-                setattr(r, leg, _clean_sequence(d.get(leg)))
-            except ValueError as e:
-                return jsonify(error=str(e)), 400
+    if "sequence" in d:
+        try:
+            r.sequence = _clean_sequence(d.get("sequence"))
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+    if "kind" in d:
+        try:
+            r.kind = _clean_kind(d.get("kind"))
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
     if "note" in d:
         r.note = (d.get("note") or "")[:300]
     db.session.commit()

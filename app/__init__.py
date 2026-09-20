@@ -411,12 +411,12 @@ def _ensure_truck_schema():
 
 
 def _ensure_route_schema():
-    """A route grew two legs on 20/09/2026: fronthaul out, backhaul home.
+    """A route carries its KIND - fronthaul, backhaul or any (20/09/2026).
 
-    Whatever the single `sequence` held was the run to the port, so it becomes
-    the fronthaul. The backhaul starts empty, which reads as "not described
-    yet" rather than "retraces the way out" - the second is a guess, and this
-    is the sort of guess that is never revisited.
+    An earlier shape that never reached prod put two legs on one route. Where
+    those columns exist and a route described a fronthaul, that list IS the
+    path, so it becomes the sequence and the route is marked a fronthaul -
+    nothing anyone built is thrown away.
     """
     from sqlalchemy import inspect
     from .models import Route
@@ -425,18 +425,21 @@ def _ensure_route_schema():
         cols = [c["name"] for c in insp.get_columns("route")]
     except Exception:
         return
-    fresh = "fronthaul" not in cols
-    if fresh:
-        _add_column_racing("route", "fronthaul JSON")
-    if "backhaul" not in cols:
-        _add_column_racing("route", "backhaul JSON")
-    if not fresh:
+    if "kind" not in cols:
+        _add_column_racing("route", "kind VARCHAR(12) DEFAULT 'any'")
+    if "fronthaul" not in cols:
         return
+    from sqlalchemy import text
     moved = 0
-    for r in Route.query.all():
-        if not (r.fronthaul or []) and (r.sequence or []):
-            r.fronthaul = list(r.sequence)
-            r.backhaul = r.backhaul or []
+    for row in db.session.execute(text("SELECT id, fronthaul FROM route")).fetchall():
+        rid, front = row[0], row[1]
+        if not front or front in ("[]", "null"):
+            continue
+        r = db.session.get(Route, rid)
+        if r is not None and not (r.sequence or []):
+            import json
+            r.sequence = json.loads(front) if isinstance(front, str) else list(front)
+            r.kind = "fronthaul"
             moved += 1
     if moved:
         db.session.commit()
