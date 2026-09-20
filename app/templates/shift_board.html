@@ -22,7 +22,12 @@
   .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;
         font-weight:700;letter-spacing:.02em;text-transform:uppercase}
   .pill.role{background:#1e293b;color:var(--acc);border:1px solid var(--line)}
-  main{padding:18px;max-width:1180px;margin:0 auto}
+  /* The page is not a box (user, 20/09/2026). A centred max-width plus a
+     table trapped in its own overflow meant a wide table scrolled inside a
+     narrow strip in the middle of the screen, with the rest of the window
+     empty on both sides. The table is as wide as it is now, and the window
+     scrolls to it. */
+  main{padding:18px;max-width:none;margin:0}
   /* the picker bar rides just under the header */
   .card.sticky{position:sticky;top:var(--hdr,56px);z-index:60}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -67,8 +72,9 @@
      like one: every cell gridded, text wrapped rather than cut, inputs flat
      inside their cells. The page may stretch; on a narrow screen the table
      scrolls sideways inside its own box, never the whole page. */
-  main{max-width:1800px}
-  #listBody{overflow-x:auto}
+  main{max-width:none}
+  #listBody{overflow-x:visible}
+  #listTable td.c-route{white-space:nowrap;color:var(--txt)}
   #listTable{margin-top:6px;background:#0d1626;font-size:12.5px;line-height:1.3}
   #listTable th,#listTable td{border:1px solid #2a3850;padding:4px 6px;
       white-space:normal;overflow-wrap:break-word;vertical-align:top}
@@ -460,6 +466,9 @@ function drawRows(){
       return '<tr style="opacity:.72">' + no + '<td class="plate">' + esc(r.plate) + '</td>'
         + '<td class="c-trail">' + trailLink(r.plate) + '</td>'
         + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
+      + '<td class="c-route">' + (r.route
+          ? esc(r.route)
+          : '<span style="color:var(--mut)">—</span>') + '</td>'
         + '<td>' + badge('absent') + '</td>'
         + '<td></td>' + gpsCell(r)
         + '<td colspan="8" style="color:var(--bad);font-size:12px">'
@@ -478,6 +487,9 @@ function drawRows(){
           + 'for this company">not committed</span>' : '') + '</td>'
       + '<td class="c-trail">' + trailLink(r.plate) + '</td>'
       + '<td style="color:var(--mut)">' + esc(r.sub||'') + '</td>'
+      + '<td class="c-route">' + (r.route
+          ? esc(r.route)
+          : '<span style="color:var(--mut)">—</span>') + '</td>'
       + '<td>' + (declared
           ? '<span class="decl' + (running ? '' : ' decl-off') + '">'
             + esc(declared) + '</span>'
@@ -882,6 +894,11 @@ async function loadList(){
         cols: [
           {key:'plate',    label:'Truck', cls:'c-plate'},
           {key:'sub',      label:'Sub', cls:'c-sub'},
+          // The truck's standing route - the way OUT, the one it is declared
+          // onto. The server already sends it with every row; it simply had
+          // nowhere to be shown.
+          {key:'route',    label:'Route', hint:'the way out', cls:'c-route',
+           get: r => r.route || ''},
           {key:'status',   label:'Status', cls:'c-status',
            get: r => r.absent ? 'absent' : (r.note || r.reason || '')},
           {key:'load',     label:'Loaded / Empty', cls:'c-load', get: r => r.sheet_status || ''},
