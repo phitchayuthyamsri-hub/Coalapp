@@ -53,22 +53,32 @@
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
   th{color:#aab8d0;font-weight:700;font-size:11px;text-transform:uppercase;
      background:#131d30}
-  /* The table head does NOT float.
-     It was sticky, pinned to an offset this page kept getting wrong: sticky
-     pushes an element DOWN to its `top` when that offset sits below where the
-     element naturally is, so an over-large offset does not leave a gap - it
-     drops the headings into the middle of the table with rows above them.
-     Three attempts to compute the right offset were three wrong answers, and a
-     frozen header is a convenience while a table you cannot read is not. It
-     scrolls with its rows now, which cannot be wrong. */
-  #listBody thead th{position:static;background:var(--panel2)}
+  /* The table head floats again - but against its OWN box, not the page.
+     Three earlier attempts pinned it to the page with a computed offset and
+     all three were wrong: sticky pushes an element DOWN to its `top` when that
+     offset is below where the element naturally sits, so an over-large offset
+     does not leave a gap, it drops the headings into the middle of the table
+     with rows above them. The offset was the bug, so there is no offset now.
+     #listBody scrolls the rows itself and the head sticks to top:0 of that
+     box, which cannot drift however tall the card above it grows. The height
+     is the only measured number left, and getting it wrong just makes the box
+     a little short or tall - it cannot put the headings in the wrong place. */
+  #listBody thead th{position:sticky;top:0;z-index:5;background:#1a2640}
+  /* border-collapse drops a sticky cell's own borders, so they are drawn as a
+     shadow instead - otherwise the head loses its gridlines the moment it
+     lifts off the rows. */
+  #listBody thead th{box-shadow:inset 1px 1px 0 #2a3850, inset -1px -1px 0 #2a3850}
   /* ── The truck list reads like a spreadsheet ────────────────────────────
      It is checked against a sheet the company filled in Excel, so it looks
      like one: every cell gridded, text wrapped rather than cut, inputs flat
      inside their cells. The page may stretch; on a narrow screen the table
      scrolls sideways inside its own box, never the whole page. */
   main{max-width:1800px}
-  #listBody{overflow-x:auto}
+  #listBody{overflow:auto;
+      /* Whatever is left under the page header and the filter card. The
+         fallback matters: with no measurement the table still scrolls, it
+         just guesses the height. */
+      max-height:calc(100vh - var(--freeze, 250px) - 14px)}
   #listTable{margin-top:6px;background:#0d1626;font-size:12.5px;line-height:1.3}
   #listTable th,#listTable td{border:1px solid #2a3850;padding:4px 6px;
       white-space:normal;overflow-wrap:break-word;vertical-align:top}
@@ -655,8 +665,14 @@ async function doUpload(){
 function measureFreeze(){
   const hdr = document.querySelector('header');
   if (!hdr) return;
-  document.documentElement.style.setProperty(
-    '--hdr', Math.round(hdr.getBoundingClientRect().height) + 'px');
+  const h = Math.round(hdr.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--hdr', h + 'px');
+  // How much is above the table: the page header plus the filter card. This
+  // sizes the table's own scroll box - it is NOT an offset the head is pinned
+  // to, so a wrong answer here costs a few pixels of height and nothing else.
+  const card = document.querySelector('.card.sticky');
+  const c = card ? Math.round(card.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--freeze', (h + c + 24) + 'px');
 }
 window.addEventListener('resize', measureFreeze);
 
