@@ -16,6 +16,7 @@ Nothing is invented: a truck the sheet does not mention is left exactly as it
 is, and a value the sheet leaves blank does not overwrite one already stored.
 Run it twice and the second run reports nothing.
 """
+import json
 import os
 import re
 import sys
@@ -24,7 +25,7 @@ import openpyxl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app import create_app                       # noqa: E402
-from app.models import db, Truck, Route          # noqa: E402
+from app.models import db, Truck, Route, KVStore # noqa: E402
 
 # The sheet that is the fleet. The others are earlier revisions of it.
 SHEET = "Danh sách đăng ký 16,9"
@@ -39,6 +40,10 @@ ROUTE_MAP = {
 }
 
 COL = {"plate": 1, "kind": 2, "driver": 3, "phone": 4, "note": 5, "route": 6}
+
+# The fleet page's own tombstone list: plates someone pressed Remove on. It is
+# team-wide (the shared key-value store), so it outlives any one browser.
+HIDDEN_KEY = "actualGpsFleetHidden_v1"
 
 
 def norm_plate(s):
@@ -159,6 +164,7 @@ def main():
             print("\nNothing written. Run again with --apply to make these changes.")
             return 0
 
+        wanted = {norm_plate(r["plate"]) for r in fleet}
         for key, row, want in new:
             t = Truck(plate=key, status="online",
                       driver=row["driver"], phone=clean_phone(row["phone"]))
@@ -172,6 +178,23 @@ def main():
                 t.phone = clean_phone(row["phone"])
             if want:
                 t.route_id = routes[want].id
+        # A plate removed from the fleet page at some point is TOMBSTONED in a
+        # team-wide list, and the page hides anything on it - so a truck the
+        # sheet puts back would be imported, stored, and then quietly not
+        # shown. Importing a plate is saying it is in the fleet, so the
+        # tombstone goes with it.
+        row = db.session.get(KVStore, HIDDEN_KEY)
+        if row:
+            try:
+                hidden = json.loads(row.value or "[]")
+            except ValueError:
+                hidden = []
+            keep = [h for h in hidden if norm_plate(h) not in wanted]
+            if len(keep) != len(hidden):
+                row.value = json.dumps(keep)
+                print("  un-hid %d plate(s) the fleet page was tombstoning"
+                      % (len(hidden) - len(keep)))
+
         # The company's own wording for each run, kept where the run is.
         for vi, en in ({} if no_routes else ROUTE_MAP).items():
             r = routes.get(en)
