@@ -146,11 +146,15 @@ def monitor_page():
 @page_bp.route("/route")
 @login_required
 def route_page():
-    """Named routes: the order of Locations a truck on that route passes
-    through, and which trucks are locked to it. Reference data, so anyone
-    logged in may read it; writing is gated in the API."""
-    from flask import render_template
-    return render_template("route.html")
+    """Kept as a doorway, not a page (20/09/2026).
+
+    Routes are edited on the tool page now, beside Locations, and a route has
+    two legs there. This template only ever knew about one flat sequence, so
+    leaving it reachable would mean a second editor showing half the truth.
+    Old links and bookmarks land on the real one instead.
+    """
+    from flask import redirect
+    return redirect("/tool#route")
 
 
 @page_bp.route("/readiness")

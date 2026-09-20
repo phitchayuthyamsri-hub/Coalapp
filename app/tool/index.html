@@ -2090,6 +2090,39 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 [data-page-panel="anchors"] .anchors-side > .panel { width: max-content; max-width: 100%; }
 [data-page-panel="anchors"] .help-text { max-width: 78ch; white-space: normal; }
 
+/* Route page (20/09/2026) */
+.new-route-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px 0; }
+.new-route-row[hidden] { display: none; }
+.new-route-row input { min-width: 260px; padding: 4px 8px; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
+.new-route-row .msg { font-size: 11px; color: var(--muted); }
+.new-route-row .msg.err { color: #ff6b6b; }
+.route-list td.cell-leg { white-space: nowrap; font-size: 11px; }
+.route-list td.cell-leg .none { color: var(--muted); font-style: italic; }
+.route-list td.cell-leg .arrow { color: var(--muted); padding: 0 4px; }
+.route-list td.cell-trucks { color: var(--muted); }
+
+.legs-box { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  margin: 0 0 8px 0; background: var(--panel2); }
+.legs-box[hidden] { display: none; }
+.legs-head { display: flex; align-items: center; gap: 8px; font-size: 11px;
+  font-weight: 600; margin-bottom: 9px; }
+.legs-head .legs-who { color: var(--ink); }
+.legs-head button { margin-left: auto; }
+.legs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.leg h3 { margin: 0 0 6px; font-size: 11px; font-weight: 700; }
+.leg h3 span { font-weight: 400; color: var(--muted); }
+.chain { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; min-height: 26px; }
+.chain .stop { display: inline-flex; align-items: center; gap: 3px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 9px; font-size: 11px; }
+.chain .stop .k { color: var(--muted); font-size: 9px; font-weight: 700; margin-right: 2px; }
+.chain .stop button { padding: 0 4px; font-size: 9px; line-height: 1.4; }
+.chain .none { color: var(--muted); font-size: 11px; font-style: italic; }
+.chain .arrow { color: var(--muted); font-size: 10px; }
+.leg-add { display: flex; gap: 6px; align-items: center; }
+.leg-add select { flex: 1 1 auto; min-width: 0; font-size: 11px; padding: 3px 5px;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
+
 .locmap-layout {
   display: flex;
   flex-direction: column;
@@ -2695,10 +2728,60 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 
 <!-- ============ PAGE: DISTANCES ============ -->
 <!-- ============ PAGE: ROUTE (embedded) ============ -->
+<!-- The Route page came home on 20/09/2026. It was an iframe onto /route, with
+     its own stylesheet and its own palette, pinned to calc(100vh - 230px) - a
+     page inside a page that looked almost, but not quite, like the rest. It is
+     the same .grid-table as Locations now, and it shows both legs. -->
 <div class="page" data-page-panel="route">
   <div class="page-pad">
-    <iframe id="routeFrame" data-src="/route?embed=1" title="Route"
-            style="width:100%;height:calc(100vh - 230px);min-height:560px;border:1px solid var(--line);border-radius:10px;background:#0b1220"></iframe>
+    <div class="panel">
+      <h2>Routes
+        <button class="small" id="btnNewRoute">+ New route</button>
+        <button class="small" id="btnSaveRoutes" title="Send renamed routes and edited legs to the server">💾 Save</button>
+      </h2>
+      <div class="new-route-row" id="newRouteRow" hidden>
+        <input type="text" id="newRouteName" placeholder="a name for this route, e.g. Mine : Port" maxlength="80">
+        <button class="small go" id="btnCreateRoute">Create</button>
+        <button class="small secondary" id="btnCancelRoute">Cancel</button>
+        <span class="msg" id="newRouteMsg"></span>
+      </div>
+      <div class="grid-table-wrap">
+        <table class="grid-table route-list" id="routeList"><thead></thead><tbody></tbody></table>
+      </div>
+
+      <div class="legs-box" id="legsBox" hidden>
+        <div class="legs-head">
+          Stops — <span class="legs-who" id="legsWho"></span>
+          <button class="small secondary" id="legsClose">Close</button>
+        </div>
+        <div class="legs-grid">
+          <div class="leg" data-leg="fronthaul">
+            <h3>Fronthaul <span>— the laden run to the port</span></h3>
+            <div class="chain" data-chain="fronthaul"></div>
+            <div class="leg-add">
+              <select data-add="fronthaul"></select>
+              <button class="small go" data-addbtn="fronthaul">Add stop</button>
+            </div>
+          </div>
+          <div class="leg" data-leg="backhaul">
+            <h3>Backhaul <span>— the way home to the mine</span></h3>
+            <div class="chain" data-chain="backhaul"></div>
+            <div class="leg-add">
+              <select data-add="backhaul"></select>
+              <button class="small go" data-addbtn="backhaul">Add stop</button>
+            </div>
+          </div>
+        </div>
+        <div class="cond-note">A Location may appear in <b>both</b> legs — QL49 is passed going out and again coming back,
+          which is why its window times are per direction. Twice in the <i>same</i> leg is refused.
+          Leaving a leg empty means it has not been described yet.</div>
+      </div>
+
+      <div class="help-text">A route is a named sequence of <b>Locations</b>, in two legs. The name is just a
+        name — it does not have to match the stops, and nothing is read from it. A truck belongs to <b>one</b>
+        route, set on the declaration list. Click a name to rename it, ✎ to build its legs, × to delete it.
+        Renames and stops are held here until you press <b>Save</b>; creating and deleting a route happen at once.</div>
+    </div>
   </div>
 </div>
 <!-- ============ PAGE: GPS CAPTURE (embedded) ============ -->
@@ -3926,6 +4009,302 @@ function condNum(v) {
   if (v === '' || v == null) return null;
   const n = parseInt(v, 10);
   return isNaN(n) ? null : Math.max(0, n);
+}
+
+/* ===== ROUTES: TWO LEGS, ONE TABLE (20/09/2026) =====
+   A route is a name and two ordered lists of Locations: the fronthaul out to
+   the port and the backhaul home. The name is only a name - nothing is read
+   from it, and it need not describe the stops it passes.
+
+   Renames and stops are staged here and pushed by Save, the way the Location
+   page works. Creating and deleting are NOT staged: a new route needs an id
+   from the server before its legs can be edited, and a delete has to be able
+   to say which trucks are locked to it. */
+STATE.routes = [];
+STATE.routeDirty = false;
+STATE.legsOpenId = null;
+
+function routeById(id) {
+  return STATE.routes.filter(r => String(r.id) === String(id))[0] || null;
+}
+
+function routesDirty(on) {
+  STATE.routeDirty = on;
+  const b = document.getElementById('btnSaveRoutes');
+  if (b) {
+    b.textContent = on ? '💾 Save (unsaved)' : '💾 Save';
+    b.classList.toggle('attention', on);
+  }
+}
+
+// Admin only, the same rule the server keeps in _may_edit_routes(). The page
+// hiding what the server would refuse is the whole point - change both or
+// neither, which is the lesson of the planner gate on 20/09.
+let MAY_EDIT_ROUTES = false;
+
+async function loadRoutes() {
+  try {
+    const me = await fetch('/api/me').then(r => r.json()).catch(() => ({}));
+    MAY_EDIT_ROUTES = !!(me.is_admin || me.role === 'admin');
+    const r = await fetch('/api/route-seqs');
+    if (!r.ok) return;
+    STATE.routes = await r.json();
+  } catch (e) { return; }
+  ['btnNewRoute', 'btnSaveRoutes'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.display = MAY_EDIT_ROUTES ? '' : 'none';
+  });
+  routesDirty(false);
+  renderRoutes();
+  renderLegs();
+}
+
+function legText(leg) {
+  if (!leg || !leg.length) return '<span class="none">not set</span>';
+  return leg.map(s => escapeHtml(s.name)).join('<span class="arrow">→</span>');
+}
+
+function renderRoutes() {
+  const table = document.getElementById('routeList');
+  if (!table) return;
+  const head = table.querySelector('thead'), body = table.querySelector('tbody');
+  head.innerHTML = '';
+  body.innerHTML = '';
+  if (!STATE.routes.length) {
+    body.innerHTML = '<tr><td class="na" style="border:0;padding:10px 2px">'
+      + 'No routes yet — press <b>+ New route</b> to name one.</td></tr>';
+    return;
+  }
+  head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Fronthaul — to port</th>'
+    + '<th>Backhaul — to mine</th><th>Trucks</th><th></th><th></th></tr>';
+  STATE.routes.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.innerHTML = `
+      <td class="rowno">${idx + 1}</td>
+      <td><span class="name" title="Click to rename">${escapeHtml(r.name)}</span></td>
+      <td class="cell-leg">${legText(r.fronthaul)}</td>
+      <td class="cell-leg">${legText(r.backhaul)}</td>
+      <td class="cell-trucks">${r.trucks && r.trucks.length ? escapeHtml(r.trucks.join(', ')) : '—'}</td>
+      <td class="act">${MAY_EDIT_ROUTES ? '<button class="edit-btn" data-act="legs" title="Build the stops on this route">✎</button>' : ''}</td>
+      <td class="act">${MAY_EDIT_ROUTES ? '<button class="x" data-act="del" title="Delete this route">×</button>' : ''}</td>
+    `;
+    if (MAY_EDIT_ROUTES) tr.querySelector('.name').addEventListener('click', (e) => {
+      e.stopPropagation();
+      beginRenameRoute(tr, r);
+    });
+    if (MAY_EDIT_ROUTES) {
+      tr.querySelector('[data-act="legs"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        STATE.legsOpenId = (String(STATE.legsOpenId) === String(r.id)) ? null : String(r.id);
+        renderLegs();
+      });
+      tr.querySelector('[data-act="del"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteRoute(r);
+      });
+    }
+    body.appendChild(tr);
+  });
+}
+
+function beginRenameRoute(tr, r) {
+  const span = tr.querySelector('.name');
+  if (!span || tr.classList.contains('editing')) return;
+  tr.classList.add('editing');
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = r.name;
+  inp.maxLength = 80;
+  inp.style.cssText = 'width:100%;font-size:11px';
+  span.replaceWith(inp);
+  inp.focus();
+  inp.select();
+  let closed = false;
+  const done = (keep) => {
+    if (closed) return;
+    closed = true;
+    const v = (inp.value || '').trim();
+    if (keep && v && v !== r.name) { r.name = v; routesDirty(true); }
+    tr.classList.remove('editing');
+    renderRoutes();
+    renderLegs();
+  };
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); done(true); }
+    if (e.key === 'Escape') { e.preventDefault(); done(false); }
+  });
+  inp.addEventListener('blur', () => done(true));
+}
+
+/* -- the legs editor ------------------------------------------------------ */
+// Zones drawn on the Location page but not yet applied exist nowhere but that
+// browser, so they cannot be a stop on a route the server knows about.
+function liveLocations() {
+  return (STATE.anchors || []).filter(a => !String(a.id).startsWith('anc_'));
+}
+
+function renderLegs() {
+  const box = document.getElementById('legsBox');
+  if (!box) return;
+  const r = routeById(STATE.legsOpenId);
+  if (!r) { box.hidden = true; return; }
+  box.hidden = false;
+  document.getElementById('legsWho').textContent = r.name;
+  ['fronthaul', 'backhaul'].forEach(leg => {
+    const host = box.querySelector('[data-chain="' + leg + '"]');
+    const list = r[leg] || [];
+    host.innerHTML = list.length
+      ? list.map((s, i) => '<span class="stop"><span class="k">' + (i + 1) + '</span>' + escapeHtml(s.name)
+          + '<button data-move="' + leg + '" data-i="' + i + '" data-d="-1" title="Earlier"' + (i === 0 ? ' disabled' : '') + '>◀</button>'
+          + '<button data-move="' + leg + '" data-i="' + i + '" data-d="1" title="Later"' + (i === list.length - 1 ? ' disabled' : '') + '>▶</button>'
+          + '<button data-drop="' + leg + '" data-i="' + i + '" title="Remove from this leg">×</button></span>')
+          .join('<span class="arrow">→</span>')
+      : '<span class="none">no stops yet</span>';
+    // Only Locations this leg does not already hold: twice in ONE leg is
+    // refused by the server, so it is not offered here either. The other leg
+    // is deliberately not consulted - the same stop belongs in both.
+    const have = new Set(list.map(s => String(s.id)));
+    const sel = box.querySelector('[data-add="' + leg + '"]');
+    const opts = liveLocations().filter(a => !have.has(String(a.id)))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined,
+                                                  { numeric: true, sensitivity: 'base' }));
+    sel.innerHTML = '<option value="">— add a Location —</option>'
+      + opts.map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>').join('');
+  });
+  box.querySelectorAll('[data-move]').forEach(b => b.addEventListener('click', () => {
+    const leg = b.dataset.move, i = +b.dataset.i, j = i + (+b.dataset.d);
+    const list = r[leg];
+    if (j < 0 || j >= list.length) return;
+    const moved = list.splice(i, 1)[0];
+    list.splice(j, 0, moved);
+    routesDirty(true);
+    renderRoutes();
+    renderLegs();
+  }));
+  box.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => {
+    r[b.dataset.drop].splice(+b.dataset.i, 1);
+    routesDirty(true);
+    renderRoutes();
+    renderLegs();
+  }));
+}
+
+function bindRoutePage() {
+  const box = document.getElementById('legsBox');
+  if (!box) return;
+  ['fronthaul', 'backhaul'].forEach(leg => {
+    box.querySelector('[data-addbtn="' + leg + '"]').addEventListener('click', () => {
+      const r = routeById(STATE.legsOpenId);
+      const sel = box.querySelector('[data-add="' + leg + '"]');
+      if (!r || !sel.value) return;
+      const a = liveLocations().filter(x => String(x.id) === String(sel.value))[0];
+      if (!a) return;
+      r[leg] = r[leg] || [];
+      r[leg].push({ id: Number(a.id), name: a.name });
+      routesDirty(true);
+      renderRoutes();
+      renderLegs();
+    });
+  });
+  document.getElementById('legsClose').addEventListener('click', () => {
+    STATE.legsOpenId = null;
+    renderLegs();
+  });
+
+  const row = document.getElementById('newRouteRow');
+  const msg = document.getElementById('newRouteMsg');
+  const name = document.getElementById('newRouteName');
+  document.getElementById('btnNewRoute').addEventListener('click', () => {
+    row.hidden = false;
+    msg.textContent = '';
+    name.value = '';
+    name.focus();
+  });
+  document.getElementById('btnCancelRoute').addEventListener('click', () => { row.hidden = true; });
+  document.getElementById('btnCreateRoute').addEventListener('click', createRoute);
+  name.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); createRoute(); }
+  });
+  document.getElementById('btnSaveRoutes').addEventListener('click', saveRoutes);
+}
+
+async function createRoute() {
+  const name = document.getElementById('newRouteName');
+  const msg = document.getElementById('newRouteMsg');
+  const v = (name.value || '').trim();
+  if (!v) { msg.className = 'msg err'; msg.textContent = 'a route needs a name'; return; }
+  msg.className = 'msg';
+  msg.textContent = 'creating…';
+  try {
+    const res = await fetch('/api/route-seqs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: v, fronthaul: [], backhaul: [] })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'could not create it');
+    STATE.routes = j.routes || STATE.routes;
+    document.getElementById('newRouteRow').hidden = true;
+    renderRoutes();
+    renderLegs();
+    toast('Route created');
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  }
+}
+
+async function deleteRoute(r) {
+  if (!confirm('Delete route "' + r.name + '"?')) return;
+  try {
+    let res = await fetch('/api/route-seqs/' + r.id, { method: 'DELETE' });
+    let j = await res.json().catch(() => ({}));
+    // A route with trucks locked to it is refused until it is clear what
+    // happens to them; force unlocks them first.
+    if (res.status === 409 && j.code === 'locked') {
+      if (!confirm(j.error + ' Delete it anyway and unlock them?')) return;
+      res = await fetch('/api/route-seqs/' + r.id + '?force=1', { method: 'DELETE' });
+      j = await res.json().catch(() => ({}));
+    }
+    if (!res.ok) throw new Error(j.error || 'could not delete it');
+    STATE.routes = j.routes || [];
+    if (String(STATE.legsOpenId) === String(r.id)) STATE.legsOpenId = null;
+    renderRoutes();
+    renderLegs();
+    toast('Route deleted');
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveRoutes() {
+  const btn = document.getElementById('btnSaveRoutes');
+  btn.disabled = true;
+  try {
+    for (const r of STATE.routes) {
+      const body = {
+        name: r.name,
+        fronthaul: (r.fronthaul || []).map(s => s.id),
+        backhaul: (r.backhaul || []).map(s => s.id)
+      };
+      const res = await fetch('/api/route-seqs/' + r.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || ((res.status === 403)
+          ? 'Only an admin may change a route'
+          : 'Could not save ' + r.name));
+      }
+    }
+    await loadRoutes();
+    toast('Saved — the routes are on the server');
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ===== THE MAP IS ITS OWN PAGE (user, 20/09/2026) =====
@@ -7004,6 +7383,8 @@ document.getElementById('btnMapDraw').addEventListener('click', startDrawingPoly
 document.getElementById('btnMapBack').addEventListener('click', goToLocations);
 document.getElementById('btnViewMap').addEventListener('click',
   () => goToLocMap(selectedAnchorId()));
+// The Route page's own buttons, bound at boot like every other page's.
+bindRoutePage();
 
 // ============================================================
 // HELPERS
@@ -7405,7 +7786,7 @@ function _sendAllDone(){ const s=document.getElementById('waStep'); if(s) s.clas
 // reached at all (user 19/09/2026). Measure the top instead and end the frame
 // where the window ends, so the bar is always the bottom line on screen.
 function sizeEmbeddedFrames(){
-  ['opsFrame', 'routeFrame', 'gpscapFrame'].forEach(function (id) {
+  ['opsFrame', 'gpscapFrame'].forEach(function (id) {
     var f = document.getElementById(id);
     if (!f || f.offsetParent === null) return;      // its page is not showing
     var top = f.getBoundingClientRect().top;
@@ -7438,6 +7819,9 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     });
     // Per-page refresh hooks
     if (t === 'locmap') { setTimeout(() => map.invalidateSize(), 60); }
+    // The Route page reads from the server each time it is opened: its
+    // stops are Locations, and those may have changed on the other page.
+    if (t === 'route') { try { loadRoutes(); } catch (e) {} }
     if (t === 'data') { renderTable(); renderSequenceTable(); renderTimeline(); }
     if (t === 'fleet') { renderFleetUI(); }
     if (t === 'plan') { renderDinPlan(); }
@@ -7448,7 +7832,6 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'vlist') { _vlLoadSaved(); }
     if (t === 'gpscap') { const _gf = document.getElementById('gpscapFrame'); if (_gf && !_gf.getAttribute('src')) _gf.setAttribute('src', _gf.dataset.src); }
     if (t === 'ops') { const _of = document.getElementById('opsFrame'); if (_of && !_of.getAttribute('src')) _of.setAttribute('src', _of.dataset.src); }
-    if (t === 'route') { const _rf = document.getElementById('routeFrame'); if (_rf && !_rf.getAttribute('src')) _rf.setAttribute('src', _rf.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'subfleet') { renderSubFleet(); }

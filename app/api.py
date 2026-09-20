@@ -603,8 +603,8 @@ def _may_edit_routes():
     """Admin only (20/09/2026). Planners were named here but never reached
     it: the page's own check could only see is_admin, so admin-only is what
     the system has really enforced all along. Widening it again is a one-word
-    change in BOTH this test and MAY_EDIT in route.html - change neither
-    alone, or the halves drift apart the way they just did."""
+    change in BOTH this test and MAY_EDIT_ROUTES on the tool page - change
+    neither alone, or the halves drift apart the way they just did."""
     return getattr(current_user, "is_admin", False) or \
         (getattr(current_user, "role", "") or "") == "admin"
 
