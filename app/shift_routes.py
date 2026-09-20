@@ -1003,6 +1003,23 @@ def rows_revert():
                    state=dl.state, count=len(moved))
 
 
+def _plan_route_name(plate):
+    """A truck's standing route, by plate.
+
+    Built once per REQUEST and hung on flask.g: a plan walks dozens of loops
+    and would otherwise ask the database per row - but a cache that outlived
+    the request would keep showing a route after someone changed it.
+    """
+    from flask import g
+    cache = getattr(g, "_plan_routes", None)
+    if cache is None:
+        names = {x.id: x.name for x in _Route.query.all()}
+        cache = {engine.norm_plate(t.plate): names.get(t.route_id, "")
+                 for t in Truck.query.all() if t.route_id}
+        g._plan_routes = cache
+    return cache.get(engine.norm_plate(plate), "")
+
+
 def _plan_row(r, label, sub_id, loop, from_plan):
     """One planned loop, in the shape both the week and the revision return.
 
@@ -1019,6 +1036,9 @@ def _plan_row(r, label, sub_id, loop, from_plan):
         "day": r["arrive_mine"].strftime("%Y-%m-%d"),
         "loop": loop, "from_plan": from_plan,
         "route": r["route"], "cycle_hours": r["cycle_hours"],
+        # The run this truck is declared onto. NOT "route" above, which is the
+        # way home this loop takes - hue or ql49.
+        "route_name": _plan_route_name(r["plate"]),
         "total_wait": r["total_wait"], "waits": r["waits"],
         "t": {
             "arrive_mine": iso(r["arrive_mine"]),
