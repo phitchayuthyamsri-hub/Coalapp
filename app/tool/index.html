@@ -5357,9 +5357,14 @@ function loadFleetFromStorage() {
       if (data && typeof data === 'object') {
         STATE.fleet = {};
         for (const [p, r] of Object.entries(data)) {
+          // Every field the table draws has to be named here as well. This
+          // rebuilds the entry rather than keeping it, so anything not listed
+          // is dropped on the way in - the server can send a driver and a
+          // route, the seed can write them, and they still never arrive.
           STATE.fleet[normPlate(p)] = {
             status: FLEET_STATUSES.includes(r?.status) ? r.status : 'online',
             added: r?.added || Date.now(),
+            driver: r?.driver || '', route: r?.route || '',
             phone: r?.phone || '', gps: r?.gps || '',
             effFrom: r?.effFrom || '', effTo: r?.effTo || ''
           };

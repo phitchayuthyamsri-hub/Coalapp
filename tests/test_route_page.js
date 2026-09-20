@@ -209,6 +209,14 @@ check('...and says so rather than showing an empty dropdown',
 // not to the copy renders blank and reads as missing data. That is exactly
 // what happened first time round.
 const fleetProj = (html.match(/plate: p, status: effectiveStatus\(p\),[\s\S]*?ytd: ts\.ytd/) || [''])[0];
+// Three places rebuild the fleet entry by naming each field, and a column is
+// only drawn if ALL THREE name it: the seed, the loader that reads it back out
+// of localStorage, and the row copy the table maps over. Missing any one of
+// them renders a blank that looks like data, not a bug. All three were missed
+// in turn before this test existed.
+const fleetLoader = (html.match(/STATE\.fleet\[normPlate\(p\)\] = \{[\s\S]*?\};/) || [''])[0];
+check('the localStorage loader keeps the driver', /driver: r\?\.driver/.test(fleetLoader), true);
+check('...and the route', /route: r\?\.route/.test(fleetLoader), true);
 check('the row copy carries the driver', /driver: r\.driver/.test(fleetProj), true);
 check('...and the route', /route: r\.route/.test(fleetProj), true);
 check('a changed route is sent like every other field',
