@@ -326,3 +326,106 @@ def plan_trucks(arrivals, cfg=None):
             r["notes"].append("cycle over 60 h")
         out.append(r)
     return out
+
+
+# ── planning a route, stop by stop ──────────────────────────────────────────
+# The corridor planner above walks a fixed chain - mine, border, QL49, port,
+# home - and names each stage in its output, which is what the week and
+# revision views are built on. It stays exactly as it is.
+#
+# This one walks whatever stops a ROUTE lists. It is the same arithmetic said
+# generically: wait for the place to open, queue for a bay, do the work, drive
+# to the next stop. What it cannot do is invent a distance, so a pair of stops
+# nobody has measured stops the plan there and says so rather than costing
+# nothing - a leg worth zero hours is how a truck arrives before it left.
+
+
+def _stop_conditions(anchor_ids):
+    """What each stop says about itself, keyed by id."""
+    out = {}
+    for a in Anchor.query.filter(Anchor.id.in_(list(anchor_ids))).all():
+        mins = a.loading_time_min
+        out[a.id] = {
+            "name": a.name,
+            "works": (a.loc_type or "") in ("load", "unload", "load_unload"),
+            "work_h": (float(mins) / 60.0) if mins is not None else None,
+            "bays": int(a.loading_bays) if a.loading_bays else 1,
+            "win_out": _win(a, "out"),
+            "win_back": _win(a, "back"),
+        }
+    return out
+
+
+def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
+    """Plan a set of trucks along one route's stops.
+
+    `arrivals` is [(plate, when it reaches the FIRST stop)] - which is the
+    route's own beginning, not the mine. `direction` picks which of each
+    Location's two windows applies: a place can be open one way and shut the
+    other, which is the whole reason they are recorded per direction.
+
+    Bays are shared across the trucks in one call, so a queue forms the way it
+    does on the ground rather than every truck loading at once.
+    """
+    cfg = cfg or load_config()
+    index = legs_between(cfg)
+    cond = _stop_conditions(stops)
+    bays = {sid: Bays(cond.get(sid, {}).get("bays", 1)) for sid in stops}
+    win_key = "win_back" if direction == "back" else "win_out"
+    out = []
+
+    for plate, arrive in sorted(arrivals, key=lambda x: x[1]):
+        r = {"plate": plate, "start": arrive, "stops": [], "waits": {},
+             "notes": [], "direction": direction, "complete": True}
+        t = arrive
+        for i, sid in enumerate(stops):
+            c = cond.get(sid) or {"name": "(retired zone)", "works": False,
+                                  "work_h": None, "bays": 1, win_key: None}
+            row = {"anchor_id": sid, "name": c["name"], "arrive": t,
+                   "work_start": None, "work_end": None, "wait_h": 0.0}
+            w = c.get(win_key)
+            window = ((w[0], w[1]), (w[2], w[3])) if w else None
+            if c["works"]:
+                if c["work_h"] is None:
+                    # The stop loads or unloads but nobody has said how long.
+                    r["notes"].append("%s has no load/unload time" % c["name"])
+                    r["complete"] = False
+                    ws, we, waited = t, t, 0.0
+                    if window:
+                        ws, waited = next_window(t, window[0], window[1])
+                        we = ws
+                else:
+                    ws, we, waited = bays[sid].take(t, c["work_h"], window)
+                row["work_start"], row["work_end"] = ws, we
+                row["wait_h"] = round(waited, 2)
+                r["waits"]["%s_queue" % c["name"]] = round(waited, 2)
+                t = we
+            elif window:
+                # Nothing is done here, but the place still has to be open to
+                # pass through it - a border is the obvious one.
+                ws, waited = next_window(t, window[0], window[1])
+                row["work_start"] = row["work_end"] = ws
+                row["wait_h"] = round(waited, 2)
+                if waited:
+                    r["waits"]["%s_gate" % c["name"]] = round(waited, 2)
+                t = ws
+            r["stops"].append(row)
+
+            if i + 1 < len(stops):
+                g = leg_for(index, sid, stops[i + 1])
+                if g is None:
+                    r["notes"].append("no leg measured from %s to %s"
+                                      % (c["name"], (cond.get(stops[i + 1])
+                                                     or {}).get("name", "?")))
+                    r["complete"] = False
+                    break            # stop here rather than teleport onward
+                row["drive_h"] = round(g["hours"], 2)
+                row["drive_km"] = g["km"]
+                t = t + timedelta(hours=g["hours"])
+
+        r["finish"] = t
+        r["hours"] = round((t - arrive).total_seconds() / 3600.0, 1)
+        r["total_wait"] = round(sum(r["waits"].values()), 1)
+        r["drive_km"] = round(sum(s.get("drive_km", 0.0) for s in r["stops"]), 2)
+        out.append(r)
+    return out
