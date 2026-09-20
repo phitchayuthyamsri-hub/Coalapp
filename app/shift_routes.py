@@ -687,10 +687,16 @@ def _list_payload(dl, day):
 @login_required
 def get_settings():
     """Everything the planner uses, including the per-leg speeds, in one place."""
+    from .planner import LOCATION_DERIVED
     out = []
     for p in PlanSetting.query.order_by(PlanSetting.ordering).all():
+        # Where the planner actually reads it from since 20/09/2026. A figure
+        # the Location answers for is still stored - it is the fallback for a
+        # Location that has not been filled in - but editing it here would be
+        # editing the thing that is not consulted.
         out.append({"key": p.key, "value": p.value, "label": p.label,
-                    "unit": p.unit, "group": p.group, "kind": "setting"})
+                    "unit": p.unit, "group": p.group, "kind": "setting",
+                    "from_location": LOCATION_DERIVED.get(p.key)})
     for r in RouteLeg.query.order_by(RouteLeg.id).all():
         # Same rule as the planner: a snapshot that measured the leg
         # differently from the plan it freezes would make every variance wrong

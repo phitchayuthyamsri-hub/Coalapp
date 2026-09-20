@@ -13,9 +13,67 @@ Two things make this more than arithmetic:
 from datetime import datetime, timedelta
 
 from . import engine
-from .models import PlanSetting, RouteLeg
+from .models import PlanSetting, RouteLeg, Anchor
 
 LOCAL = timedelta(hours=7)          # everything below is local time, UTC+7
+
+
+# ── where a figure comes from ───────────────────────────────────────────────
+# The Location page describes each place: when it is open in each direction,
+# how many bays it has, how long the work there takes. Those are the same
+# facts the planning figures held, so from 20/09/2026 the Location is asked
+# first and the figure is what answers when the Location is silent.
+#
+# Silent means blank, which means nobody has said - not "open all day" and not
+# "no bays". Falling back rather than guessing is what keeps an unfilled
+# Location from quietly changing a plan.
+#
+# Places are found by ROLE, not by name: a role is what the engine already
+# uses to know which zone is the mine and which is the border, and renaming a
+# zone must not detach its figures.
+# The figures the Location page now answers for. Named once, here, so the
+# screen that hides them and the planner that reads them cannot drift apart.
+LOCATION_DERIVED = {
+    "load_hours": "the loading area (or the mine) - Load/Unload time",
+    "mine_bays": "the loading area (or the mine) - Load/Unload bay",
+    "mine_247": "the mine - leaving both windows blank",
+    "unload_hours": "the port - Load/Unload time",
+    "port_bays": "the port - Load/Unload bay",
+    "port_open": "the port - Window time, To port",
+    "port_close": "the port - Window time, To port",
+    "clearance_hours": "the border - Load/Unload time",
+    "border_open": "the border - Window time, To port",
+    "border_close": "the border - Window time, To port",
+    "border_out_open": "the border - Window time, To mine",
+    "border_out_close": "the border - Window time, To mine",
+    "ql49_in_open": "QL49 - Window time, To port",
+    "ql49_in_close": "QL49 - Window time, To port",
+    "ql49_out_open": "QL49 - Window time, To mine",
+    "ql49_out_close": "QL49 - Window time, To mine",
+}
+
+
+def _by_role():
+    out = {}
+    for a in Anchor.query.filter(Anchor.retired_at.is_(None)).all():
+        if a.role:
+            out[a.role] = a
+    return out
+
+
+def _win(a, direction):
+    """A Location's window for one direction, or None if it has not said."""
+    if a is None:
+        return None
+    o = getattr(a, "window_%s_open" % direction, "") or ""
+    c = getattr(a, "window_%s_close" % direction, "") or ""
+    if not o or not c:
+        return None
+    try:
+        return (int(o.split(":")[0]), int(o.split(":")[1]),
+                int(c.split(":")[0]), int(c.split(":")[1]))
+    except (ValueError, IndexError):
+        return None
 
 
 # ── settings ────────────────────────────────────────────────────────────────
@@ -55,22 +113,53 @@ def load_config():
                      for i in range(len(r.points) - 1))
         legs[r.leg_key] = {"km": km, "speed": r.speed or 30.0,
                            "hours": (km / r.speed) if r.speed else 0.0}
+    # The Location page answers first; the figure answers when it is silent.
+    z = _by_role()
+    mine_work = z.get("loading") or z.get("xppl")    # loading area if drawn
+
+    def mins(a, k, d):
+        """A place's work time, in hours. The Location holds minutes."""
+        v = getattr(a, "loading_time_min", None) if a is not None else None
+        return (float(v) / 60.0) if v is not None else hours(k, d)
+
+    def bays(a, k, d):
+        v = getattr(a, "loading_bays", None) if a is not None else None
+        return max(1, int(v)) if v else count(k, d)
+
+    def window(a, direction, ko, kc, do, dc):
+        w = _win(a, direction)
+        return ((w[0], w[1]), (w[2], w[3])) if w else (hhmm(ko, do), hhmm(kc, dc))
+
+    b_out = window(z.get("border"), "out", "border_open", "border_close", "15:00", "19:00")
+    b_back = window(z.get("border"), "back", "border_out_open", "border_out_close", "07:00", "19:00")
+    q_out = window(z.get("ql49"), "out", "ql49_in_open", "ql49_in_close", "19:00", "24:00")
+    q_back = window(z.get("ql49"), "back", "ql49_out_open", "ql49_out_close", "00:00", "05:00")
+    p_out = window(z.get("port"), "out", "port_open", "port_close", "07:00", "17:00")
+
     return {
-        "load_h": hours("load_hours", 1.0),
+        "load_h": mins(mine_work, "load_hours", 1.0),
+        # Not a place's property: rest before turning again is the truck's.
         "turn_gap_h": hours("turn_gap_hours", 0.0),
-        "unload_h": hours("unload_hours", 0.5),
-        "clear_h": hours("clearance_hours", 3.0),
-        "mine_bays": count("mine_bays", 2),
-        "port_bays": count("port_bays", 1),
-        "mine_247": str(s.get("mine_247", "yes")).lower().startswith("y"),
-        "border_open": hhmm("border_open", "15:00"),
-        "border_close": hhmm("border_close", "19:00"),
-        "ql49_in_open": hhmm("ql49_in_open", "19:00"),
-        "ql49_in_close": hhmm("ql49_in_close", "24:00"),
-        "port_open": hhmm("port_open", "07:00"),
-        "port_close": hhmm("port_close", "17:00"),
-        "ql49_out_open": hhmm("ql49_out_open", "00:00"),
-        "ql49_out_close": hhmm("ql49_out_close", "05:00"),
+        "unload_h": mins(z.get("port"), "unload_hours", 0.5),
+        "clear_h": mins(z.get("border"), "clearance_hours", 3.0),
+        "mine_bays": bays(mine_work, "mine_bays", 2),
+        "port_bays": bays(z.get("port"), "port_bays", 1),
+        # A mine with no window in either direction is a mine that never shuts.
+        "mine_247": (not _win(z.get("xppl"), "out") and not _win(z.get("xppl"), "back"))
+                    if z.get("xppl") is not None
+                    else str(s.get("mine_247", "yes")).lower().startswith("y"),
+        "border_open": b_out[0],
+        "border_close": b_out[1],
+        "border_out_open": b_back[0],
+        "border_out_close": b_back[1],
+        "ql49_in_open": q_out[0],
+        "ql49_in_close": q_out[1],
+        "port_open": p_out[0],
+        "port_close": p_out[1],
+        "ql49_out_open": q_back[0],
+        "ql49_out_close": q_back[1],
+        # Which way home, by when unloading finished - a choice between routes,
+        # so it stays a planning figure.
         "cutoff": hhmm("backhaul_cutoff", "14:00"),
         "legs": legs,
     }

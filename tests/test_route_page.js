@@ -102,7 +102,10 @@ check('the add-a-Location picker fits its content',
 // corridor was described in two places. The STORE never moved - planner.py
 // still reads PlanSetting and RouteLeg - only the screen did.
 console.log('\nthe planning figures');
-check('they have a table on this page',
+check('the legs get their own section, KM and time travel',
+      /<h2>KM &amp; time travel/.test(html), true);
+check('...with its own table', /<table class="grid-table" id="legTable">/.test(html), true);
+check('what is left keeps the figures table',
       /<table class="grid-table" id="figureList">/.test(html), true);
 check('read from the planner own endpoint',
       /fetch\('\/api\/shift\/settings'\)/.test(html), true);
@@ -113,6 +116,28 @@ check('who may edit is the server answer, not a guess',
 check('a leg distance is editable here', /legkm:/.test(html), true);
 check('the driving time is shown, not worked out by eye',
       /function figHours\(km, speed\)/.test(html), true);
+
+// A place answers for its own figures now (user, 20/09). The planner asks the
+// Location first and falls back to the stored figure only while that Location
+// is blank - so those figures are shown here, not edited here.
+console.log('\nthe places answer for themselves');
+const plannerPy = fs.readFileSync(path.join(root, 'app', 'planner.py'), 'utf8');
+const shiftPy = fs.readFileSync(path.join(root, 'app', 'shift_routes.py'), 'utf8');
+check('the planner reads Locations by role', /def _by_role\(\):/.test(plannerPy), true);
+check('...and falls back to the figure when one is blank',
+      /return \(\(w\[0\], w\[1\]\), \(w\[2\], w\[3\]\)\) if w else \(hhmm\(ko, do\), hhmm\(kc, dc\)\)/.test(plannerPy), true);
+check('the list of which figures moved lives in one place',
+      /LOCATION_DERIVED = \{/.test(plannerPy), true);
+check('...and the API hands it to the page',
+      /"from_location": LOCATION_DERIVED\.get\(p\.key\)/.test(shiftPy), true);
+check('the page shows those, but does not edit them',
+      /Answered by Setting . Location/.test(html), true);
+['border_open', 'ql49_in_open', 'port_open', 'mine_bays', 'load_hours', 'unload_hours',
+ 'clearance_hours', 'port_bays', 'mine_247'].forEach(k =>
+  check(`"${k}" comes from a Location`, new RegExp('"' + k + '":').test(plannerPy), true));
+check('rest before turning again stays a figure',
+      /"turn_gap_h": hours\("turn_gap_hours", 0\.0\)/.test(plannerPy), true);
+check('...as does which way home', /"cutoff": hhmm\("backhaul_cutoff", "14:00"\)/.test(plannerPy), true);
 
 const shiftApi = fs.readFileSync(path.join(root, 'app', 'shift_routes.py'), 'utf8');
 check('the endpoint takes a distance now',
