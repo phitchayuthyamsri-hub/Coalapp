@@ -318,6 +318,43 @@ def _ensure_routeleg_schema():
             _add_column_racing("route_leg", "%s INTEGER" % c)
     if "via" not in cols:
         _add_column_racing("route_leg", "via VARCHAR(40) DEFAULT ''")
+    _map_corridor_legs_to_stops()
+
+
+def _map_corridor_legs_to_stops():
+    """Say which two Locations each of the corridor's own legs runs between.
+
+    They were named by hand - mine_border, ql49p_port - and the planner calls
+    them by those names. A planner walking a ROUTE has only the stops, so it
+    needs to find a leg by its ends. DIST_LEGS already records each leg's ends
+    as engine ROLES, and every zone carries a role, so the two line up.
+
+    ql49b_ql49p is the exception and is left unmapped on purpose: it is the
+    stretch INSIDE QL49, between a border-side point and a port-side one, and
+    there is a single QL49 zone. A route that stops at QL49 once uses the leg
+    from QL49 to the port instead, which measures that stretch already.
+    """
+    from .models import Anchor, RouteLeg
+    from .engine import DIST_LEGS
+    try:
+        by_role = {a.role: a.id for a in
+                   Anchor.query.filter(Anchor.retired_at.is_(None)).all() if a.role}
+    except Exception:
+        return
+    # The corridor names two QL49 points; the map has one zone.
+    by_role.setdefault("ql49b", by_role.get("ql49"))
+    by_role.setdefault("ql49p", by_role.get("ql49"))
+    mapped = 0
+    for spec in DIST_LEGS:
+        a, b = by_role.get(spec["from"]), by_role.get(spec["to"])
+        if not a or not b or a == b:
+            continue                       # ql49b_ql49p lands here, as intended
+        r = RouteLeg.query.filter_by(leg_key=spec["key"]).first()
+        if r is not None and (r.from_anchor_id != a or r.to_anchor_id != b):
+            r.from_anchor_id, r.to_anchor_id = a, b
+            mapped += 1
+    if mapped:
+        db.session.commit()
 
 
 def _ensure_snapshot_schema():

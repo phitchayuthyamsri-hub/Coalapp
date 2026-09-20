@@ -166,6 +166,46 @@ def load_config():
     }
 
 
+def legs_between(cfg):
+    """Every leg, indexed by the two stops it runs between.
+
+    {(from_id, to_id): [ {via, km, speed, hours}, ... ]}
+
+    A pair can hold more than one leg - two ways between the same stops is
+    normal here, and the list keeps them in the order the operation entered
+    them so "the first one" means something rather than whatever the database
+    happened to return.
+    """
+    out = {}
+    for r in RouteLeg.query.order_by(RouteLeg.id).all():
+        if not r.from_anchor_id or not r.to_anchor_id:
+            continue                       # a corridor-only leg, called by name
+        km = float(r.road_km or 0.0)
+        spd = float(r.speed or 0.0)
+        out.setdefault((r.from_anchor_id, r.to_anchor_id), []).append({
+            "leg_key": r.leg_key, "via": r.via or "", "km": km, "speed": spd,
+            "hours": (km / spd) if spd else 0.0,
+        })
+    return out
+
+
+def leg_for(index, a_id, b_id, via=None):
+    """The leg between two stops, or None when nobody has measured it.
+
+    None is the honest answer and the caller has to say so in the plan: a
+    missing leg silently costing nothing is how a truck arrives before it
+    left. `via` picks a named alternative; without one the first entered wins.
+    """
+    opts = index.get((a_id, b_id))
+    if not opts:
+        return None
+    if via:
+        want = str(via).strip().lower()
+        for o in opts:
+            if (o["via"] or "").strip().lower() == want:
+                return o
+    return opts[0]
+
 # ── time helpers ────────────────────────────────────────────────────────────
 def _at(day, hm):
     """hm as a time on `day`. 24:00 means midnight ending that day."""

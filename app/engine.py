@@ -107,7 +107,7 @@ DIST_LEGS = [
     {"key": "border_ql49b",   "label": "Border \u2192 QL49(Border)",    "from": "border", "to": "ql49b"},
     {"key": "ql49b_ql49p",    "label": "QL49(Border) \u2192 QL49(Port)","from": "ql49b",  "to": "ql49p"},
     {"key": "ql49p_port",     "label": "QL49(Port) \u2192 Port",        "from": "ql49p",  "to": "port"},
-    {"key": "port_mine",      "label": "Port \u2192 Mine (QL9)",        "from": "port",   "to": "xppl"},
+    {"key": "port_mine",      "label": "Port \u2192 Mine (QL9/Dakrong)",        "from": "port",   "to": "xppl"},
     {"key": "port_mine_ql49", "label": "Port \u2192 Mine (via QL49)",   "from": "port",   "to": "xppl"},
 ]
 FRONTHAUL_LEGS = ["mine_border", "border_ql49b", "ql49b_ql49p", "ql49p_port"]
