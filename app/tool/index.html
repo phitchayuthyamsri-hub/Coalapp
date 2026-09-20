@@ -2120,7 +2120,10 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 .chain .none { color: var(--muted); font-size: 11px; font-style: italic; }
 .chain .arrow { color: var(--muted); font-size: 10px; }
 .leg-add { display: flex; gap: 6px; align-items: center; }
-.leg-add select { flex: 1 1 auto; min-width: 0; font-size: 11px; padding: 3px 5px;
+/* Fit-to-content (user, 20/09): it held a handful of Location names and was
+   stretching the width of the page to do it. */
+.leg-add { justify-content: flex-start; }
+.leg-add select { flex: 0 0 auto; width: auto; max-width: 100%; font-size: 11px; padding: 3px 5px;
   border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); }
 
 .locmap-layout {

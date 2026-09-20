@@ -88,5 +88,10 @@ check('...and the column says it is the way out', /label:'Route out'/.test(sub),
 check('a backhaul route says why its Trucks cell is empty',
       /kind === 'backhaul' \?[\s\S]{0,120}?not declared/.test(html), true);
 
+// Fit-to-content, which this page keeps having to be told: a picker holding a
+// handful of Location names should not stretch the width of the window.
+check('the add-a-Location picker fits its content',
+      /\.leg-add select \{[\s\S]{0,60}?flex: 0 0 auto; width: auto;/.test(html), true);
+
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);
