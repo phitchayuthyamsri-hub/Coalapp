@@ -51,8 +51,12 @@ check('a bad type is refused, not corrected',
 
 console.log('\nthe table');
 const head = html.match(/head\.innerHTML = ('<tr><th>No#<\/th><th>Name<\/th>[\s\S]*?);\n/);
-const body = html.match(/tr\.innerHTML = `([\s\S]*?)`;\n/);
-if (!head || !body) { console.log('  FAIL  could not find the route header or row'); process.exit(1); }
+// There are two tables on this page now, so pick the row by what is in it
+// rather than by which one comes first.
+const rows = [...html.matchAll(/tr\.innerHTML = `([\s\S]*?)`;\n/g)].map(m => m[1]);
+// Shaped like a match result so the checks below read the same: [1] is the row.
+const body = [null, rows.find(r => r.includes('cell-kind'))];
+if (!head || !body[1]) { console.log('  FAIL  could not find the route header or row'); process.exit(1); }
 check('header cells', (head[1].match(/<th>/g) || []).length, 7);
 check('row cells match the header', (body[1].match(/<td[ >]/g) || []).length, 7);
 check('it is the same table as Locations',
@@ -92,6 +96,22 @@ check('a backhaul route says why its Trucks cell is empty',
 // handful of Location names should not stretch the width of the window.
 check('the add-a-Location picker fits its content',
       /\.leg-add select \{[\s\S]{0,60}?flex: 0 0 auto; width: auto;/.test(html), true);
+
+// Distance and speed per leg feed every plan, and had no screen at all
+// between the Roads tab being retired on 19/09 and this.
+console.log('\nthe corridor legs');
+const legRow = rows.find(r => r.includes('cell-hours'));
+check('the legs have a table', /<table class="grid-table" id="legList">/.test(html), true);
+check('a row per leg with five cells', (legRow || '').match(/<td[ >]/g).length, 5);
+// The cell is built by concatenation, so the act name is what to look for.
+check('distance is editable', /\['l-km', 'road_km'\]/.test(html), true);
+check('speed is editable', /\['l-speed', 'speed'\]/.test(html), true);
+check('the driving time is shown, not worked out by eye',
+      /function hoursText\(km, speed\)/.test(html), true);
+check('the API answers with the distance', /"road_km": km/.test(api), true);
+check('...and the hours it becomes', /"hours": \(km \/ spd\) if spd else 0\.0/.test(api), true);
+check('changing a leg is admin-only, like the routes it feeds',
+      /def route_update\(leg_key\):[\s\S]*?if not _may_edit_routes\(\):/.test(api), true);
 
 console.log('\n  ' + (FAIL ? FAIL + ' FAILED' : 'all pass'));
 process.exit(FAIL ? 1 : 0);

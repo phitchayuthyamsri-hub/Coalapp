@@ -2776,6 +2776,20 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <b>Trucks</b> shows who is declared onto a route on the declaration list — the way <i>out</i> only.
         A backhaul is not declared per truck: which way a truck comes home varies by trip.</div>
     </div>
+
+    <div class="panel">
+      <h2>Corridor legs
+        <button class="small" id="btnSaveLegs" title="Send the distances and speeds to the server">💾 Save</button>
+      </h2>
+      <div class="grid-table-wrap">
+        <table class="grid-table" id="legList"><thead></thead><tbody></tbody></table>
+      </div>
+      <div class="help-text">How far each leg is and how fast it is driven. The planner turns the two into
+        the driving time it plans with, so the hours are shown beside them rather than left to be worked out
+        by eye. These are the same legs the plan already uses — they simply had no screen after the Roads tab
+        was retired. A blank distance means <i>not known</i>; a blank speed keeps its last value rather than
+        divide by zero.</div>
+    </div>
   </div>
 </div>
 <!-- ============ PAGE: GPS CAPTURE (embedded) ============ -->
@@ -4005,6 +4019,113 @@ function condNum(v) {
   return isNaN(n) ? null : Math.max(0, n);
 }
 
+/* ===== THE CORRIDOR'S LEGS (20/09/2026) =====
+   How far each leg is and how fast it is driven. The planner turns the two
+   into hours and plans with them - they are as much a part of a plan as any
+   Planning figure.
+
+   They had no screen at all: the Roads tab that used to hold them was retired
+   on 19/09 for drawing polylines nobody wanted, and it took the distance and
+   speed with it. The numbers kept feeding every plan from a table only the
+   database could see. */
+STATE.legs = [];
+STATE.legsDirty = false;
+
+function legsDirty(on) {
+  STATE.legsDirty = on;
+  const b = document.getElementById('btnSaveLegs');
+  if (b) {
+    b.textContent = on ? '💾 Save (unsaved)' : '💾 Save';
+    b.classList.toggle('attention', on);
+  }
+}
+
+async function loadLegs() {
+  try {
+    const r = await fetch('/api/routes');
+    if (!r.ok) return;
+    STATE.legs = await r.json();
+  } catch (e) { return; }
+  legsDirty(false);
+  renderLegTable();
+}
+
+function hoursText(km, speed) {
+  const k = parseFloat(km), s = parseFloat(speed);
+  if (!k || !s) return '<span class="na">—</span>';
+  const h = k / s;
+  return h < 1 ? Math.round(h * 60) + ' min' : (Math.round(h * 10) / 10) + ' h';
+}
+
+function renderLegTable() {
+  const table = document.getElementById('legList');
+  if (!table) return;
+  const head = table.querySelector('thead'), body = table.querySelector('tbody');
+  head.innerHTML = '';
+  body.innerHTML = '';
+  if (!STATE.legs.length) {
+    body.innerHTML = '<tr><td class="na" style="border:0;padding:10px 2px">No legs defined.</td></tr>';
+    return;
+  }
+  head.innerHTML = '<tr><th>No#</th><th>Leg</th><th>Distance (km)</th>'
+    + '<th>Speed (km/h)</th><th>Driving time</th></tr>';
+  STATE.legs.forEach((g, idx) => {
+    const tr = document.createElement('tr');
+    tr.dataset.key = g.leg_key;
+    const cell = (act, val, step) => MAY_EDIT_ROUTES
+      ? '<input type="number" min="0" step="' + step + '" data-act="' + act + '" placeholder="—" value="'
+        + (val != null && val !== 0 ? val : '') + '">'
+      : escapeHtml(String(val || '—'));
+    tr.innerHTML = `
+      <td class="rowno">${idx + 1}</td>
+      <td>${escapeHtml(g.label || g.leg_key)}</td>
+      <td class="cell-num">${cell('l-km', g.road_km, '0.01')}</td>
+      <td class="cell-num">${cell('l-speed', g.speed, '1')}</td>
+      <td class="cell-hours">${hoursText(g.road_km, g.speed)}</td>
+    `;
+    if (MAY_EDIT_ROUTES) {
+      [['l-km', 'road_km'], ['l-speed', 'speed']].forEach(([act, field]) => {
+        const el = tr.querySelector('[data-act="' + act + '"]');
+        el.addEventListener('change', (e) => {
+          const v = e.target.value;
+          // Blank distance means unknown; a blank speed would divide by zero,
+          // so it keeps the number it had.
+          g[field] = (v === '') ? (field === 'road_km' ? null : g[field]) : parseFloat(v);
+          legsDirty(true);
+          renderLegTable();
+        });
+      });
+    }
+    body.appendChild(tr);
+  });
+}
+
+async function saveLegs() {
+  const btn = document.getElementById('btnSaveLegs');
+  btn.disabled = true;
+  try {
+    for (const g of STATE.legs) {
+      const res = await fetch('/api/routes/' + encodeURIComponent(g.leg_key), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ road_km: (g.road_km == null ? '' : g.road_km), speed: g.speed })
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || ((res.status === 403)
+          ? 'Only an admin may change a leg'
+          : 'Could not save ' + (g.label || g.leg_key)));
+      }
+    }
+    await loadLegs();
+    toast('Saved — the planner will use these');
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ===== ROUTES: TWO LEGS, ONE TABLE (20/09/2026) =====
    A route is a name and two ordered lists of Locations: the fronthaul out to
    the port and the backhaul home. The name is only a name - nothing is read
@@ -4235,6 +4356,8 @@ function bindRoutePage() {
     if (e.key === 'Enter') { e.preventDefault(); createRoute(); }
   });
   document.getElementById('btnSaveRoutes').addEventListener('click', saveRoutes);
+  const sl = document.getElementById('btnSaveLegs');
+  if (sl) sl.addEventListener('click', saveLegs);
 }
 
 async function createRoute() {
@@ -7829,7 +7952,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'locmap') { setTimeout(() => map.invalidateSize(), 60); }
     // The Route page reads from the server each time it is opened: its
     // stops are Locations, and those may have changed on the other page.
-    if (t === 'route') { try { loadRoutes(); } catch (e) {} }
+    if (t === 'route') { try { loadRoutes(); loadLegs(); } catch (e) {} }
     if (t === 'data') { renderTable(); renderSequenceTable(); renderTimeline(); }
     if (t === 'fleet') { renderFleetUI(); }
     if (t === 'plan') { renderDinPlan(); }

@@ -207,14 +207,30 @@ def anchor_retire(aid):
 @bp.get("/routes")
 @login_required
 def routes():
-    return jsonify([{"leg_key": r.leg_key, "label": r.label,
-                     "points": r.points, "speed": r.speed}
-                    for r in RouteLeg.query.all()])
+    """The corridor's legs: how far each is and how fast it is driven.
+
+    The planner turns these two numbers into the hours it plans with, so they
+    are carried here too - a leg is only as good as the hours it produces, and
+    the arithmetic should not have to be done by eye.
+    """
+    out = []
+    for r in RouteLeg.query.order_by(RouteLeg.leg_key).all():
+        km = float(r.road_km or 0.0)
+        spd = float(r.speed or 0.0)
+        out.append({"leg_key": r.leg_key, "label": r.label,
+                    "points": r.points, "speed": spd, "road_km": km,
+                    "hours": (km / spd) if spd else 0.0})
+    return jsonify(out)
 
 
 @bp.put("/routes/<leg_key>")
 @login_required
 def route_update(leg_key):
+    """A leg's distance and speed feed every plan, so the rule that guards
+    routes guards these too - it was open to anyone logged in, which was an
+    oversight rather than a decision."""
+    if not _may_edit_routes():
+        return jsonify(error="Only an admin may change a leg"), 403
     d = request.get_json(force=True)
     r = RouteLeg.query.filter_by(leg_key=leg_key).first()
     if not r:
@@ -222,7 +238,25 @@ def route_update(leg_key):
     if "points" in d:
         r.points = d["points"]
     if "speed" in d and d["speed"]:
-        r.speed = float(d["speed"])
+        try:
+            spd = float(d["speed"])
+        except (TypeError, ValueError):
+            return jsonify(error="a speed is a number of km/h"), 400
+        if spd <= 0:
+            return jsonify(error="a speed has to be above zero"), 400
+        r.speed = spd
+    if "road_km" in d:
+        raw = d.get("road_km")
+        if raw is None or str(raw).strip() == "":
+            r.road_km = None            # unknown, not zero
+        else:
+            try:
+                km = float(raw)
+            except (TypeError, ValueError):
+                return jsonify(error="a distance is a number of km"), 400
+            if km < 0:
+                return jsonify(error="a distance cannot be negative"), 400
+            r.road_km = km
     db.session.commit()
     return jsonify(ok=True)
 
