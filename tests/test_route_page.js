@@ -205,6 +205,12 @@ check('the route cell offers the way out only',
       /fleetRouteOptions[\s\S]{0,200}?!== 'backhaul'/.test(html), true);
 check('...and says so rather than showing an empty dropdown',
       /No routes on Setting . Route yet/.test(html), true);
+// The row is a copy of the fleet entry, so a column added to the table but
+// not to the copy renders blank and reads as missing data. That is exactly
+// what happened first time round.
+const fleetProj = (html.match(/plate: p, status: effectiveStatus\(p\),[\s\S]*?ytd: ts\.ytd/) || [''])[0];
+check('the row copy carries the driver', /driver: r\.driver/.test(fleetProj), true);
+check('...and the route', /route: r\.route/.test(fleetProj), true);
 check('a changed route is sent like every other field',
       /route: 'route',/.test(html), true);
 check('the server keeps the declaration list rule for it',

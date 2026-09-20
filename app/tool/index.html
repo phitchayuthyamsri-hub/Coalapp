@@ -5606,6 +5606,10 @@ function renderFleetUI() {
     return {
       plate: p, status: effectiveStatus(p),
       added: r.added || null,
+      // Every column drawn below has to be named here: the row is a copy, not
+      // the entry itself, so a column added to the table and not to this list
+      // renders blank and looks like missing data.
+      driver: r.driver || '', route: r.route || '',
       phone: r.phone || '', gps: r.gps || '',
       effFrom: r.effFrom || '', effTo: r.effTo || '',
       ytd: ts.ytd, month: ts.month, avg: ts.avg
