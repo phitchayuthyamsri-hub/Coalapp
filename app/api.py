@@ -600,8 +600,13 @@ def anchor_update(aid):
 
 # ── Routes: named sequences of Locations, and the truck lock ─────────────────
 def _may_edit_routes():
+    """Admin only (20/09/2026). Planners were named here but never reached
+    it: the page's own check could only see is_admin, so admin-only is what
+    the system has really enforced all along. Widening it again is a one-word
+    change in BOTH this test and MAY_EDIT in route.html - change neither
+    alone, or the halves drift apart the way they just did."""
     return getattr(current_user, "is_admin", False) or \
-        (getattr(current_user, "role", "") or "") in ("planner", "admin")
+        (getattr(current_user, "role", "") or "") == "admin"
 
 
 def _plate_key(p):
@@ -665,7 +670,7 @@ def route_seqs():
 @login_required
 def route_seq_create():
     if not _may_edit_routes():
-        return jsonify(error="Only a planner or an admin may create a route"), 403
+        return jsonify(error="Only an admin may create a route"), 403
     d = request.get_json(force=True, silent=True) or {}
     name = (d.get("name") or "").strip()
     if not name:
@@ -687,7 +692,7 @@ def route_seq_create():
 @login_required
 def route_seq_update(rid):
     if not _may_edit_routes():
-        return jsonify(error="Only a planner or an admin may change a route"), 403
+        return jsonify(error="Only an admin may change a route"), 403
     r = db.session.get(Route, rid)
     if not r:
         return jsonify(error="not found"), 404
@@ -717,7 +722,7 @@ def route_seq_delete(rid):
     """Refused while trucks are locked to it, unless ?force=1, which unlocks
     them first - a truck must never point at a route that is not there."""
     if not _may_edit_routes():
-        return jsonify(error="Only a planner or an admin may delete a route"), 403
+        return jsonify(error="Only an admin may delete a route"), 403
     r = db.session.get(Route, rid)
     if not r:
         return jsonify(error="not found"), 404
@@ -858,6 +863,7 @@ def _apps_of(u):
 def me():
     return jsonify(username=current_user.username,
                    is_admin=bool(current_user.is_admin),
+                   role=(current_user.role or "monitor"),
                    tabs=_tabs_of(current_user),
                    lang=(current_user.lang or "en"),
                    default_page=(current_user.default_page or None),

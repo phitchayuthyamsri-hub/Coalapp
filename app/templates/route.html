@@ -103,7 +103,11 @@ async function load(){
     jget('/api/route-seqs'), jget('/api/anchors'),
     jget('/api/me').catch(() => ({}))]);
   ROUTES = routes; LOCS = locs;
-  MAY_EDIT = !!(me.is_admin || me.role === 'planner' || me.role === 'admin');
+  // Admin only (user, 20/09/2026). This named 'planner' too, but /api/me
+  // never sent a role, so that half of the test was dead and the page has
+  // been admin-only in practice. The server now says the same thing, and
+  // /api/me sends the role, so the admin half works for either spelling.
+  MAY_EDIT = !!(me.is_admin || me.role === 'admin');
   $('#newCard').style.display = MAY_EDIT ? '' : 'none';
   draw();
 }
