@@ -39,7 +39,7 @@ from flask_login import current_user, login_required
 
 from . import engine
 from .models import (DailyList, DailyListRow, FleetCommitment, GpsPing,
-                     PlanSnapshot, Truck, db)
+                     PlanSnapshot, Route, Truck, db)
 
 bp = Blueprint("tool_link", __name__)
 
@@ -73,6 +73,9 @@ def _own_plates():
 
 
 def _fleet(only):
+    # The route by NAME, because the tool keys everything on names a person
+    # would recognise. One query, not one per truck.
+    names = {r.id: r.name for r in Route.query.all()}
     out = {}
     for t in Truck.query.order_by(Truck.plate).all():
         key = engine.norm_plate(t.plate)
@@ -83,6 +86,8 @@ def _fleet(only):
             "added": int((t.added or datetime.utcnow()).timestamp() * 1000),
             "phone": t.phone or "",
             "gps": t.gps_provider or "",
+            "driver": t.driver or "",
+            "route": names.get(t.route_id, ""),
             "effFrom": t.eff_from or "",
             "effTo": t.eff_to or "",
         }

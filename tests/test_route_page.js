@@ -215,6 +215,14 @@ check('a changed route is sent like every other field',
       /route: 'route',/.test(html), true);
 check('the server keeps the declaration list rule for it',
       /if "route" in d:[\s\S]{0,200}?_may_lock_truck\(\)/.test(api), true);
+// The browser is seeded by /api/tool/seed.js on every page load, NOT by the
+// KV blob the cron writes - so the seed is the one that has to carry it.
+// Adding it to the other builder alone left the column empty on both sides.
+check('the SEED the browser actually gets carries the route',
+      /"route": names\.get\(t\.route_id, ""\)/.test(
+        fs.readFileSync(path.join(root, 'app', 'tool_link.py'), 'utf8')), true);
+check('...and the driver', /"driver": t\.driver or ""/.test(
+        fs.readFileSync(path.join(root, 'app', 'tool_link.py'), 'utf8')), true);
 check('the synced fleet blob carries it too',
       /"route": names\.get\(t\.route_id, ""\)/.test(
         fs.readFileSync(path.join(root, 'sync_tool_state.py'), 'utf8')), true);
