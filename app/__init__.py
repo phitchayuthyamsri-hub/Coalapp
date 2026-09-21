@@ -477,6 +477,10 @@ def _ensure_route_schema():
         return
     if "kind" not in cols:
         _add_column_racing("route", "kind VARCHAR(12) DEFAULT 'any'")
+    if "launched" not in cols:
+        # Every route that exists today is taken as running, which is what the
+        # declaration check assumed before the flag existed.
+        _add_column_racing("route", "launched BOOLEAN DEFAULT 1")
     if "fronthaul" not in cols:
         return
     from sqlalchemy import text

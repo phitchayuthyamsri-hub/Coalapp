@@ -90,6 +90,12 @@ class Route(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
     kind = db.Column(db.String(12), default="any")   # fronthaul / backhaul / any
+    # Whether trucks are running it yet (21/09/2026). A route can be built -
+    # stops, legs, trucks assigned - ahead of the day it starts, and until then
+    # its trucks are not asked for on the declaration: they are not "missing",
+    # there is nothing for them to do. New routes start launched, so a truck is
+    # only excused when somebody has said its route is not running.
+    launched = db.Column(db.Boolean, default=True)
     sequence = db.Column(db.JSON, default=list)      # [anchor_id, ...] in order
     note = db.Column(db.String(300), default="")
     created_by = db.Column(db.String(80), default="")

@@ -768,6 +768,7 @@ def _stops_api(ids, names):
 def _route_api(r, trucks_by_route, names):
     return {"id": r.id, "name": r.name, "note": r.note or "",
             "kind": r.kind or "any",
+            "launched": r.launched is not False,
             "sequence": _stops_api(r.sequence, names),
             "trucks": sorted(trucks_by_route.get(r.id, []))}
 
@@ -833,6 +834,7 @@ def route_seq_create():
     except ValueError as e:
         return jsonify(error=str(e)), 400
     r = Route(name=name[:80], kind=kind, sequence=seq,
+              launched=bool(d.get("launched", True)),
               note=(d.get("note") or "")[:300],
               created_by=current_user.username)
     db.session.add(r)
@@ -867,6 +869,8 @@ def route_seq_update(rid):
             r.kind = _clean_kind(d.get("kind"))
         except ValueError as e:
             return jsonify(error=str(e)), 400
+    if "launched" in d:
+        r.launched = bool(d.get("launched"))
     if "note" in d:
         r.note = (d.get("note") or "")[:300]
     db.session.commit()

@@ -639,8 +639,9 @@ def _list_payload(dl, day):
         # the list cannot mistake them for trucks somebody put on it.
         if roster and recs:
             on_sheet = {r.key for r in recs}
+            idle = _not_launched()
             for key, plate in sorted(roster.items()):
-                if key in on_sheet:
+                if key in on_sheet or key in idle:
                     continue
                 rows.append({
                     "plate": plate, "sub": short, "ready": False,
@@ -3237,10 +3238,24 @@ def save_list():
     return jsonify(out)
 
 
+def _not_launched():
+    """Plates (normalised) whose route is built but not running yet.
+
+    Those trucks have nothing to declare, so the sheet does not ask for them.
+    A truck with no route at all is still asked for: only a route somebody
+    has marked as not launched excuses one."""
+    off = {r.id for r in _Route.query.filter(_Route.launched.is_(False)).all()}
+    if not off:
+        return set()
+    return {engine.norm_plate(t.plate) for t in Truck.query.all()
+            if t.route_id in off}
+
+
 def _fleet_gaps(dl, sub_id):
     """Fleet trucks with no update on this list - no row at all, or a row with
     a blank status. Judged against the committed roster when one is registered,
-    else against the whole active truck table."""
+    else against the whole active truck table - less the trucks whose route has
+    not launched."""
     roster = _roster(sub_id) if sub_id else {}
     if roster:
         fleet = {k: c.plate for k, c in roster.items()}
@@ -3248,6 +3263,8 @@ def _fleet_gaps(dl, sub_id):
         fleet = {engine.norm_plate(t.plate): t.plate
                  for t in Truck.query.all()
                  if (t.status or "") != "deactivated"}
+    for k in _not_launched():
+        fleet.pop(k, None)
     have = {(r.key or engine.norm_plate(r.plate)): (r.note or "").strip()
             for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
     return sorted(fleet[k] for k in fleet if not have.get(k))

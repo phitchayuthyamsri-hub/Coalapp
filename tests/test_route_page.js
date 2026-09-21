@@ -13,8 +13,8 @@
 // other here, from the two files that have to agree.
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-const html = fs.readFileSync(path.join(root, 'app', 'tool', 'index.html'), 'utf8');
-const api = fs.readFileSync(path.join(root, 'app', 'api.py'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'app', 'tool', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
+const api = fs.readFileSync(path.join(root, 'app', 'api.py'), 'utf8').replace(/\r\n/g, '\n');  // a Windows checkout is CRLF
 
 let FAIL = 0;
 function check(label, got, want) {
@@ -57,12 +57,16 @@ const rows = [...html.matchAll(/tr\.innerHTML = `([\s\S]*?)`;\n/g)].map(m => m[1
 // Shaped like a match result so the checks below read the same: [1] is the row.
 const body = [null, rows.find(r => r.includes('cell-kind'))];
 if (!head || !body[1]) { console.log('  FAIL  could not find the route header or row'); process.exit(1); }
-check('header cells', (head[1].match(/<th>/g) || []).length, 7);
-check('row cells match the header', (body[1].match(/<td[ >]/g) || []).length, 7);
+// 21/09/2026: Launched joined, between Type and the stops.
+check('header cells', (head[1].match(/<th[ >]/g) || []).length, 8);
+check('row cells match the header', (body[1].match(/<td[ >]/g) || []).length, 8);
+check('launched sits between type and stops',
+      /cell-kind[\s\S]*cell-launch[\s\S]*cell-leg/.test(body[1]), true);
+check('launched is sent on save', /launched: r\.launched !== false/.test(html), true);
 check('it is the same table as Locations',
       /<table class="grid-table route-list" id="routeList">/.test(html), true);
-check('the type sits beside the stops',
-      /<th>Type<\/th><th>Stops, in order<\/th>/.test(head[1]), true);
+check('type, then launched, then the stops',
+      /<th>Type<\/th>[\s\S]*?>Launched<\/th>[\s\S]*?<th>Stops, in order<\/th>/.test(head[1]), true);
 
 console.log('\nthe old page is not a second editor');
 check('the iframe is gone', /routeFrame|\/route\?embed=1/.test(html), false);

@@ -4483,8 +4483,9 @@ function renderRoutes() {
       + 'No routes yet — press <b>+ New route</b> to name one.</td></tr>';
     return;
   }
-  head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Type</th><th>Stops, in order</th>'
-    + '<th>Trucks</th><th></th><th></th></tr>';
+  head.innerHTML = '<tr><th>No#</th><th>Name</th><th>Type</th>'
+    + '<th title="A route not launched yet is built but not running: its trucks are not asked for on the declaration">Launched</th>'
+    + '<th>Stops, in order</th><th>Trucks</th><th></th><th></th></tr>';
   STATE.routeDefs.forEach((r, idx) => {
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
@@ -4496,10 +4497,15 @@ function renderRoutes() {
             + ROUTE_KIND_LABEL[v] + '</option>').join('')
         + '</select>'
       : escapeHtml(ROUTE_KIND_LABEL[kind] || kind);
+    const launched = r.launched !== false;
+    const launchCell = MAY_EDIT_ROUTES
+      ? '<input type="checkbox" data-act="r-launch"' + (launched ? ' checked' : '') + '>'
+      : (launched ? 'Yes' : '<span class="na">Not yet</span>');
     tr.innerHTML = `
       <td class="rowno">${idx + 1}</td>
       <td><span class="name" title="Click to rename">${escapeHtml(r.name)}</span></td>
       <td class="cell-kind">${typeCell}</td>
+      <td class="cell-launch" style="text-align:center">${launchCell}</td>
       <td class="cell-leg">${stopsText(r.sequence)}</td>
       <td class="cell-trucks">${r.trucks && r.trucks.length ? escapeHtml(r.trucks.join(', '))
         : (kind === 'backhaul' ? '<span class="na" title="Which way a truck comes home varies by trip, so the backhaul is not declared on the declaration list">not declared</span>' : '—')}</td>
@@ -4516,6 +4522,13 @@ function renderRoutes() {
       kindSel.addEventListener('change', (e) => {
         e.stopPropagation();
         r.kind = e.target.value;
+        routesDirty(true);
+      });
+      const launchBox = tr.querySelector('[data-act="r-launch"]');
+      launchBox.addEventListener('click', (e) => e.stopPropagation());
+      launchBox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        r.launched = e.target.checked;
         routesDirty(true);
       });
       tr.querySelector('[data-act="legs"]').addEventListener('click', (e) => {
@@ -4709,6 +4722,7 @@ async function saveRoutes() {
       const body = {
         name: r.name,
         kind: r.kind || 'any',
+        launched: r.launched !== false,
         sequence: (r.sequence || []).map(s => s.id)
       };
       const res = await fetch('/api/route-seqs/' + r.id, {
