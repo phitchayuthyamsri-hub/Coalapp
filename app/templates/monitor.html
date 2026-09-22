@@ -82,7 +82,19 @@
      under every column once the page is scrolled right, and the header rows
      freeze against the page under the filter bar (--freeze), not against a box. */
   #trackCard{width:max-content;min-width:100%}
-  #track table.grid{width:max-content;min-width:100%;margin-top:0}
+  /* Only as wide as its columns. Stretched to the page, each route's table
+     shared the slack out over its own columns, and the identity columns sat
+     at different widths from one table to the next (user 22/09/2026). */
+  #track table.grid{width:max-content;margin-top:0}
+  /* The identity columns are the same width in every table, so a truck's
+     name, phone and remark line up down the page whatever its route. */
+  .track-tbl th.c-no, .track-tbl td.c-no{width:34px;min-width:34px}
+  .track-tbl th[data-col="where"], .track-tbl td.where{width:210px;min-width:210px}
+  .track-tbl th[data-col="plate"], .track-tbl td.plate{width:84px;min-width:84px}
+  .track-tbl th[data-col="phone"], .track-tbl td.tel{width:210px;min-width:210px}
+  .track-tbl th[data-col="sub"], .track-tbl td.c-sub{width:72px;min-width:72px}
+  .track-tbl th[data-col="remark"], .track-tbl td.rmk{width:200px;min-width:200px}
+  .track-tbl th.sub2, .track-tbl td.pl, .track-tbl td.ac{width:84px;min-width:84px}
   /* The page is now wider than the window, so the two bars that stay put when
      it scrolls DOWN have to stay put when it scrolls SIDEWAYS as well. They are
      laid out against the whole scrolled width and held one window wide at the
