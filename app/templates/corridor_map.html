@@ -80,8 +80,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
   <div id="notes"></div>
   <div id="map"></div>
   <div class="legend">
-    <span><i style="background:#34c759"></i>plan start</span>
-    <span><i style="background:#ff6b60"></i>pending start</span>
+    <span><i style="background:#34c759"></i>run started &mdash; reached the mine (its first stop)</span>
+    <span><i style="background:#ff6b60"></i>planned, not at the mine yet</span>
     <span><i style="background:#5ac8fa"></i>off plan</span>
     <span><i class="hollow"></i>outside the corridor</span>
     <span><i style="background:#8b97ad"></i>geofence</span>
@@ -174,7 +174,7 @@ function draw(){
       INFO.setContent('<div style="color:#111;min-width:170px"><b>' + esc(t.plate) + '</b>'
         + (t.driver ? '<br>' + esc(t.driver) : '')
         + (t.sub ? '<br>' + esc(t.sub) : '')
-        + '<br>' + (t.planned ? (t.started ? 'plan started' : 'pending start')
+        + '<br>' + (t.planned ? (t.started ? 'run started - reached its first stop' : 'planned, not at its first stop yet')
                               : 'not in this day\'s plan')
         + '<br>seen ' + esc(t.seen_at)
         + (t.address ? '<br>' + esc(t.address) : '')
@@ -190,9 +190,9 @@ function draw(){
   const out = shown.filter(t => t.outside).length;
   $('#stat').innerHTML =
       '<div>on the map<b>' + shown.length + '</b></div>'
-    + '<div>plan started<b style="color:var(--grn)">'
+    + '<div>run started<b style="color:var(--grn)">'
       + shown.filter(t => t.planned && t.started).length + '</b></div>'
-    + '<div>pending start<b style="color:var(--red)">'
+    + '<div>not at the mine yet<b style="color:var(--red)">'
       + shown.filter(t => t.planned && !t.started).length + '</b></div>'
     + '<div>off plan<b style="color:var(--blue)">'
       + shown.filter(t => !t.planned).length + '</b></div>'

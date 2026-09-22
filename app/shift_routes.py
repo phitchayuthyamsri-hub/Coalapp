@@ -1956,14 +1956,16 @@ def map_data():
             if r.get("day") == day:
                 plan.setdefault(engine.norm_plate(r["plate"]), r)
 
-    visits, _r = _visits_and_roles()
-    last_visit = {}
+    # A run has started when the truck has REACHED ITS FIRST STOP - the mine,
+    # or A Ngo for a route that begins there (user 22/09/2026). Being seen at
+    # QL49 on the way home used to count, which painted tomorrow's truck
+    # green tonight. Only the day's window is read: a visit older than that
+    # cannot start this run.
+    visits, roles = _visits_and_roles(since=_day_bounds(day)[0] - timedelta(days=1))
+    arrivals = {}
     for v in visits:
-        if not v.get("enter"):
-            continue
-        k = engine.norm_plate(v["plate"])
-        if k not in last_visit or v["enter"] > last_visit[k]:
-            last_visit[k] = v["enter"]
+        if v.get("enter"):
+            arrivals.setdefault((engine.norm_plate(v["plate"]), v["anchor_id"]), []).append(v["enter"])
 
     # Ping times are local (see gps_ingest), so the freshness clock is too.
     fresh_after = datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE
@@ -1986,10 +1988,10 @@ def map_data():
             try:
                 am = datetime.strptime((p.get("t") or {}).get("arrive_mine"),
                                        "%Y-%m-%dT%H:%M")
-                lv = last_visit.get(k)
-                # Seen at any corridor checkpoint since shortly before its
-                # planned mine arrival = the run has started.
-                started = bool(lv and lv >= am - timedelta(hours=6))
+                # At its first stop since shortly before it was due there.
+                first = roles.get(p.get("start_role") or "xppl")
+                started = any(e >= am - timedelta(hours=6)
+                              for e in arrivals.get((k, first), []))
             except (TypeError, ValueError):
                 started = False
         g = last.get(k)
