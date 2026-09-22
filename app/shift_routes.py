@@ -1837,7 +1837,10 @@ def _match_route(vs, roles, path):
     limit = end["enter"] if end else None
     cursor = start["enter"]
     for role in path[1:-1]:
-        v = first_at(role, cursor, limit, strict=True)
+        # The loading area lies INSIDE the mine, so the ping that opens the
+        # mine's visit can open the loading area's at the same instant; a
+        # strictly-later start would miss it (20H01397, 22/09/2026).
+        v = first_at(role, cursor, limit, strict=(role != "loading"))
         if v:
             out[("fh", role)] = v
             if role != "loading":

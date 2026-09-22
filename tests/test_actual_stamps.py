@@ -137,6 +137,13 @@ def v2(role, enter_h, exit_h, open_=False, plate="R1"):
 
 
 print("")
+print("the loading area opens with the mine")
+vs = [v2("xppl", 0, 2, open_=True, plate="R2"), v2("loading", 0, 2, open_=True, plate="R2")]
+m = _match_route(vs, ROLES, DEFAULT_PATH)
+check("one ping inside both: the mine is matched", ("fh", "xppl") in m, True)
+check("...and so is the loading area, at the same instant", m.get(("fh", "loading"), {}).get("enter"), T0)
+
+print("")
 print("Mine : A Ngo ends at A Ngo, and comes home from there")
 vs = [v2("xppl", 0, 2), v2("loading", 0.5, 1.5), v2("border", 5, 6), v2("ango", 7, 9),
       v2("border", 10, 11), v2("xppl", 15, 16)]
