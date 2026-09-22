@@ -528,6 +528,25 @@ def _shift_deadline(day, shift):
     return end - LOCAL_OFFSET
 
 
+def _own_pings(q):
+    """Narrow a GpsPing query to each truck's own provider (22/09/2026).
+
+    Rows stored before the ingest learned to refuse another provider's
+    position for a registered plate are still in the table, and they are
+    another vehicle's. Grouped by provider so the filter is two NOT clauses,
+    not one per truck: "not (a Viettel truck reported by TCT) and not (a TCT
+    truck reported by Viettel)"."""
+    from .gps_ingest import registered_providers
+    reg = registered_providers()
+    by = {}
+    for plate, key in reg.items():
+        by.setdefault(key, []).append(plate)
+    for key, plates in by.items():
+        q = q.filter(db.not_(db.and_(GpsPing.plate.in_(plates),
+                                     db.not_(GpsPing.source.like("api:" + key + "%")))))
+    return q
+
+
 # How far before `since` the pings are read (21/09/2026). A visit already
 # running when the window opens is then built from inside it, so its enter
 # lands before `since` and the caller drops it, exactly as it would have from
@@ -558,8 +577,8 @@ def _visits_and_roles(since=None):
     roles = geofence.roles()
     deactivated = frozenset(engine.norm_plate(t.plate) for t in
                             Truck.query.filter_by(status="deactivated").all())
-    q = db.session.query(GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
-                         GpsPing.speed, GpsPing.status)
+    q = _own_pings(db.session.query(GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
+                                    GpsPing.speed, GpsPing.status))
     cut = (since - VISIT_LEAD) if since is not None else None
     if cut is not None:
         q = q.filter(GpsPing.dt >= cut)
@@ -1949,7 +1968,7 @@ def map_data():
     # Ping times are local (see gps_ingest), so the freshness clock is too.
     fresh_after = datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE
     last, recent = {}, {}
-    for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
+    for g in (_own_pings(GpsPing.query.filter(GpsPing.dt >= fresh_after))
               .order_by(GpsPing.dt).all()):
         k = engine.norm_plate(g.plate)
         last[k] = g
@@ -2098,9 +2117,9 @@ def track():
     # Only for the "on the road" estimate of a truck with nothing stamped yet:
     # where each truck last was, in this run's window. Columns, not objects.
     last_ping = {}
-    for pl, dt, la, ln in (db.session.query(GpsPing.plate, GpsPing.dt,
-                                            GpsPing.lat, GpsPing.lng)
-                           .filter(GpsPing.dt >= lo, GpsPing.dt <= lo + CYCLE_SPAN)
+    for pl, dt, la, ln in (_own_pings(db.session.query(GpsPing.plate, GpsPing.dt,
+                                                       GpsPing.lat, GpsPing.lng)
+                                      .filter(GpsPing.dt >= lo, GpsPing.dt <= lo + CYCLE_SPAN))
                            .order_by(GpsPing.dt).all()):
         last_ping[engine.norm_plate(pl)] = _Ping(pl, dt, la, ln)
 
@@ -3208,7 +3227,7 @@ def _gps_view(day, only):
     fresh_after = max(window_start,
                       datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE)
     last = {}
-    for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
+    for g in (_own_pings(GpsPing.query.filter(GpsPing.dt >= fresh_after))
               .order_by(GpsPing.dt).all()):
         last[engine.norm_plate(g.plate)] = g
 
@@ -4206,8 +4225,8 @@ def _today_by_company(day, now):
 
     anchors = [a for a in Anchor.query.all() if a.polygon]
     last_ping = {}
-    for g in (GpsPing.query.filter(GpsPing.dt >= lo - timedelta(hours=12),
-                                   GpsPing.dt <= now)
+    for g in (_own_pings(GpsPing.query.filter(GpsPing.dt >= lo - timedelta(hours=12),
+                                              GpsPing.dt <= now))
               .order_by(GpsPing.dt).all()):
         last_ping[engine.norm_plate(g.plate)] = g
 

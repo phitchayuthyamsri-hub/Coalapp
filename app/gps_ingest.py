@@ -358,11 +358,17 @@ def _provider_key(name):
     return n
 
 
-# Who to believe when two providers report the same plate (user 22/09/2026:
-# "always priority on TCT first, Viettel has low reliability"). Twenty-three
+# Who to believe when two providers report the same plate. Twenty-three
 # plates are on both accounts, and the two positions can be 100 km apart at
-# the same minute - one of them is another vehicle wearing the number. TCT's
-# word stands wherever TCT has spoken recently; Viettel only fills in for a
+# the same minute - one of them is another vehicle wearing the number.
+#
+# Settled 22/09/2026 on 20H01378: the fleet register said Viettel, TCT-first
+# showed TCT's device parked at Chan May port while the truck itself was
+# loaded at Lalay, and the system reported it "already past the port". So
+# the REGISTER decides - the Fleet page names each truck's provider - and
+# the priority below applies only to a plate the register does not name
+# ("always priority on TCT first, Viettel has low reliability"). There, TCT's
+# word stands wherever TCT has spoken recently, and Viettel fills in for a
 # plate TCT has gone quiet on, so a dead TCT box does not silence a truck.
 PROVIDER_PRIORITY = ("tct", "adsun", "viettel")
 PRIORITY_FRESH_H = 24
@@ -390,25 +396,35 @@ def _fresh_from(keys, plates, now=None):
     return {_norm_plate(r[0]) for r in q.all()}
 
 
-def foreign_to(pings, source, now=None):
-    """The pings in `pings` a better provider has already spoken for.
+def foreign_to(pings, source, now=None, registered=None):
+    """The pings in `pings` that this source has no business reporting.
 
-    A ping from `source` for a plate that a higher-ranked provider has
-    positioned in the last PRIORITY_FRESH_H hours is the other vehicle's,
-    and is dropped."""
-    key = _provider_key(source)
-    above = _outranked_by(key)
-    if not above or not pings:
+    A plate the register names: any other provider's ping for it is the
+    other vehicle's. A plate it does not name: a ping from `source` that a
+    higher-ranked provider has positioned in the last PRIORITY_FRESH_H hours
+    is dropped."""
+    if not pings:
         return []
-    raw = {p.get("plate") for p in pings}
-    taken = _fresh_from(above, raw, now)
-    return [p for p in pings if _norm_plate(p.get("plate")) in taken]
+    key = _provider_key(source)
+    registered = registered_providers() if registered is None else registered
+    out, unnamed = [], []
+    for p in pings:
+        want = registered.get(_norm_plate(p.get("plate")))
+        if want:
+            if want != key:
+                out.append(p)
+        else:
+            unnamed.append(p)
+    above = _outranked_by(key)
+    if above and unnamed:
+        taken = _fresh_from(above, {p.get("plate") for p in unnamed}, now)
+        out += [p for p in unnamed if _norm_plate(p.get("plate")) in taken]
+    return out
 
 
 def registered_providers():
-    """{normalised plate: provider key} as the fleet register has it. Kept
-    for the pages that name a truck's provider; the ingest no longer decides
-    by it - TCT outranks by rule, see PROVIDER_PRIORITY."""
+    """{normalised plate: provider key} as the fleet register has it - the
+    authority on whose position counts for that plate."""
     from .models import Truck
     out = {}
     for t in Truck.query.all():
@@ -842,10 +858,13 @@ def _stored_trail(plate, begin, end):
                         .filter(GpsPing.dt >= begin, GpsPing.dt <= end)
                         .order_by(GpsPing.dt.asc()).all())
             if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)]
-    # The best provider that spoke in this range, alone (22/09/2026): the
+    # The truck's registered provider alone; for a plate the register does
+    # not name, the best provider that spoke in this range (22/09/2026). The
     # other provider's rows for this plate are another vehicle.
-    present = {_provider_key(r.source) for r in rows}
-    best = next((k for k in PROVIDER_PRIORITY if k in present), None)
+    best = registered_providers().get(key)
+    if not best:
+        present = {_provider_key(r.source) for r in rows}
+        best = next((k for k in PROVIDER_PRIORITY if k in present), None)
     if best:
         rows = [r for r in rows if _provider_key(r.source) == best]
     return [{"dt": r.dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": r.lat, "lng": r.lng,
