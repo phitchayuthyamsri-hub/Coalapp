@@ -155,6 +155,7 @@ def create_app(config_class=Config):
         _ensure_subcontractors()
         _ensure_plan_settings()
         _ensure_routeleg_schema()
+        _ensure_ping_schema()
         _ensure_anchor_schema()
         _ensure_snapshot_schema()
         _ensure_shifts()
@@ -300,6 +301,18 @@ def _ensure_plan_settings():
         added += 1
     if added:
         db.session.commit()
+
+def _ensure_ping_schema():
+    """A ping carries the provider's address (22/09/2026)."""
+    from sqlalchemy import inspect
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("gps_ping")]
+    except Exception:
+        return
+    if "address" not in cols:
+        _add_column_racing("gps_ping", "address VARCHAR(200) DEFAULT ''")
+
 
 def _ensure_routeleg_schema():
     """Add RouteLeg.road_km to a database created before the column existed."""

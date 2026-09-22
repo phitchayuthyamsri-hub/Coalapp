@@ -1864,6 +1864,37 @@ def _route_paths():
             for t in Truck.query.all() if t.route_id in seqs}
 
 
+IDLE_RADIUS_M = 150      # still "here" while the fixes scatter within this
+IDLE_SPEED_KMH = 3.0     # a fix below this is standing; GPS drifts a little
+
+
+def _idle_since(pings):
+    """When a truck stopped moving, from its recent pings, or None if the
+    latest ping shows it moving.
+
+    `pings` are (dt, lat, lng, speed) in time order. The run is walked back
+    from the last ping while each earlier one is also standing and within
+    IDLE_RADIUS_M of where the truck is now; the earliest of those is when it
+    stopped. Positions arrive every 5-30 minutes, so "since" is that coarse -
+    a truck that stopped between two pulls is idle from the first pull that
+    saw it still.
+    """
+    if not pings:
+        return None
+    last = pings[-1]
+    if (last[3] or 0.0) > IDLE_SPEED_KMH:
+        return None
+    since = last[0]
+    for dt, lat, lng, spd in reversed(pings[:-1]):
+        if (spd or 0.0) > IDLE_SPEED_KMH:
+            break
+        if engine.haversine_km(lat, lng, last[1], last[2]) * 1000.0 > IDLE_RADIUS_M:
+            break
+        since = dt
+    return since
+
+
+
 @bp.get("/map")
 @login_required
 def map_data():
@@ -1917,10 +1948,13 @@ def map_data():
 
     # Ping times are local (see gps_ingest), so the freshness clock is too.
     fresh_after = datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE
-    last = {}
+    last, recent = {}, {}
     for g in (GpsPing.query.filter(GpsPing.dt >= fresh_after)
               .order_by(GpsPing.dt).all()):
-        last[engine.norm_plate(g.plate)] = g
+        k = engine.norm_plate(g.plate)
+        last[k] = g
+        recent.setdefault(k, []).append((g.dt, g.lat, g.lng, g.speed or 0.0))
+    now_local = datetime.utcnow() + LOCAL_OFFSET
 
     trucks, unseen = [], []
     for t in Truck.query.order_by(Truck.plate).all():
@@ -1947,7 +1981,14 @@ def map_data():
         lat, lng = float(g.lat), float(g.lng)
         outside = not (box["s"] <= lat <= box["n"]
                        and box["w"] <= lng <= box["e"])
+        since = _idle_since(recent.get(k, []))
         trucks.append({
+            # The provider's address and how long the truck has stood still
+            # (user 22/09/2026): idle since the first of the run of pings at
+            # this spot with no speed, measured to now.
+            "address": getattr(g, "address", "") or "",
+            "idle_since": since.strftime("%Y-%m-%d %H:%M") if since else None,
+            "idle_min": int((now_local - since).total_seconds() // 60) if since else None,
             "plate": t.plate, "driver": t.driver or "",
             "sub": (p or {}).get("sub") or "",
             # Where it really is (22/09/2026): the map is free to pan there

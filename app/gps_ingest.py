@@ -172,6 +172,7 @@ def _fetch_tct(cfg):
             "dt": dt, "lat": lat, "lng": lng,
             "speed": _num(v.get("Speed")) or 0.0,
             "status": str(v.get("State", "")),
+            "address": str(v.get("Address") or "").strip()[:200],
         })
     return out
 
@@ -221,6 +222,7 @@ def _fetch_adsun(cfg):
             "dt": dt, "lat": lat, "lng": lng,
             "speed": _num(v.get("Speed")) or 0.0,
             "status": ("stopped" if v.get("IsStop") else "moving"),
+            "address": str(v.get("Address") or v.get("address") or "").strip()[:200],
         })
     return out
 
@@ -297,6 +299,7 @@ def _fetch_viettel(cfg):
             "dt": dt, "lat": lat, "lng": lng,
             "speed": _num(value.get("speed")) or 0.0,
             "status": "moving" if raw_status == "run" else (raw_status or "stopped"),
+            "address": str(value.get("address") or "").strip()[:200],
         })
     return out
 
@@ -367,7 +370,8 @@ def _store(pings, source):
             continue
         db.session.add(GpsPing(plate=p["plate"], dt=p["dt"], lat=p["lat"],
                                lng=p["lng"], speed=p.get("speed") or 0.0,
-                               status=p.get("status", ""), source=source))
+                               status=p.get("status", ""), source=source,
+                               address=p.get("address") or ""))
         existing.add(key)
         n += 1
     db.session.commit()

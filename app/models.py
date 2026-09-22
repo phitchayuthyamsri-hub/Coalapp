@@ -172,6 +172,10 @@ class GpsPing(db.Model):
     speed = db.Column(db.Float, default=0.0)
     status = db.Column(db.String(40), default="")
     source = db.Column(db.String(120), default="")
+    # The provider's own reading of where that is ("X. La Lay, Quảng Trị"),
+    # kept as sent (22/09/2026). TCT sends one on every position; a provider
+    # that does not leaves it blank.
+    address = db.Column(db.String(200), default="")
 
 
 class Anchor(db.Model):

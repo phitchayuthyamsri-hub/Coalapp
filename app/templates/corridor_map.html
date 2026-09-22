@@ -136,6 +136,13 @@ async function drawFences(){
   } catch (e) { /* the trucks matter more than the scenery */ }
 }
 
+// "2 h 09 min" / "35 min", as the drivers' own portal words it.
+function idleText(min){
+  min = Math.max(0, min | 0);
+  return min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' min'
+                   : min + ' min';
+}
+
 function clearMarkers(){ MARKERS.forEach(m => m.setMap(null)); MARKERS = []; }
 
 function draw(){
@@ -159,6 +166,9 @@ function draw(){
         + '<br>' + (t.planned ? (t.started ? 'plan started' : 'pending start')
                               : 'not in this day\'s plan')
         + '<br>seen ' + esc(t.seen_at)
+        + (t.address ? '<br>' + esc(t.address) : '')
+        + (t.idle_min != null ? '<br><b>idle ' + idleText(t.idle_min) + '</b>'
+            + ' <span style="color:#666">since ' + esc(String(t.idle_since).slice(11, 16)) + '</span>' : '')
         + (t.outside ? '<br><b>outside the corridor</b>' : '')
         + '<br><a target="_blank" rel="noopener" href="/truck-trail?plate='
         + encodeURIComponent(t.plate) + '">◎ trail</a></div>');
