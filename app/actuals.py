@@ -17,8 +17,8 @@ honest:
 
   * an EXIT is written only once the truck has left. While it is still inside,
     the last ping inside is where the visit has got to, not where it ends;
-  * the run home is walked from the port's exit, so nothing on it is written
-    until the truck has left the port.
+  * the run home is walked from the last stop's exit (the port, or A Ngo),
+    so nothing on it is written until the truck has left there.
 """
 from datetime import datetime, timedelta
 
@@ -49,15 +49,19 @@ def stamp_days(days, visits, roles):
 
     `visits` must hold every visit entered from the earliest day's start on.
     Returns how many stamps were written."""
-    from .shift_routes import _day_bounds, _match_cycle, CYCLE_SPAN
+    from .shift_routes import (_day_bounds, _match_route, _applies, _route_paths,
+                               DEFAULT_PATH, CYCLE_SPAN)
     events = _events()
+    # Each truck is walked along its own route (22/09/2026): Mine : A Ngo ends
+    # at A Ngo the way the corridor ends at the port. A stamp already written
+    # stays as it is if the truck later changes route.
+    paths = _route_paths()
     by_plate = {}
     for v in visits:
         by_plate.setdefault(engine.norm_plate(v["plate"]), []).append(v)
     have = {}
     for s in ActualStamp.query.filter(ActualStamp.day.in_(list(days))).all():
         have[(s.day, s.key, s.leg, s.role, s.edge)] = True
-    port_role = "port"
     wrote = 0
     for day in days:
         lo, _hi = _day_bounds(day)
@@ -66,17 +70,20 @@ def stamp_days(days, visits, roles):
                   if lo <= v["enter"] <= lo + CYCLE_SPAN]
             if not vs:
                 continue
-            matched = _match_cycle(vs, roles)
-            port = matched.get(("fh", port_role))
-            home_ready = port is not None and not port.get("open")
+            path = paths.get(key, DEFAULT_PATH)
+            matched = _match_route(vs, roles, path)
+            end = matched.get(("fh", path[-1]))
+            home_ready = end is not None and not end.get("open")
             for leg, role, edge in events:
                 if (day, key, leg, role, edge) in have:
                     continue               # already said - permanent
+                if not _applies(leg, role, edge, path):
+                    continue               # not a place on this truck's route
                 v = matched.get((leg, role))
                 if v is None:
                     continue
                 if leg == "bh" and not home_ready:
-                    continue               # the run home starts at the port's exit
+                    continue               # the run home starts at the last stop's exit
                 if edge == "exit" and v.get("open"):
                     continue               # still inside: no exit yet
                 at = v.get(edge) or v.get("enter")

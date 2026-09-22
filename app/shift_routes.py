@@ -1581,6 +1581,12 @@ LOC_FH = [
     ("leave",  "Leaves mine", "load_end",      "xppl",    "exit"),
     ("border", "At border",   "arrive_border", "border",  "enter"),
     ("cross",  "Crosses",     "cross_border",  "border",  "exit"),
+    # A Ngo Warehouse, 8 km past the border (22/09/2026): where Mine : A Ngo
+    # ends and A Ngo : Chan May begins. Not planned by the corridor planner,
+    # so an actual with no promise; a truck whose route skips it shows "not
+    # on route" here.
+    ("ango",     "At A Ngo",     None,         "ango",    "enter"),
+    ("ango_out", "Leaves A Ngo", None,         "ango",    "exit"),
     ("ql49",   "Enters QL49", "ql49_in",       "ql49",    "enter"),
     ("port",   "At port",     "arrive_port",   "port",    "enter"),
     ("unload", "Unloads",     "unload_start",  None,      None),
@@ -1591,9 +1597,14 @@ LOC_FH = [
 LOC_BH = [
     ("port",   "Leaves port",  "depart_port", "port",   "exit"),
     ("ql49",   "QL49",         None,          "ql49",   "enter"),
+    ("ango",   "A Ngo",        None,          "ango",   "enter"),
     ("border", "Border",       None,          "border", "enter"),
     ("mine",   "Back at mine", "back",        "xppl",   "enter"),
 ]
+
+
+# The path a truck runs when nothing says otherwise: the corridor, mine to port.
+DEFAULT_PATH = ("xppl", "loading", "border", "ql49", "port")
 
 
 def _match_cycle(vs, roles):
@@ -1617,6 +1628,18 @@ def _match_cycle(vs, roles):
     port (a blind or missing stop is skipped, not guessed). The run home
     starts at that port visit's exit and walks the same way back to the mine.
     """
+    return _match_route(vs, roles, DEFAULT_PATH)
+
+
+def _match_route(vs, roles, path):
+    """_match_cycle for any route (22/09/2026): the same walk, along the
+    truck's own stops. `path` is the route's roles in order - its first stop
+    starts the run the way the mine does, its last ends it the way the port
+    does, and the run home walks the stops between back to the first. The
+    loading area sits inside the mine's stay, so it never moves the cursor
+    and is not walked on the way home. For DEFAULT_PATH this is exactly the
+    corridor walk above.
+    """
     vs = sorted(vs, key=lambda v: v["enter"])
 
     def first_at(role, after=None, before=None, strict=False):
@@ -1634,36 +1657,63 @@ def _match_cycle(vs, roles):
         return None
 
     out = {}
-    mine = first_at("xppl")
-    if mine is None:
+    path = list(path or ())
+    if len(path) < 2:
         return out
-    out[("fh", "xppl")] = mine
-    port = first_at("port", mine["enter"], strict=True)
-    limit = port["enter"] if port else None
-    cursor = mine["enter"]
-    # Loading is inside the mine's stay, so it is walked from the mine's ENTER
-    # like everything else - but the cursor does not move past it: a truck can
-    # be seen at the loading area and still leave the mine later, and the
-    # border must be judged from the mine's exit, not from loading.
-    lv = first_at("loading", cursor, limit, strict=True)
-    if lv:
-        out[("fh", "loading")] = lv
-    for role in ("border", "ql49"):
+    start_role, end_role = path[0], path[-1]
+    start = first_at(start_role)
+    if start is None:
+        return out
+    out[("fh", start_role)] = start
+    end = first_at(end_role, start["enter"], strict=True)
+    limit = end["enter"] if end else None
+    cursor = start["enter"]
+    for role in path[1:-1]:
         v = first_at(role, cursor, limit, strict=True)
         if v:
             out[("fh", role)] = v
-            cursor = v["enter"]
-    if port is None:
+            if role != "loading":
+                cursor = v["enter"]
+    if end is None:
         return out
-    out[("fh", "port")] = port
-    out[("bh", "port")] = port
-    cursor = port.get("exit") or port["enter"]
-    for role in ("ql49", "border", "xppl"):
+    out[("fh", end_role)] = end
+    out[("bh", end_role)] = end
+    cursor = end.get("exit") or end["enter"]
+    for role in [r for r in reversed(path[:-1]) if r != "loading"]:
         v = first_at(role, cursor, strict=True)
         if v:
             out[("bh", role)] = v
             cursor = v["enter"]
     return out
+
+
+def _applies(leg, role, edge, path):
+    """Whether this event is on this route at all.
+
+    Loaded run: a place on the route. Unloads (no role) belongs to the port.
+    Run home: it leaves from the route's last stop - only its exit is on the
+    way home, and only when that stop is the port, the one column that says
+    so - then passes the stops before it, the loading area aside."""
+    path = list(path or DEFAULT_PATH)
+    if leg == "fh":
+        return (role in path) if role else ("port" in path)
+    if role == path[-1]:
+        return role == "port" and edge == "exit"
+    return role in path[:-1] and role != "loading"
+
+
+def _route_paths():
+    """{normalised plate: its route's roles in order} for trucks whose route
+    names at least two places the GPS can recognise. Anything else runs the
+    corridor."""
+    by_id = {a.id: a.role for a in Anchor.query.all() if a.role and a.retired_at is None}
+    seqs = {}
+    for r in _Route.query.all():
+        path = [by_id[i] for i in (r.sequence or []) if i in by_id]
+        if len(path) >= 2:
+            seqs[r.id] = tuple(path)
+    return {engine.norm_plate(t.plate): seqs[t.route_id]
+            for t in Truck.query.all() if t.route_id in seqs}
 
 
 @bp.get("/map")
@@ -1854,6 +1904,7 @@ def track():
     lo, _hi = _day_bounds(day)
     seen_anchor = actuals.seen_anchor_ids()
     stamped = actuals.stamps_for(day)
+    paths = _route_paths()
 
     # Only for the "on the road" estimate of a truck with nothing stamped yet:
     # where each truck last was, in this run's window. Columns, not objects.
@@ -1891,6 +1942,7 @@ def track():
         p = by_plate.get(plate)
         plan = (p or {}).get("t") or {}
         pkey = engine.norm_plate(plate)
+        path = paths.get(pkey, DEFAULT_PATH)
 
         # Mine first, as the stamps were made - see actuals and _match_cycle.
         # Until the mine is stamped every later place is an estimate.
@@ -1923,6 +1975,13 @@ def track():
         def cells(spec, leg):
             out = []
             for key, label, field, role, edge in spec:
+                if not _applies(leg, role, edge, path):
+                    # Not a place this truck's route goes. Nothing is
+                    # estimated for it and nothing carries through it.
+                    out.append({"key": key, "label": label, "plan": None,
+                                "actual": None, "estimate": None, "delay": None,
+                                "blind": False, "na": True})
+                    continue
                 got = pick(role, edge, leg)
                 planned = plan.get(field) if field else None
                 cell = {"key": key, "label": label, "plan": planned,
@@ -3824,6 +3883,12 @@ def board():
     # blind checkpoint report trucks as 'missed' - that manufactures alarms.
     seen_anchor = actuals.seen_anchor_ids()
     stamped = actuals.stamps_for(day)
+    paths = _route_paths()
+
+    def on_route(plate, code):
+        ev = CHECK_EVENTS.get(code)
+        return ev is None or _applies(ev[0], ev[1], ev[2],
+                                      paths.get(engine.norm_plate(plate), DEFAULT_PATH))
 
     def evidence(plate, code):
         ev = CHECK_EVENTS.get(code)
@@ -3840,6 +3905,8 @@ def board():
 
         done, pending, missed, unverified = [], [], [], []
         for plate in expected:
+            if not on_route(plate, chk.code):
+                continue           # its route does not pass here
             when = evidence(plate, chk.code) if role_name else None
             if when:
                 done.append({"plate": plate, "at": _fmt(when)})

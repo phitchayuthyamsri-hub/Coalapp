@@ -19,7 +19,11 @@ from datetime import datetime, timedelta
 
 from .models import db, Anchor, AnchorVersion
 
-ROLE_KEYS = ("xppl", "loading", "border", "ql49", "ql49b", "ql49p", "port", "detour")
+ROLE_KEYS = ("xppl", "loading", "border", "ql49", "ql49b", "ql49p", "port", "detour",
+             "ango")
+# Roles the old role-mapping screen never knew about (22/09/2026). A save from
+# it sends only the roles it lists, and must not clear these on the way.
+ROUTE_ONLY_ROLES = ("ango",)
 
 # GpsPing.dt is stored on the local clock (UTC+7). A version's valid_from is
 # only ever compared with a ping's dt, so it has to be on the same clock, or
@@ -289,6 +293,8 @@ def set_roles(mapping):
                 pass
     for a in Anchor.query.all():
         if a.retired_at is not None:
+            continue
+        if a.role in ROUTE_ONLY_ROLES and a.role not in (mapping or {}):
             continue
         mine = [k for k, v in want.items() if v == a.id]
         a.role = mine[0] if mine else ""

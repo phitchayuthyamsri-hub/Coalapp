@@ -72,6 +72,8 @@ const ROWS = [
 // corridor (Mine first), not the alphabet (QL49 first is the reported bug).
 ROWS[1].last_seen = {place:'QL49', leg:'fh', at:'2026-09-09T10:00'};
 ROWS[3].last_seen = {place:'Mine', leg:'fh', at:'2026-09-09T05:05'};
+// 22/09/2026: a place the truck's route does not go comes marked na.
+ROWS[0].fh[2] = {plan:null, actual:null, delay:null, estimate:null, na:true};
 
 vm.runInContext(`
   TOL = 60; LEG = 'fh'; TV = null;
@@ -116,6 +118,8 @@ try {
      (out.match(/rowspan="2"/g) || []).length, 7);
   is('the default order follows the corridor, mine first',
      plates(), ['20H00717','20C10770','20C10615','20H00715']);
+  is('a place off the truck route reads "off route", not a dash',
+     (out.match(/<span class="t-na"[^>]*>off route</g) || []).length, 1);
   is('every truck carries a team-remark box',
      (out.match(/class="rmk-in"/g) || []).length, 4);
   vm.runInContext(`TRACK.remarks = {'20C10770': {text:'border queue, driver called',

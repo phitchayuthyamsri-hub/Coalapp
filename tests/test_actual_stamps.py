@@ -125,5 +125,56 @@ with app.app_context():
     check("the mine is now a seen Location",
           db.session.get(AnchorSeen, ROLES["xppl"]) is not None, True)
 
+from app.shift_routes import _match_route, _applies, DEFAULT_PATH, _match_cycle  # noqa: E402
+
+ROLES["ango"] = 7
+MINE_ANGO = ("xppl", "loading", "border", "ango")
+ANGO_PORT = ("ango", "ql49", "port")
+
+
+def v2(role, enter_h, exit_h, open_=False, plate="R1"):
+    return visit(role, enter_h, exit_h, open_, plate)
+
+
+print("")
+print("Mine : A Ngo ends at A Ngo, and comes home from there")
+vs = [v2("xppl", 0, 2), v2("loading", 0.5, 1.5), v2("border", 5, 6), v2("ango", 7, 9),
+      v2("border", 10, 11), v2("xppl", 15, 16)]
+m = _match_route(vs, ROLES, MINE_ANGO)
+check("at A Ngo is the loaded run's end", m.get(("fh", "ango"))["enter"], T0 + timedelta(hours=7))
+check("the border on the way home", m.get(("bh", "border"))["enter"], T0 + timedelta(hours=10))
+check("back at the mine", m.get(("bh", "xppl"))["enter"], T0 + timedelta(hours=15))
+check("no port on this route", ("fh", "port") in m, False)
+
+print("")
+print("A Ngo : Chan May starts at A Ngo")
+vs = [v2("ango", 0, 1), v2("ql49", 3, 4), v2("port", 6, 8), v2("ql49", 10, 11), v2("ango", 13, 14)]
+m = _match_route(vs, ROLES, ANGO_PORT)
+check("the run starts at A Ngo", m.get(("fh", "ango"))["enter"], T0)
+check("port is its end", m.get(("fh", "port"))["enter"], T0 + timedelta(hours=6))
+check("home to A Ngo", m.get(("bh", "ango"))["enter"], T0 + timedelta(hours=13))
+
+print("")
+print("which columns each route has")
+check("corridor: A Ngo is off route", _applies("fh", "ango", "enter", DEFAULT_PATH), False)
+check("corridor: leaves port is on", _applies("bh", "port", "exit", DEFAULT_PATH), True)
+check("Mine : A Ngo: leaves port is off", _applies("bh", "port", "exit", MINE_ANGO), False)
+check("Mine : A Ngo: unloads (at the port) is off", _applies("fh", None, None, MINE_ANGO), False)
+check("Mine : A Ngo: leaves A Ngo is on", _applies("fh", "ango", "exit", MINE_ANGO), True)
+check("Mine : A Ngo: the home 'A Ngo' column is off", _applies("bh", "ango", "enter", MINE_ANGO), False)
+check("A Ngo : Chan May: at mine is off", _applies("fh", "xppl", "enter", ANGO_PORT), False)
+check("A Ngo : Chan May: home to A Ngo is on", _applies("bh", "ango", "enter", ANGO_PORT), True)
+check("A Ngo : Chan May: border is off", _applies("bh", "border", "enter", ANGO_PORT), False)
+
+print("")
+print("the corridor walk did not change")
+vs = [v2("ql49", -5, -4), v2("xppl", 0, 2), v2("loading", 0.5, 1.5), v2("border", 5, 6),
+      v2("ql49", 8, 9), v2("port", 11, 13), v2("ql49", 15, 16), v2("border", 18, 19),
+      v2("xppl", 23, 24)]
+check("_match_cycle is _match_route along the corridor",
+      _match_cycle(vs, ROLES) == _match_route(vs, ROLES, DEFAULT_PATH), True)
+check("the QL49 before the mine is not this run's",
+      _match_cycle(vs, ROLES)[("fh", "ql49")]["enter"], T0 + timedelta(hours=8))
+
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))
 sys.exit(1 if FAIL else 0)

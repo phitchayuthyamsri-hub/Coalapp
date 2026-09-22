@@ -126,6 +126,7 @@
      neutral where every confirmed time is tinted, so the eye passes over
      it and lands on what was actually seen. */
   .t-est{color:#A6A6A6}
+  .t-na{color:var(--mut);font-size:10.5px;font-style:italic;opacity:.7}
   td.tel{white-space:nowrap}
   td.tel a{color:var(--acc);text-decoration:none;font-size:12px}
   td.tel a:hover{text-decoration:underline}
@@ -302,6 +303,8 @@ function trailLink(plate){
 }
 
 function cellHtml(c, planDay){
+  // A place this truck's route does not go (22/09/2026) - not a missing time.
+  if (c.na) return '<span class="t-na" title="Not on the route this truck runs">off route</span>';
   if (c.actual){
     const d = c.delay;
     if (d === null || d === undefined || Math.abs(d) <= TOL)
@@ -447,6 +450,7 @@ function drawTrack(){
     + '<span><b class="t-late">14:24 +2.2 h</b> <i>late</i></span>'
     + '<span><b class="t-est">~14:24</b> <i>estimate, not confirmed</i></span>'
     + '<span><b style="color:var(--mut)">&mdash;</b> <i>nothing planned or seen</i></span>'
+    + '<span><b class="t-na">off route</b> <i>not a place on the route this truck runs</i></span>'
     + '</div>';
   // Going home the truck runs port, QL49, border, mine, so the cells are read
   // back to front on the back-haul - the same reversal the headings get.
@@ -474,6 +478,7 @@ function drawTrack(){
   // late ones" is the question, and a menu of fifty-eight distinct times is
   // not an answer to it.
   const stateOf = c => {
+    if (c.na) return 'off route';
     if (c.actual){
       const g = c.delay;
       if (g === null || g === undefined || Math.abs(g) <= TOL) return 'on time';
