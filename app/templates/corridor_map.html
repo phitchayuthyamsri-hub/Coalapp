@@ -108,7 +108,18 @@ function ensureMap(box){
   // is drawn where it is - hollow, so it still reads as off the road.
   const bounds = {north: box.n, south: box.s, east: box.e, west: box.w};
   MAP = new google.maps.Map($('#map'), {
-    mapTypeControl: false, streetViewControl: false, fullscreenControl: true
+    // Map or Satellite (user 22/09/2026), remembered per browser: satellite
+    // shows the yard, the queue and the road surface the map tiles do not.
+    mapTypeControl: true,
+    mapTypeControlOptions: {mapTypeIds: ['roadmap', 'hybrid'],
+      style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+      position: google.maps.ControlPosition.TOP_LEFT},
+    mapTypeId: (function(){ try { return localStorage.getItem('coal.mapType') || 'roadmap'; }
+                            catch (e) { return 'roadmap'; } })(),
+    streetViewControl: false, fullscreenControl: true
+  });
+  MAP.addListener('maptypeid_changed', function(){
+    try { localStorage.setItem('coal.mapType', MAP.getMapTypeId()); } catch (e) {}
   });
   MAP.fitBounds(bounds);
   INFO = new google.maps.InfoWindow();
