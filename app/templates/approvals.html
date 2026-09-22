@@ -102,7 +102,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 <header>
   <div><h1>Managers</h1>
     <div class="sub">approval page &mdash; what the supervisor sent, and what the GPS
-      says about it</div></div>
+      says about it</div>
+    <div class="sub" id="gpsAt"></div></div>
   <div class="spacer"></div>
   <a href="/ops">Operations</a>
   <a href="/logout" style="color:var(--mut)">Log out</a>
@@ -169,6 +170,11 @@ function draw(){
   const total = lists.reduce((n, l) => n + l.rows.length, 0);
   const differs = lists.reduce((n, l) =>
     n + l.rows.filter(r => r.state === 'applied' && r.differs.length).length, 0);
+  // Which GPS picture the evidence column is: the supervisor's, pulled with
+  // the declaration - this page never pulls its own.
+  $('#gpsAt').textContent = d.gps_taken_at
+    ? 'GPS as the supervisor pulled it, ' + d.gps_taken_at
+    : 'GPS not pulled yet — it comes with the supervisor opening this day.';
   $('#stats').innerHTML =
       '<div><b>' + waiting + '</b>waiting on you</div>'
     + '<div><b>' + lists.length + '</b>' + (lists.length === 1 ? 'company' : 'companies') + '</div>'

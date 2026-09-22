@@ -16,10 +16,16 @@ from . import engine
 from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
                      MonitorRemark, ActivityEvent,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
-                     PlanSetting, RouteLeg, PlanSnapshot, Notice)
+                     PlanSetting, RouteLeg, PlanSnapshot, Notice,
+                     MineArrival, GpsSnapshot)
 from . import readiness_import
 from . import geofence
+from . import actuals
 from .models import Route as _Route
+from collections import namedtuple
+
+# The four columns of a ping the Monitor's on-the-road estimate reads.
+_Ping = namedtuple("_Ping", "plate dt lat lng")
 from . import planner
 
 bp = Blueprint("shift", __name__, url_prefix="/api/shift")
@@ -177,6 +183,19 @@ CHECK_SPEC = {
     "arrive_port":   ("port",    "enter", "arrived at Chan May Port"),
     "unload_done":   ("port",    "exit",  "finished unloading at port"),
     "depart_ql49":   ("ql49",    "exit",  "departed QL49"),
+}
+
+# The stamped event each shift check reads (22/09/2026). The checks used to
+# find their own evidence - the first visit at the place in the window - while
+# the table beside them walked the loop mine-first, so the counters and the
+# table could disagree about the same truck. Both read the same stamps now.
+CHECK_EVENTS = {
+    "arrive_mine":   ("fh", "xppl",    "enter"),
+    "load_done":     ("fh", "loading", "exit"),
+    "depart_border": ("fh", "border",  "exit"),
+    "arrive_port":   ("fh", "port",    "enter"),
+    "unload_done":   ("bh", "port",    "exit"),
+    "depart_ql49":   ("fh", "ql49",    "exit"),
 }
 
 CYCLE_SPAN = timedelta(days=3)   # a loop runs 48h, 72h if the QL49 window is used
@@ -477,23 +496,58 @@ def _shift_deadline(day, shift):
     return end - LOCAL_OFFSET
 
 
-def _visits_and_roles():
+# How far before `since` the pings are read (21/09/2026). A visit already
+# running when the window opens is then built from inside it, so its enter
+# lands before `since` and the caller drops it, exactly as it would have from
+# the whole history - rather than appearing to START at the window's edge.
+VISIT_LEAD = timedelta(days=1)
+
+# One result per (window, state of the ping table, zones, deactivated trucks).
+# The GPS cron adds pings every five minutes; between runs every page asking
+# gets the same visits, so building them again only made each page wait.
+_VISIT_MEMO = {}
+
+
+def _visits_and_roles(since=None):
     """Every geofence visit the GPS supports, and which anchor plays which role.
 
     Built the same way /api/visits builds them, so a check answered here and a
     visit listed there can never disagree.
+
+    `since` is for callers that only look at visits entered from then on: the
+    pings are read from VISIT_LEAD before it instead of from the beginning of
+    time. Visits entered before `since` are NOT reliable in that answer and a
+    caller passing it must not use them. Without it, the whole history.
     """
     # Through geofence, so a zone is the versioned zone: a ping is judged by
     # the shape in force when it was captured, and a change never rewrites
     # what Monitor already showed.
     anchors = geofence.for_engine()
     roles = geofence.roles()
-    pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
-              "speed": p.speed, "status": p.status}
-             for p in GpsPing.query.order_by(GpsPing.dt).all()]
-    deactivated = {engine.norm_plate(t.plate) for t in
-                   Truck.query.filter_by(status="deactivated").all()}
-    return engine.build_visits(pings, anchors, deactivated), roles
+    deactivated = frozenset(engine.norm_plate(t.plate) for t in
+                            Truck.query.filter_by(status="deactivated").all())
+    q = db.session.query(GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
+                         GpsPing.speed, GpsPing.status)
+    cut = (since - VISIT_LEAD) if since is not None else None
+    if cut is not None:
+        q = q.filter(GpsPing.dt >= cut)
+    stamp = db.session.query(db.func.max(GpsPing.id), db.func.count(GpsPing.id))
+    if cut is not None:
+        stamp = stamp.filter(GpsPing.dt >= cut)
+    key = (cut, tuple(stamp.one()), repr(anchors), deactivated)
+    hit = _VISIT_MEMO.get(key)
+    if hit is None:
+        # Columns, not ORM objects: building tens of thousands of GpsPing
+        # instances cost more than the geofence work itself.
+        pings = [{"plate": r[0], "dt": r[1], "lat": r[2], "lng": r[3],
+                  "speed": r[4], "status": r[5]}
+                 for r in q.order_by(GpsPing.dt).all()]
+        hit = engine.build_visits(pings, anchors, deactivated)
+        if len(_VISIT_MEMO) > 8:
+            _VISIT_MEMO.clear()
+        _VISIT_MEMO[key] = hit
+    # Copies, so a caller annotating a visit cannot change the next caller's.
+    return [dict(v) for v in hit], roles
 
 
 def _content_hash(list_id):
@@ -930,6 +984,9 @@ def upload():
          % (_dmy(day), len(rows), len(overlap)))
     _restate(dl)
     db.session.commit()
+    # The supervisor pulling the declaration pulls the GPS with it.
+    if _role() in GPS_PULLERS:
+        _take_gps_snapshot(day, retake=True)
 
     s = db.session.get(Subcontractor, sub_id) if sub_id else None
     return jsonify(
@@ -1790,19 +1847,22 @@ def track():
     phones = {engine.norm_plate(t.plate): (t.phone or "").strip()
               for t in Truck.query.all()}
 
-    visits, roles = _visits_and_roles()
+    # The actuals are READ, not worked out (22/09/2026): the GPS job stamps
+    # each one once, after every pull, and a stamped time is permanent. This
+    # page no longer rebuilds a single visit.
+    roles = geofence.roles()
     lo, _hi = _day_bounds(day)
-    seen_anchor = {v["anchor_id"] for v in visits}
-    by_plate_visits = {}
-    for v in visits:
-        if v["enter"] < lo or v["enter"] > lo + CYCLE_SPAN:
-            continue
-        by_plate_visits.setdefault(engine.norm_plate(v["plate"]), []).append(v)
+    seen_anchor = actuals.seen_anchor_ids()
+    stamped = actuals.stamps_for(day)
 
+    # Only for the "on the road" estimate of a truck with nothing stamped yet:
+    # where each truck last was, in this run's window. Columns, not objects.
     last_ping = {}
-    for g in GpsPing.query.filter(GpsPing.dt >= lo,
-                                  GpsPing.dt <= lo + CYCLE_SPAN).order_by(GpsPing.dt).all():
-        last_ping[engine.norm_plate(g.plate)] = g
+    for pl, dt, la, ln in (db.session.query(GpsPing.plate, GpsPing.dt,
+                                            GpsPing.lat, GpsPing.lng)
+                           .filter(GpsPing.dt >= lo, GpsPing.dt <= lo + CYCLE_SPAN)
+                           .order_by(GpsPing.dt).all()):
+        last_ping[engine.norm_plate(pl)] = _Ping(pl, dt, la, ln)
 
     home = RouteLeg.query.filter_by(leg_key="mine_border").first()
     to_mine = list(reversed(home.points or [])) if home else []
@@ -1830,18 +1890,12 @@ def track():
     for plate in sorted(by_plate.keys()):
         p = by_plate.get(plate)
         plan = (p or {}).get("t") or {}
-        vs = sorted(by_plate_visits.get(engine.norm_plate(plate), []),
-                    key=lambda x: x["enter"])
+        pkey = engine.norm_plate(plate)
 
-        # Mine first. The cycle's actuals begin at the truck's arrival at the
-        # mine and are walked forward from there - see _match_cycle. Until the
-        # mine is seen, every later place is an estimate, however many visits
-        # the window holds: those belong to the loop before.
-        matched = _match_cycle(vs, roles)
-
+        # Mine first, as the stamps were made - see actuals and _match_cycle.
+        # Until the mine is stamped every later place is an estimate.
         def pick(role, edge, leg):
-            v = matched.get((leg, role))
-            return (v.get(edge) or v.get("enter")) if v else None
+            return stamped.get((pkey, leg, role, edge))
 
         last_seen = None
         for key, label, field, role, edge in LOC_FH + LOC_BH:
@@ -2816,6 +2870,75 @@ def _road_segment(vs, roles, by_id, at):
     return "%s > %s" % (name(last), name(nxt)), step
 
 
+# ── the day's GPS picture, pulled once (22/09/2026) ─────────────────────────
+# The supervisor pulls the declared trucks, and the GPS is pulled with them:
+# one picture of where every truck was, saved. The supervisor's page shows it
+# and the manager's page shows the SAME one, so a manager decides on what the
+# supervisor saw rather than on a newer, different answer. It is taken again
+# only when the supervisor pulls again (an upload), and never once a list for
+# the day is confirmed - that decision's evidence stays as it was.
+
+GPS_PULLERS = ("supervisor", "admin")
+
+
+def _day_confirmed(day):
+    return DailyList.query.filter_by(list_date=day, state="confirmed").first() is not None
+
+
+def _take_gps_snapshot(day, retake=False):
+    """The day's picture: the saved one, or a new pull when there is none -
+    or when `retake`, unless the day is confirmed."""
+    snap = GpsSnapshot.query.filter_by(day=day).first()
+    if snap is not None and (not retake or _day_confirmed(day)):
+        return snap
+    data = _gps_view(day, None)
+    if snap is None:
+        snap = GpsSnapshot(day=day)
+        db.session.add(snap)
+    snap.data = data
+    snap.taken_at = datetime.utcnow()
+    snap.taken_by = getattr(current_user, "username", "") or ""
+    db.session.commit()
+    return snap
+
+
+def _snapshot_view(snap, only):
+    """The saved picture, narrowed to one company the way _gps_view narrows:
+    a company's fleet is whatever is on its most recent list."""
+    data = dict(snap.data or {})
+    rows = list(data.get("rows") or [])
+    if only is not None:
+        dl = (DailyList.query.filter_by(subcontractor_id=only)
+              .order_by(DailyList.list_date.desc()).first())
+        if dl:
+            keys = {r.key for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+            rows = [r for r in rows if engine.norm_plate(r["plate"]) in keys]
+    seen = sum(1 for r in rows if r.get("seen_at"))
+    data.update(rows=rows, subcontractor_id=only, trucks=len(rows), seen=seen,
+                unseen=len(rows) - seen, taken_at=_fmt(snap.taken_at),
+                taken_by=snap.taken_by or "", frozen=_day_confirmed(snap.day))
+    return data
+
+
+@bp.get("/gps")
+@login_required
+def gps_snapshot():
+    """The supervisor's page's GPS: the day's saved picture. Opening the day
+    with none yet pulls it - for the supervisor only; anyone else is told
+    it has not been pulled."""
+    day = request.args.get("date") or (
+        datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    only = _req_sub_id()
+    snap = GpsSnapshot.query.filter_by(day=day).first()
+    if snap is None and _role() in GPS_PULLERS:
+        snap = _take_gps_snapshot(day)
+    if snap is None:
+        return jsonify(date=day, rows=[], trucks=0, seen=0, unseen=0,
+                       taken_at=None, pending=True,
+                       note="The GPS is pulled when the supervisor opens this day.")
+    return jsonify(**_snapshot_view(snap, only))
+
+
 def _gps_view(day, only):
     """The GPS answer for every truck, shared by the declaration page and the
     approval page. One computation, so what a subcontractor is offered and what
@@ -2823,10 +2946,10 @@ def _gps_view(day, only):
     anchors = Anchor.query.all()
     roles = {a.role: a.id for a in anchors if a.role}
     by_id = {a.id: a for a in anchors}
-    visits, _r = _visits_and_roles()
-
     lo, _hi = _day_bounds(day)
     window_start = lo - CYCLE_SPAN
+    # Only visits entered since window_start are used below.
+    visits, _r = _visits_and_roles(since=window_start)
 
     # A position older than 24 hours is treated as no position at all: the
     # truck shows "no GPS", with no stale place offered in its stead.
@@ -2955,8 +3078,11 @@ def approvals():
         datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id()
 
+    # The supervisor's picture, exactly as the supervisor saw it - this page
+    # never pulls the GPS itself (22/09/2026).
+    gsnap = GpsSnapshot.query.filter_by(day=day).first()
     gps = {engine.norm_plate(r["plate"]): r
-           for r in _gps_view(day, None)["rows"]}
+           for r in ((gsnap.data or {}).get("rows", []) if gsnap else [])}
     subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
 
     q = DailyList.query.filter_by(list_date=day)
@@ -3019,7 +3145,9 @@ def approvals():
         })
     total_waiting = sum(o["waiting"] for o in out)
     return jsonify(date=day, lists=out, waiting=total_waiting,
-                   role=_role(), may_decide=_role() in ("manager", "planner", "admin"))
+                   role=_role(), may_decide=_role() in ("manager", "planner", "admin"),
+                   gps_taken_at=_fmt(gsnap.taken_at) if gsnap else None,
+                   gps_taken_by=(gsnap.taken_by or "") if gsnap else "")
 
 
 @bp.post("/list/amend/request")
@@ -3686,30 +3814,23 @@ def board():
             checks=[], list_state=dl.state, role=_role(),
         )
 
-    visits, roles = _visits_and_roles()
+    # Read from the stamps the Monitor table reads (22/09/2026), so the two
+    # can no longer disagree, and no visit is rebuilt to answer.
+    roles = geofence.roles()
     deadline = _shift_deadline(day, shift)
     overdue = datetime.utcnow() >= deadline
 
     # A checkpoint we have never once observed is blind, not failing. Never let a
     # blind checkpoint report trucks as 'missed' - that manufactures alarms.
-    seen_anchor = {v["anchor_id"] for v in visits}
+    seen_anchor = actuals.seen_anchor_ids()
+    stamped = actuals.stamps_for(day)
 
-    by_plate_visits = {}
-    for v in visits:
-        by_plate_visits.setdefault(engine.norm_plate(v["plate"]), []).append(v)
-
-    def evidence(plate, role_name, edge):
-        aid = roles.get(role_name)
-        if not aid:
+    def evidence(plate, code):
+        ev = CHECK_EVENTS.get(code)
+        if not ev:
             return None
-        for v in sorted(by_plate_visits.get(engine.norm_plate(plate), []),
-                        key=lambda x: x["enter"]):
-            if v["anchor_id"] != aid:
-                continue
-            if v["enter"] < lo or v["enter"] > lo + CYCLE_SPAN:
-                continue
-            return v.get(edge) or v.get("enter")
-        return None
+        leg, role, edge = ev
+        return stamped.get((engine.norm_plate(plate), leg, role, edge))
 
     out_checks = []
     for chk in checks:
@@ -3719,7 +3840,7 @@ def board():
 
         done, pending, missed, unverified = [], [], [], []
         for plate in expected:
-            when = evidence(plate, role_name, edge) if role_name else None
+            when = evidence(plate, chk.code) if role_name else None
             if when:
                 done.append({"plate": plate, "at": _fmt(when)})
             elif blind:
@@ -3812,12 +3933,15 @@ def _today_by_company(day, now):
     lo, _hi = _day_bounds(day)
     grace = timedelta(minutes=ON_TIME_MINUTES)
 
-    visits, roles = _visits_and_roles()
+    # Read from the mine arrivals the GPS job records (22/09/2026) - an arrival
+    # once seen is a fact and is not worked out again. A mine arrival is looked
+    # for from 12 hours before the planned time, and planned times fall on
+    # `day`; a day back covers that with room to spare.
+    roles = geofence.roles()
     mine_id = roles.get("xppl")
     mine_enters = {}
-    for v in visits:
-        if v.get("anchor_id") == mine_id and v.get("enter"):
-            mine_enters.setdefault(engine.norm_plate(v["plate"]), []).append(v["enter"])
+    for m in MineArrival.query.filter(MineArrival.at >= lo - timedelta(days=1)).all():
+        mine_enters.setdefault(m.key, []).append(m.at)
 
     anchors = [a for a in Anchor.query.all() if a.polygon]
     last_ping = {}

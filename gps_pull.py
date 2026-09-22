@@ -48,6 +48,17 @@ def main():
                 print("no providers enabled")
             for r in results:
                 print(r)
+        # Write down what the new pings settle (22/09/2026): the Monitor's
+        # actual times and the mine arrivals, blanks only - a time already
+        # written is permanent. The pages read these instead of rebuilding
+        # every visit. A failure here must never cost the pull itself.
+        try:
+            from app import actuals
+            print("stamped", actuals.stamp_recent())
+        except Exception as e:                      # noqa: BLE001
+            from app.models import db
+            db.session.rollback()
+            print("stamping failed:", repr(e))
 
 
 if __name__ == "__main__":

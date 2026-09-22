@@ -574,3 +574,67 @@ class PlanSnapshot(db.Model):
     note = db.Column(db.String(300), default="")
     rows = db.Column(db.JSON)        # the planned loops, exactly as issued
     figures = db.Column(db.JSON)     # every planning figure in force that day
+
+
+# ── what the GPS has already said, kept (22/09/2026) ────────────────────────
+# The pages used to rebuild every visit from every ping on every load, so a
+# time already seen was worked out again, and again, and could in principle
+# come out different. What has been observed is now written down once and
+# read back: the GPS job fills what is still blank, and nothing overwrites
+# what is filled.
+
+class ActualStamp(db.Model):
+    """One observed time on the Monitor: this truck, this run day, this event.
+
+    An event is (leg, role, edge) - "fh, border, exit" is Crosses. Written
+    once by the GPS job and permanent from then on. A time the truck has not
+    finished making - leaving a zone it is still inside - is not written until
+    it has left, because the last ping inside is not yet the exit.
+    """
+    __tablename__ = "actual_stamp"
+    __table_args__ = (db.UniqueConstraint("day", "key", "leg", "role", "edge",
+                                          name="uq_actual_stamp"),)
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.String(10), index=True, nullable=False)   # Monitor's run day
+    key = db.Column(db.String(40), index=True, nullable=False)   # normalised plate
+    leg = db.Column(db.String(2), nullable=False)                # fh / bh
+    role = db.Column(db.String(20), nullable=False)              # xppl, border, ...
+    edge = db.Column(db.String(5), nullable=False)               # enter / exit
+    at = db.Column(db.DateTime, nullable=False)                  # local time, as pings
+    stamped_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MineArrival(db.Model):
+    """A truck entering the mine, as the GPS saw it. Permanent once written.
+
+    The Managers page asks whether each planned truck reached the mine around
+    its planned time; this is the record it reads instead of rebuilding
+    visits."""
+    __tablename__ = "mine_arrival"
+    __table_args__ = (db.UniqueConstraint("key", "at", name="uq_mine_arrival"),)
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(40), index=True, nullable=False)
+    at = db.Column(db.DateTime, index=True, nullable=False)
+
+
+class AnchorSeen(db.Model):
+    """A Location the GPS has seen at least one truck inside. A checkpoint
+    never seen is 'blind', and a blind checkpoint cannot report a truck as
+    missed. Once seen, always seen."""
+    __tablename__ = "anchor_seen"
+    anchor_id = db.Column(db.Integer, primary_key=True)
+    first_at = db.Column(db.DateTime)
+
+
+class GpsSnapshot(db.Model):
+    """Where every truck was, as pulled when the supervisor pulled the day's
+    declaration. The supervisor's page and the manager's page both read this
+    one picture, so the manager decides on exactly what the supervisor saw.
+    Taken again when the supervisor pulls again; never once a list for the
+    day is confirmed."""
+    __tablename__ = "gps_snapshot"
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.String(10), unique=True, nullable=False)
+    taken_at = db.Column(db.DateTime, default=datetime.utcnow)   # UTC
+    taken_by = db.Column(db.String(80), default="")
+    data = db.Column(db.JSON, default=dict)                      # _gps_view(day, None)

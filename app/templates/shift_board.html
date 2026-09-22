@@ -818,14 +818,18 @@ function companiesOnDay(day){
   return (r && r.companies) || [];
 }
 
+let GPSAT = {};
 async function loadList(){
   // The GPS answer comes WITH the list: drawn together, so a late GPS reply can
   // never redraw the table over a reason somebody is typing.
   const [list, gps] = await Promise.all([
     jget('/api/shift/list?date=' + $('#day').value + subQ()),
-    jget('/api/shift/suggest?date=' + $('#day').value).catch(() => ({rows: []}))
+    // The day's GPS picture, pulled once with the declaration and saved - the
+    // manager sees this same one. Not re-pulled on every open (22/09/2026).
+    jget('/api/shift/gps?date=' + $('#day').value).catch(() => ({rows: []}))
   ]);
   LIST = list;
+  GPSAT = gps || {};
   attachGps(LIST, gps);
   let [cls, text] = BANNER[LIST.state] || BANNER.none;
   let extra = '';
@@ -861,6 +865,8 @@ async function loadList(){
     extra = '';
     cls = 'b-none';
   }
+  if (GPSAT.taken_at)
+    extra += ' · GPS as of ' + GPSAT.taken_at + (GPSAT.frozen ? ' (locked)' : '');
   $('#listBanner').className = 'banner ' + cls;
   $('#listBanner').textContent = text + extra;
 
