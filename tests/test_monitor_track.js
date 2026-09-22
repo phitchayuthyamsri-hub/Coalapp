@@ -247,6 +247,18 @@ try {
       return (store['track'].innerHTML.match(/<td class="c-no">(\d+)<\/td>/g) || [])
         .map(s => s.replace(/\D/g, '')).join(',');
     })(), '1');
+
+  // Typing a time into a cell (22/09/2026): the parser behind the right-click box.
+  const pw = html.match(/function parseWhen[\s\S]*?\n}/)[0];
+  vm.runInContext(pw, sandbox);
+  is('"22/09 22:14" is a full time', sandbox.parseWhen('22/09 22:14', '2026-09-22T00:00'), '2026-09-22T22:14');
+  is('"22:14" alone takes the day of the cell', sandbox.parseWhen('22:14', '2026-09-23T05:14'), '2026-09-23T22:14');
+  is('a year can be given', sandbox.parseWhen('01/10/2026 06:30', '2026-09-22T00:00'), '2026-10-01T06:30');
+  is('words are not a time', sandbox.parseWhen('noon', '2026-09-22T00:00'), null);
+  is('a typed time is marked and named',
+     (function(){ vm.runInContext("TV.filters = {}; TV.sortSeq = []; TRACK.rows.find(r => r.plate === '20C10615').fh[0].by = 'mon'; drawTrack();", sandbox);
+        const h = store['track'].innerHTML; vm.runInContext("TRACK.rows.find(r => r.plate === '20C10615').fh[0].by = ''; drawTrack();", sandbox);
+        return /class="t-hand" title="entered by mon"/.test(h); })(), true);
 } catch (e) {
   console.log('  RENDERER THREW: ' + e.message);
   fail++;

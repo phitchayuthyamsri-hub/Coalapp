@@ -139,6 +139,11 @@
      it and lands on what was actually seen. */
   .t-est{color:#A6A6A6}
   .t-na{color:var(--mut);font-size:10.5px;font-style:italic;opacity:.7}
+  /* A time a person typed in (22/09/2026): marked, and named on hover. */
+  .t-hand{color:var(--acc);font-size:9px;margin-left:3px;vertical-align:super}
+  td.ac.can-type{cursor:context-menu}
+  .ac-in{width:104px;background:#0c1523;color:var(--txt);border:1px solid var(--acc);
+         border-radius:5px;padding:2px 5px;font:inherit;font-size:11.5px}
   /* One table per route (22/09/2026), under its name, folding away. */
   .rt-grp{margin:0 0 14px}
   .rt-head{display:flex;align-items:baseline;gap:10px;background:none;border:none;
@@ -323,6 +328,24 @@ function trailLink(plate){
     + '">◎ trail</a>';
 }
 
+// "22/09 22:14", "22/09/2026 22:14" or "22:14" (on ref's day) -> "2026-09-22T22:14";
+// null when it is not a time.
+function parseWhen(v, ref){
+  const t = String(v || '').trim();
+  if (!t) return null;
+  let m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\s+(\d{1,2}):(\d{2})$/.exec(t);
+  let y, mo, da, h, mi;
+  if (m){
+    da = +m[1]; mo = +m[2]; y = m[3] ? +m[3] : +String(ref).slice(0, 4); h = +m[4]; mi = +m[5];
+  } else if ((m = /^(\d{1,2}):(\d{2})$/.exec(t))){
+    y = +String(ref).slice(0, 4); mo = +String(ref).slice(5, 7); da = +String(ref).slice(8, 10);
+    h = +m[1]; mi = +m[2];
+  } else return null;
+  if (h > 23 || mi > 59 || mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+  const p = n => (n < 10 ? '0' : '') + n;
+  return y + '-' + p(mo) + '-' + p(da) + 'T' + p(h) + ':' + p(mi);
+}
+
 function cellHtml(c, planDay){
   // A place this truck's route does not go (22/09/2026) - not a missing time.
   if (c.na) return '<span class="t-na" title="Not on the route this truck runs">off route</span>';
@@ -330,11 +353,13 @@ function cellHtml(c, planDay){
     // Day first, as the plan and the estimate already read (user 22/09/2026):
     // a run crosses midnight, and 22:14 alone does not say which side.
     const when = '<span class="t-dm">' + dm(c.actual) + '</span> ' + clock(c.actual);
+    // Typed in by a person rather than seen by the GPS: marked, and named.
+    const hand = c.by ? '<span class="t-hand" title="entered by ' + esc(c.by) + '">&#9998;</span>' : '';
     const d = c.delay;
     if (d === null || d === undefined || Math.abs(d) <= TOL)
-      return '<b class="t-ok">' + when + '</b>';
+      return '<b class="t-ok">' + when + '</b>' + hand;
     const cls = d < 0 ? 't-early' : 't-late';
-    return '<b class="' + cls + '">' + when + '</b>'
+    return '<b class="' + cls + '">' + when + '</b>' + hand
       + ' <span class="' + cls + '" style="font-size:10.5px">'
       + (d < 0 ? '&minus;' : '+') + gap(d) + '</span>';
   }
@@ -608,7 +633,11 @@ function drawTrack(){
           return '<td class="pl">'
             + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
                       : '<span style="color:var(--mut)">&mdash;</span>')
-            + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>';
+            + '</td><td class="ac' + (d.may_edit_actual && !c.na ? ' can-type' : '') + '"'
+            + ' data-plate="' + esc(r.plate) + '" data-leg="' + LEG + '" data-cell="' + esc(c.key) + '"'
+            + ' data-when="' + esc(c.actual || c.estimate || c.plan || '') + '"'
+            + (d.may_edit_actual && !c.na ? ' title="Right-click to enter a time"' : '') + '>'
+            + cellHtml(c, dayOf(c.plan)) + '</td>';
         }).join('')
       + '</tr>';
   };
@@ -648,6 +677,45 @@ function drawTrack(){
         + d.not_planned_count + ' approved truck(s) are not in the issued plan, so they '
         + 'are not watched here: ' + esc((d.not_planned || []).join(', ')) + '</div>' : '');
   document.querySelectorAll('#track .track-tbl').forEach(t => TV.wire(t));
+  // Right-click an actual cell to type the time (monitoring team, admin).
+  // "dd/mm HH:MM", or just "HH:MM" on the day the cell already shows; blank
+  // clears a typed time. Esc leaves it as it was.
+  if (d.may_edit_actual) document.querySelectorAll('#track td.ac.can-type').forEach(function(td){
+    td.addEventListener('contextmenu', function(ev){
+      ev.preventDefault();
+      if (td.querySelector('.ac-in')) return;
+      const was = td.innerHTML, ref = td.dataset.when;
+      const inp = document.createElement('input');
+      inp.className = 'ac-in';
+      inp.placeholder = 'dd/mm HH:MM';
+      inp.value = ref ? dm(ref) + ' ' + clock(ref) : '';
+      td.innerHTML = '';
+      td.appendChild(inp);
+      inp.focus(); inp.select();
+      let done = false;
+      const finish = async function(save){
+        if (done) return;
+        done = true;
+        if (!save){ td.innerHTML = was; return; }
+        const at = parseWhen(inp.value, ref || (TRACK.date + 'T00:00'));
+        if (inp.value.trim() && !at){ inp.style.borderColor = 'var(--bad)'; done = false; inp.focus(); return; }
+        try {
+          const r = await fetch('/api/shift/track/actual', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({date: TRACK.date, plate: td.dataset.plate,
+                                  leg: td.dataset.leg, cell: td.dataset.cell, at: at || ''})});
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || 'Could not save');
+          await loadTrack();
+        } catch (e) { alert(e.message || 'Could not save the time'); td.innerHTML = was; }
+      };
+      inp.addEventListener('keydown', function(e){
+        if (e.key === 'Enter'){ e.preventDefault(); finish(true); }
+        if (e.key === 'Escape'){ e.preventDefault(); finish(false); }
+      });
+      inp.addEventListener('blur', function(){ finish(true); });
+    });
+  });
   document.querySelectorAll('#track .rt-head').forEach(function(b){
     b.onclick = function(){
       const grp = b.parentNode, name = grp.dataset.route;
