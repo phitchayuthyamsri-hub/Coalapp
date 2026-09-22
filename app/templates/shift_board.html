@@ -501,8 +501,10 @@ function drawRows(){
       + '<td style="color:var(--mut);font-size:12px">' + esc(r.location||'') + '</td>'
       + '<td><input type="date" class="r-adate" data-i="'+i+'" value="'+esc(r.arrive_date)+'" '
         + '' + (timeEditable?'':' disabled') + '></td>'
-      + '<td><input type="time" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
-        + '' + (timeEditable?'':' disabled') + '>'
+      + '<td><input type="text" class="r-arrive" data-i="'+i+'" value="'+esc(r.arrive)+'" '
+        + 'placeholder="HH:MM" maxlength="5" inputmode="numeric" title="24-hour clock, HH:MM"'
+        + ' style="width:62px;font-variant-numeric:tabular-nums"'
+        + (timeEditable?'':' disabled') + '>'
         + (missing ? '<div class="needwhy">BH with no arrival — cannot be planned</div>' : '')
         + '</td>'
       // Declared by the company, read-only here: the supervisor decides from
@@ -534,7 +536,40 @@ function drawRows(){
       + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
       + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
   TV.wire(document.getElementById('listTable'));
+  // What is typed is tidied to HH:MM on the 24-hour clock: "6:5" and "0605"
+  // become 06:05; anything that is not a time is refused and cleared, so a
+  // value that reaches the server is always one the planner can read.
+  document.querySelectorAll('#listTable .r-arrive').forEach(function(inp){
+    inp.addEventListener('change', function(){
+      const t = normTime24(inp.value);
+      if (inp.value.trim() && t === null){
+        inp.style.borderColor = 'var(--bad)';
+        inp.title = '"' + inp.value + '" is not a time - use HH:MM on the 24-hour clock';
+        inp.value = '';
+        return;
+      }
+      inp.style.borderColor = '';
+      inp.title = '24-hour clock, HH:MM';
+      inp.value = t || '';
+    });
+  });
   measureFreeze();
+}
+
+// "6:5", "06:05", "0605", "6.05", "18h30" -> "06:05" / "18:30"; null if it is
+// not a time of day. 24:00 is not a time.
+function normTime24(v){
+  const t = String(v || '').trim();
+  let h, mi;
+  let m = /^(\d{3,4})$/.exec(t);                   // 605, 0605, 1830
+  if (m){ h = parseInt(t.slice(0, -2), 10); mi = parseInt(t.slice(-2), 10); }
+  else if ((m = /^(\d{1,2})\s*[:.hH]\s*(\d{1,2})$/.exec(t))){   // 6:5, 06.05, 18h30
+    h = parseInt(m[1], 10); mi = parseInt(m[2], 10);
+  }
+  else if ((m = /^(\d{1,2})$/.exec(t))){ h = parseInt(m[1], 10); mi = 0; }   // 6 -> 06:00
+  else return null;
+  if (h > 23 || mi > 59) return null;
+  return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
 }
 
 // The declared table as a picture (22/09/2026): the sheet as the company

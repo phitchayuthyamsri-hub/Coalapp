@@ -172,6 +172,21 @@ try {
       const h = store['listBody'].innerHTML;
       return (h.match(/<td class="c-no">(\d+)<\/td>/g) || []).join(',');
     })(), '<td class="c-no">1</td>,<td class="c-no">2</td>');
+
+  // The arrival time is a 24-hour HH:MM box (user 22/09/2026), not the
+  // browser's own time control, which draws 12:00 AM on an English Windows.
+  is('the arrival box is plain text, not the locale time control',
+     /<input type="text" class="r-arrive"/.test(html) && !/type="time"/.test(html), true);
+  const fn = html.match(/function normTime24[\s\S]*?\n}/)[0];
+  vm.runInContext(fn, sandbox);
+  is('"6:5" tidies to 06:05', sandbox.normTime24('6:5'), '06:05');
+  is('"0605" too', sandbox.normTime24('0605'), '06:05');
+  is('"605" too', sandbox.normTime24('605'), '06:05');
+  is('an hour alone is on the hour', sandbox.normTime24('6'), '06:00');
+  is('"18h30" too', sandbox.normTime24('18h30'), '18:30');
+  is('midnight is 00:00', sandbox.normTime24('0:00'), '00:00');
+  is('24:00 is not a time', sandbox.normTime24('24:00'), null);
+  is('words are not a time', sandbox.normTime24('noon'), null);
 } catch (e) {
   console.log('  RENDERER THREW: ' + e.message);
   fail++;
