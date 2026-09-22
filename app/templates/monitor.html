@@ -127,6 +127,15 @@
      it and lands on what was actually seen. */
   .t-est{color:#A6A6A6}
   .t-na{color:var(--mut);font-size:10.5px;font-style:italic;opacity:.7}
+  /* One table per route (22/09/2026), under its name, folding away. */
+  .rt-grp{margin:0 0 14px}
+  .rt-head{display:flex;align-items:baseline;gap:10px;background:none;border:none;
+      color:var(--txt);font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;
+      padding:6px 2px;position:sticky;left:0}
+  .rt-head .rt-caret{display:inline-block;width:12px;color:var(--acc);transition:transform .12s}
+  .rt-grp.shut .rt-caret{transform:rotate(-90deg)}
+  .rt-head .rt-meta{font-weight:400;font-size:11.5px;color:var(--mut)}
+  .rt-grp.shut .rt-body{display:none}
   td.tel{white-space:nowrap}
   td.tel a{color:var(--acc);text-decoration:none;font-size:12px}
   td.tel a:hover{text-decoration:underline}
@@ -141,16 +150,16 @@
      offset instead, and the sortable headers were shoved a hundred pixels down
      the table, over the trucks. Sticky is positioned too, so the arrow still
      has something to hang off. */
-  #trackTable th.hd{cursor:pointer;position:sticky;padding-right:15px}
-  #trackTable th.hd.sub2{padding-right:12px}
-  #trackTable th.hd.sub2 .harrow{right:2px;font-size:8px}
-  #trackTable th.hd:hover{background:#1d2a44}
-  #trackTable th.filt-on{color:var(--acc)}
-  #trackTable th.filt-on .harrow{color:var(--acc)}
-  #trackTable .harrow{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  .track-tbl th.hd{cursor:pointer;position:sticky;padding-right:15px}
+  .track-tbl th.hd.sub2{padding-right:12px}
+  .track-tbl th.hd.sub2 .harrow{right:2px;font-size:8px}
+  .track-tbl th.hd:hover{background:#1d2a44}
+  .track-tbl th.filt-on{color:var(--acc)}
+  .track-tbl th.filt-on .harrow{color:var(--acc)}
+  .track-tbl .harrow{position:absolute;right:4px;top:50%;transform:translateY(-50%);
                       font-size:9px;color:var(--mut)}
-  #trackTable .hl{display:block}
-  #trackTable .hsort{margin-left:4px;color:var(--acc);font-size:9px}
+  .track-tbl .hl{display:block}
+  .track-tbl .hsort{margin-left:4px;color:var(--acc);font-size:9px}
   .col-menu{position:absolute;z-index:10000;background:var(--panel);
             border:1px solid var(--line);border-radius:10px;width:250px;
             box-shadow:0 12px 34px rgba(0,0,0,.55);display:flex;flex-direction:column;
@@ -360,8 +369,11 @@ const TRACK_FREEZE = [
   {col: 'remark', cell: 'rmk'}
 ];
 function applyTrackFreeze(){
-  const tbl = document.getElementById('trackTable');
+  document.querySelectorAll('#track .track-tbl').forEach(freezeOne);
+}
+function freezeOne(tbl){
   if (!tbl || !tbl.tHead || !tbl.tHead.rows || !tbl.tHead.rows.length) return;
+  if (!tbl.offsetParent) return;          // a folded route: nothing to measure
   tbl.querySelectorAll('.frz').forEach(el => { el.classList.remove('frz', 'frz-last'); el.style.left = ''; });
   const head = Array.from(tbl.tHead.rows[0].cells);
   const pinned = [];        // [{cls, th}], in column order, only while contiguous from the left
@@ -503,9 +515,7 @@ function drawTrack(){
     {key:'plate', label:'Truck',         rowspan:2},
     {key:'phone', label:'Phone',         rowspan:2, get: r => r.phone || ''},
     {key:'sub',   label:'Sub',           rowspan:2, get: r => r.sub || ''},
-    // The run this truck is declared onto. Not r.route - that is the way home
-    // the planner chose for this loop.
-    {key:'routename', label:'Route',      rowspan:2, get: r => r.route_name || ''},
+    // The route is the table's own heading now (22/09/2026), not a column.
     {key:'remark', label:'Team remark',  rowspan:2,
      get: r => remarkOf(r).text || '',
      fget: r => (remarkOf(r).text ? 'has remark' : 'blank')}
@@ -538,56 +548,105 @@ function drawTrack(){
   const view = TV.view(d.rows);
   const hidden = d.rows.length - view.length;
 
-  $('#track').innerHTML = key +
-    '<table class="grid" id="trackTable"><thead>'
-    // Spans both header rows, so it sits with the other identifying columns
-    // rather than taking a Plan/Actual sub-heading it has no use for.
-    + '<tr>' + noHead2() + idCols.map(c => TV.head(c)).join('')
-    + locs.map(l => '<th colspan="2" class="loc">' + esc(l.label) + '</th>').join('')
-    + '</tr>'
-    + '<tr>' + placeCols.map(c => TV.head(c)).join('')
-    + '</tr></thead><tbody>'
-    + view.map(function(i, n){
-        const r = d.rows[i];
-        return (function(r){
-        const cs = cellsOf(r);
-        const where = r.last_seen
-          ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
-            + clock(r.last_seen.at) + '</span>'
-          : (r.enroute
-             ? '<span style="color:var(--blind)">on the road</span> '
-               + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
-             : '<span style="color:var(--mut)">not seen</span>');
-        const rm = remarkOf(r);
-        return '<tr>' + rowNo(n) + '<td class="where">' + where + trailLink(r.plate) + '</td>'
-          + '<td class="plate">' + esc(r.plate) + '</td>'
-          + '<td class="tel">' + phoneCell(r) + '</td>'
-          + '<td class="c-sub" style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
-          + '<td class="c-route">' + (r.route_name ? esc(r.route_name)
-              : '<span style="color:var(--mut)">—</span>') + '</td>'
-          + '<td class="rmk"><input class="rmk-in" maxlength="300"'
-            + ' data-plate="' + esc(r.plate) + '"'
-            + ' value="' + esc(rm.text || '') + '"'
-            + (rm.by ? ' title="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
-            + ' placeholder="note for the team…"></td>'
-          + cs.map(c => '<td class="pl">'
-              + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
-                        : '<span style="color:var(--mut)">&mdash;</span>')
-              + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>').join('')
-          + '</tr>';
-        })(r);
-      }).join('')
-    + '</tbody></table>'
+  // One table per route (22/09/2026). Each shows only the places its route
+  // goes, so a route that starts at A Ngo is not found by scrolling past five
+  // columns of "off route". Filters and sorting are shared: set once, they
+  // hold in every table.
+  const order = (d.route_order || []);
+  const nameOf = r => r.route_name || 'No route';
+  const groups = {};
+  view.forEach(function(i){
+    const n = nameOf(d.rows[i]);
+    (groups[n] = groups[n] || []).push(i);
+  });
+  // A route whose trucks are all filtered out keeps its heading, so a filter
+  // does not make a route look empty of work.
+  d.rows.forEach(function(r){ groups[nameOf(r)] = groups[nameOf(r)] || []; });
+  const names = Object.keys(groups).sort(function(a, b){
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return ((ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)) || a.localeCompare(b);
+  });
+  let shut = [];
+  try { shut = JSON.parse(localStorage.getItem('monitor.shutRoutes') || '[]'); } catch (e) {}
+
+  const rowHtml = function(r, n, cols){
+    const cs = cellsOf(r);
+    const where = r.last_seen
+      ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
+        + clock(r.last_seen.at) + '</span>'
+      : (r.enroute
+         ? '<span style="color:var(--blind)">on the road</span> '
+           + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'
+         : '<span style="color:var(--mut)">not seen</span>');
+    const rm = remarkOf(r);
+    return '<tr>' + rowNo(n) + '<td class="where">' + where + trailLink(r.plate) + '</td>'
+      + '<td class="plate">' + esc(r.plate) + '</td>'
+      + '<td class="tel">' + phoneCell(r) + '</td>'
+      + '<td class="c-sub" style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
+      + '<td class="rmk"><input class="rmk-in" maxlength="300"'
+        + ' data-plate="' + esc(r.plate) + '"'
+        + ' value="' + esc(rm.text || '') + '"'
+        + (rm.by ? ' title="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
+        + ' placeholder="note for the team…"></td>'
+      + cols.map(function(j){
+          const c = cs[j];
+          return '<td class="pl">'
+            + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
+                      : '<span style="color:var(--mut)">&mdash;</span>')
+            + '</td><td class="ac">' + cellHtml(c, dayOf(c.plan)) + '</td>';
+        }).join('')
+      + '</tr>';
+  };
+
+  const tables = names.map(function(name, g){
+    const idx = groups[name];
+    const all = d.rows.filter(r => nameOf(r) === name);
+    // A place is a column of this table when any of its trucks goes there.
+    const cols = locs.map((l, j) => j).filter(j => all.some(r => !cellsOf(r)[j].na));
+    const late = all.filter(r => (r.drift || 0) > TOL).length;
+    const meta = all.length + (all.length === 1 ? ' truck' : ' trucks')
+      + (late ? ' &middot; <span class="t-late">' + late + ' running late</span>' : '')
+      + (idx.length < all.length
+         ? ' &middot; ' + (all.length - idx.length) + ' hidden by a filter' : '');
+    const pc = [];
+    cols.forEach(function(j){ pc.push(placeCols[2 * j], placeCols[2 * j + 1]); });
+    return '<div class="rt-grp' + (shut.indexOf(name) >= 0 ? ' shut' : '')
+      + '" data-route="' + esc(name) + '">'
+      + '<button class="rt-head" type="button"><span class="rt-caret">▾</span>'
+      + esc(name) + ' <span class="rt-meta">' + meta + '</span></button>'
+      + '<div class="rt-body">'
+      + (idx.length
+         ? '<table class="grid track-tbl" id="trackTable' + g + '"><thead>'
+           + '<tr>' + noHead2() + idCols.map(c => TV.head(c)).join('')
+           + cols.map(j => '<th colspan="2" class="loc">' + esc(locs[j].label) + '</th>').join('')
+           + '</tr><tr>' + pc.map(c => TV.head(c)).join('') + '</tr></thead><tbody>'
+           + idx.map((i, n) => rowHtml(d.rows[i], n, cols)).join('')
+           + '</tbody></table>'
+         : '<div class="empty">Every truck on this route is hidden by a filter.</div>')
+      + '</div></div>';
+  }).join('');
+
+  $('#track').innerHTML = key + tables
     + (hidden > 0 ? '<div class="empty" style="margin-top:6px">' + hidden
         + ' truck(s) hidden by a filter.</div>' : '')
     + (d.not_planned_count ? '<div class="empty" style="margin-top:6px">'
         + d.not_planned_count + ' approved truck(s) are not in the issued plan, so they '
         + 'are not watched here: ' + esc((d.not_planned || []).join(', ')) + '</div>' : '');
-  TV.wire(document.getElementById('trackTable'));
+  document.querySelectorAll('#track .track-tbl').forEach(t => TV.wire(t));
+  document.querySelectorAll('#track .rt-head').forEach(function(b){
+    b.onclick = function(){
+      const grp = b.parentNode, name = grp.dataset.route;
+      grp.classList.toggle('shut');
+      shut = shut.filter(x => x !== name);
+      if (grp.classList.contains('shut')) shut.push(name);
+      try { localStorage.setItem('monitor.shutRoutes', JSON.stringify(shut)); } catch (e) {}
+      applyTrackFreeze();
+    };
+  });
   applyTrackFreeze();
   // A remark saves when the writer leaves the box; the answer comes back with
   // the writer's name on it so the next shift knows who to ask.
-  document.querySelectorAll('#trackTable .rmk-in').forEach(function(inp){
+  document.querySelectorAll('#track .rmk-in').forEach(function(inp){
     inp.addEventListener('change', async function(){
       try {
         const r = await fetch('/api/shift/track/remark', {method: 'POST',

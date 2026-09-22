@@ -32,7 +32,8 @@ const sandbox = {
   fetch: () => Promise.resolve({json: () => Promise.resolve({}), ok:true}),
   setTimeout, clearTimeout, setInterval: () => 0, Date, Math, JSON, Set, Object, Array,
   requestAnimationFrame: fn => fn(), encodeURIComponent, navigator: {},
-  localStorage: {getItem(){return null},setItem(){}},
+  localStorage: (function(){ const m = {}; return {getItem: k => (k in m ? m[k] : null),
+    setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; }}; })(),
   location: {search:'', hash:''}, history: {replaceState(){}},
   addEventListener(){}, removeEventListener(){}, alert(){}, confirm(){return true},
 };
@@ -112,10 +113,10 @@ try {
      out.indexOf('data-col="fh:mine:plan"') >= 0, true);
   is('so is Actual', out.indexOf('data-col="fh:port:act"') >= 0, true);
   is('sub-headers keep their own class', /class="hd sub2"/.test(out), true);
-  // Six identifying columns now - Route joined them on 20/09 - plus the row
-  // number that sits with them.
+  // Five identifying columns plus the row number. Route was a column from
+  // 20/09 to 22/09; it is each table's own heading now.
   is('the id columns still span both header rows',
-     (out.match(/rowspan="2"/g) || []).length, 7);
+     (out.match(/rowspan="2"/g) || []).length, 6);
   is('the default order follows the corridor, mine first',
      plates(), ['20H00717','20C10770','20C10615','20H00715']);
   is('a place off the truck route reads "off route", not a dash',
@@ -189,6 +190,40 @@ try {
      four.indexOf('>Leaves port<') < four.indexOf('>Back at mine<'), true);
   // Put the four-row fixture back: the checks below count its rows.
   vm.runInContext("TRACK.rows = __rows0; TRACK.locations = __locs0; LEG = 'fh'; drawTrack();", sandbox);
+
+
+  // ── one table per route (22/09/2026) ────────────────────────────────────
+  // Each route is its own table under its own name, showing only the places
+  // that route goes; the heading folds the table away.
+  const NA = {plan:null, actual:null, delay:null, estimate:null, na:true};
+  const g0 = JSON.parse(JSON.stringify(ROWS));
+  g0[0].route_name = 'Mine : Chan May'; g0[1].route_name = 'Mine : Chan May';
+  g0[2].route_name = 'A Ngo : Chan May'; g0[3].route_name = 'A Ngo : Chan May';
+  g0[0].fh[2] = {plan:'2026-09-09T19:00', actual:null, delay:null, estimate:null};
+  // The A Ngo trucks never go to the mine or the border.
+  g0[2].fh[0] = NA; g0[2].fh[1] = NA; g0[3].fh[0] = NA; g0[3].fh[1] = NA;
+  vm.runInContext("TRACK.rows = " + JSON.stringify(g0)
+    + "; TRACK.route_order = ['Mine : Chan May', 'Mine : A Ngo', 'A Ngo : Chan May'];"
+    + " TV.filters = {}; TV.sortSeq = []; LEG = 'fh'; drawTrack();", sandbox);
+  const grp = store['track'].innerHTML;
+  is('one table per route', (grp.match(/class="grid track-tbl"/g) || []).length, 2);
+  is('each under its route name, in route order',
+     grp.indexOf('data-route="Mine : Chan May"') >= 0
+     && grp.indexOf('data-route="Mine : Chan May"') < grp.indexOf('data-route="A Ngo : Chan May"'), true);
+  is('the heading counts its trucks', /Mine : Chan May <span class="rt-meta">2 trucks/.test(grp), true);
+  const tbls = grp.split('class="grid track-tbl"');
+  is('the Chan May table has all four places', (tbls[1].match(/class="loc"/g) || []).length, 4);
+  is('the A Ngo table has only the two it goes to', (tbls[2].match(/class="loc"/g) || []).length, 2);
+  is('...so no "off route" padding in it', tbls[2].indexOf('off route') < 0, true);
+  is('there is no Route column any more', grp.indexOf('data-col="routename"') < 0, true);
+  is('rows are numbered within their own route',
+     (grp.match(/<td class="c-no">(\d+)<\/td>/g) || []).map(s => s.replace(/\D/g, '')).join(','),
+     '1,2,1,2');
+  is('a route heading folds its table', /<button class="rt-head"/.test(grp), true);
+  vm.runInContext("localStorage.setItem('monitor.shutRoutes', JSON.stringify(['A Ngo : Chan May'])); drawTrack();", sandbox);
+  is('...and a folded route stays folded on redraw',
+     /class="rt-grp shut" data-route="A Ngo : Chan May"/.test(store['track'].innerHTML), true);
+  vm.runInContext("localStorage.removeItem('monitor.shutRoutes'); TRACK.rows = __rows0; delete TRACK.route_order; drawTrack();", sandbox);
 
   // ── the No# column ───────────────────────────────────────────────────────
   // This header is two rows deep. The number belongs with the identifying

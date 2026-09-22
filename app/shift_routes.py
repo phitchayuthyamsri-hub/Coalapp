@@ -2040,6 +2040,8 @@ def track():
     return jsonify(
         date=day, subcontractor_id=only, source=source, issued=issued,
         remarks=remarks,
+        # The page draws one table per route, in the order routes were made.
+        route_order=[x.name for x in _Route.query.order_by(_Route.id).all()],
         # Named rather than dropped: approved, not dispatched, and the reason is
         # almost always a missing arrival time on the sheet.
         not_planned=not_planned, not_planned_count=len(not_planned),
