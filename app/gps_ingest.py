@@ -349,20 +349,66 @@ class _NothingDue(Exception):
 
 
 def _provider_key(name):
-    """The fleet's provider name ("Viettel", "TCT") as a connector key."""
+    """A provider's name, however written ("api:tct2", "Viettel"), as a rank
+    key. The second TCT account is TCT."""
     n = str(name or "").strip().lower()
-    if not n:
-        return ""
     for k in ("adsun", "viettel", "tct"):
         if k in n:
             return k
     return n
 
 
+# Who to believe when two providers report the same plate (user 22/09/2026:
+# "always priority on TCT first, Viettel has low reliability"). Twenty-three
+# plates are on both accounts, and the two positions can be 100 km apart at
+# the same minute - one of them is another vehicle wearing the number. TCT's
+# word stands wherever TCT has spoken recently; Viettel only fills in for a
+# plate TCT has gone quiet on, so a dead TCT box does not silence a truck.
+PROVIDER_PRIORITY = ("tct", "adsun", "viettel")
+PRIORITY_FRESH_H = 24
+
+
+def _outranked_by(key):
+    """The provider keys that outrank this one."""
+    if key not in PROVIDER_PRIORITY:
+        return tuple(PROVIDER_PRIORITY)
+    return PROVIDER_PRIORITY[:PROVIDER_PRIORITY.index(key)]
+
+
+def _fresh_from(keys, plates, now=None):
+    """Plates (normalised) with a stored position from any of `keys` in the
+    last PRIORITY_FRESH_H hours. Ping times are local (UTC+7)."""
+    if not keys or not plates:
+        return set()
+    now = now or (datetime.utcnow() + _TZ_OFFSET)
+    since = now - timedelta(hours=PRIORITY_FRESH_H)
+    likes = ["api:" + k + "%" for k in keys]
+    q = (db.session.query(GpsPing.plate)
+         .filter(GpsPing.dt >= since, GpsPing.plate.in_(list(plates)))
+         .filter(db.or_(*[GpsPing.source.like(x) for x in likes]))
+         .distinct())
+    return {_norm_plate(r[0]) for r in q.all()}
+
+
+def foreign_to(pings, source, now=None):
+    """The pings in `pings` a better provider has already spoken for.
+
+    A ping from `source` for a plate that a higher-ranked provider has
+    positioned in the last PRIORITY_FRESH_H hours is the other vehicle's,
+    and is dropped."""
+    key = _provider_key(source)
+    above = _outranked_by(key)
+    if not above or not pings:
+        return []
+    raw = {p.get("plate") for p in pings}
+    taken = _fresh_from(above, raw, now)
+    return [p for p in pings if _norm_plate(p.get("plate")) in taken]
+
+
 def registered_providers():
-    """{normalised plate: connector key} for every truck whose GPS provider
-    the fleet names. A plate the fleet does not name, or names without a
-    provider, is not in here."""
+    """{normalised plate: provider key} as the fleet register has it. Kept
+    for the pages that name a truck's provider; the ingest no longer decides
+    by it - TCT outranks by rule, see PROVIDER_PRIORITY."""
     from .models import Truck
     out = {}
     for t in Truck.query.all():
@@ -372,32 +418,10 @@ def registered_providers():
     return out
 
 
-def foreign_to(pings, source, registered=None):
-    """The pings in `pings` that this source has no business reporting.
-
-    Two providers both list the same plate (22/09/2026): 23 of them, and the
-    positions are of different vehicles - one on the corridor, one 100 km
-    away at the same minute. The fleet register says which provider each
-    truck really carries; a position for that plate from any OTHER provider
-    is a different vehicle wearing the same number, and is dropped here
-    rather than drawn as a journey nobody made.
-    """
-    registered = registered_providers() if registered is None else registered
-    src = _provider_key(source)
-    if src == "tct2":
-        src = "tct"
-    out = []
-    for p in pings:
-        want = registered.get(_norm_plate(p.get("plate")))
-        if want and want != src:
-            out.append(p)
-    return out
-
-
 def _store(pings, source):
     """Insert new pings, skipping (plate, dt) duplicates already stored for this
     source (idempotent — safe to re-poll overlapping windows). A position for
-    a plate the fleet registers with another provider is not stored."""
+    a plate a better provider has spoken for is not stored (foreign_to)."""
     if not pings:
         return 0
     foreign = foreign_to(pings, source)
@@ -814,17 +838,18 @@ def _stored_trail(plate, begin, end):
     from .models import GpsPing
     from . import engine as _eng
     key = _eng.norm_plate(plate)
-    # Only the truck's own provider (22/09/2026): another provider's rows for
-    # this plate are another vehicle - see foreign_to.
-    want = registered_providers().get(key, "")
-    rows = (GpsPing.query
-            .filter(GpsPing.dt >= begin, GpsPing.dt <= end)
-            .order_by(GpsPing.dt.asc()).all())
+    rows = [r for r in (GpsPing.query
+                        .filter(GpsPing.dt >= begin, GpsPing.dt <= end)
+                        .order_by(GpsPing.dt.asc()).all())
+            if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)]
+    # The best provider that spoke in this range, alone (22/09/2026): the
+    # other provider's rows for this plate are another vehicle.
+    present = {_provider_key(r.source) for r in rows}
+    best = next((k for k in PROVIDER_PRIORITY if k in present), None)
+    if best:
+        rows = [r for r in rows if _provider_key(r.source) == best]
     return [{"dt": r.dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": r.lat, "lng": r.lng,
-             "speed": r.speed or 0.0}
-            for r in rows
-            if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)
-            and (not want or _provider_key(r.source) in (want, want + "2"))]
+             "speed": r.speed or 0.0} for r in rows]
 
 
 def fetch_trail(app, source, plate, begin, end):
