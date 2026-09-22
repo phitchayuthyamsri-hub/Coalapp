@@ -138,6 +138,15 @@ with app.app_context():
     check("home is A Ngo", t["back_ango"], t["back"])
     check("no border on this loop", t["arrive_border"], None)
 
+    print("\na week rolls a truck round its route again and again")
+    with app.test_request_context():
+        wk = sr._week_data(DAY, None, True)
+    loops = sorted(r["t"]["arrive_mine"] for r in wk["rows"] if r["plate"] == "20C10615")
+    check("Mine : A Ngo turns several loops in the week", len(loops) >= 4, True)
+    check("...each starting after the last came home", loops == sorted(set(loops)), True)
+    backs = [r["t"]["back"] for r in wk["rows"] if r["plate"] == "20C10615"]
+    check("...and each loop has its own way home", len(set(backs)), len(backs))
+
     print("\nthe Monitor reads these")
     with app.app_context():
         pass

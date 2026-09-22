@@ -479,13 +479,16 @@ def plan_route_loops(arrivals, stops, cfg=None):
     out = plan_route_trucks(arrivals, stops, cfg, direction="out")
     home_stops = [sid for sid in reversed(stops[:-1])
                   if cond.get(sid, {}).get("role") != "loading"]
-    starts = [(r["plate"], r["finish"]) for r in out]
+    # One truck can be in here several times - the week rolls a truck's next
+    # loop from the end of its last - so the way home is keyed per LOOP, not
+    # per plate, or a truck's second loop would take its first one's way home.
+    starts = [("%s#%d" % (r["plate"], i), r["finish"]) for i, r in enumerate(out)]
     home = {h["plate"]: h for h in
             plan_route_trucks(starts, home_stops, cfg, direction="back", work=False)}
     loops = []
-    for r in out:
-        h = home.get(r["plate"]) or {"stops": [], "waits": {}, "notes": [],
-                                     "finish": r["finish"], "complete": False}
+    for i, r in enumerate(out):
+        h = home.get("%s#%d" % (r["plate"], i)) or {
+            "stops": [], "waits": {}, "notes": [], "finish": r["finish"], "complete": False}
         waits = dict(r["waits"])
         for k, v in h["waits"].items():
             waits["home_" + k] = v
