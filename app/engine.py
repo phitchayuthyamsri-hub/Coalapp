@@ -232,12 +232,13 @@ def build_visits(pings, anchors, deactivated=None, now=None):
     (see anchor_at). The dwell threshold is the one in force when the visit
     opened.
 
-    `now` (ping clock, UTC+7) is how long an OPEN visit has lasted: a truck
-    seen inside at 22:14 and nowhere since has been there until now, not for
-    the zero seconds between its first and last ping inside. Without it a
-    truck that had just arrived - one ping inside - failed the dwell and the
-    Monitor went on saying "on the road" until the provider sent a second
-    position (22/09/2026, 20H01397 at the mine). Left None, the old reading.
+    `now` (ping clock, UTC+7) says the caller is reading the live picture:
+    a stay still going then counts from its first ping inside - the truck is
+    there now - while a stay that has ended still has to have lasted the
+    dwell, so a drive-through is not a visit. Without it a truck that had
+    just arrived failed the dwell and the Monitor went on saying "on the
+    road" until the provider sent a second position (22/09/2026, 20H01397 at
+    the mine). Left None, the old reading, for the history views.
     """
     deactivated = deactivated or set()
     out = []
@@ -283,12 +284,17 @@ def build_visits(pings, anchors, deactivated=None, now=None):
                 last_in = current["pings_inside"][-1]
                 current["exit"] = last_in["dt"] if last_in else current["enter"]
                 current["open"] = True
-                held_to = current["exit"]
-                if now is not None and now > held_to:
-                    held_to = now
-                dur = (held_to - current["enter"]).total_seconds() * 1000
-                if not (min_ms > 0 and dur < min_ms):
+                # With a clock, a stay still going counts from its first ping:
+                # the truck IS there, and the Monitor should say so within a
+                # minute or two, not after a dwell (user 22/09/2026). The
+                # dwell still judges stays that have ended, so a drive-through
+                # is not a visit. Without a clock, the old reading.
+                if now is not None:
                     out.append(current)
+                else:
+                    dur = (current["exit"] - current["enter"]).total_seconds() * 1000
+                    if not (min_ms > 0 and dur < min_ms):
+                        out.append(current)
 
     for v in out:
         v["ping_count"] = len(v.get("pings_inside", []))

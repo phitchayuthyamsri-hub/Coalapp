@@ -35,10 +35,8 @@ inside = {"plate": "20H01397", "dt": T, "lat": 15.7506, "lng": 106.6935, "speed"
 
 v = engine.build_visits([outside, inside], [ZONE])
 check("without a clock, one ping inside is not yet a visit", len(v), 0)
-v = engine.build_visits([outside, inside], [ZONE], now=T + timedelta(minutes=2))
-check("two minutes in, still not (it may be passing through)", len(v), 0)
-v = engine.build_visits([outside, inside], [ZONE], now=T + timedelta(minutes=8))
-check("eight minutes in and nowhere else since: at the mine", len(v), 1)
+v = engine.build_visits([outside, inside], [ZONE], now=T + timedelta(minutes=1))
+check("read live, one minute in: at the mine already", len(v), 1)
 check("...since the ping that saw it there", v[0]["enter"] if v else None, T)
 check("...and still open", v[0]["open"] if v else None, True)
 left = {"plate": "20H01397", "dt": T + timedelta(minutes=3), "lat": 15.93, "lng": 106.64, "speed": 40, "status": ""}

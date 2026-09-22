@@ -479,8 +479,12 @@ def _store(pings, source):
 
 
 # How often a truck is worth asking about, in minutes.
-INSIDE_MIN = 5      # in a polygon: loading, crossing, queueing - changes fast
-OUTSIDE_MIN = 30    # between them: driving a known road, position ages slowly
+# Asked every minute inside a zone and every five on the road (22/09/2026):
+# the Monitor is to show an arrival within a minute or two, and the old
+# thirty minutes between asks on the road was where a truck "went silent"
+# for the last hour of its run to the mine. The job itself runs every minute.
+INSIDE_MIN = 1      # in a polygon: loading, crossing, queueing - changes fast
+OUTSIDE_MIN = 5     # between them: driving a known road
 
 
 def _anchor_polys():
