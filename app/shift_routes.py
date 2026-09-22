@@ -593,7 +593,8 @@ def _visits_and_roles(since=None):
         pings = [{"plate": r[0], "dt": r[1], "lat": r[2], "lng": r[3],
                   "speed": r[4], "status": r[5]}
                  for r in q.order_by(GpsPing.dt).all()]
-        hit = engine.build_visits(pings, anchors, deactivated)
+        hit = engine.build_visits(pings, anchors, deactivated,
+                                  now=datetime.utcnow() + LOCAL_OFFSET)
         if len(_VISIT_MEMO) > 8:
             _VISIT_MEMO.clear()
         _VISIT_MEMO[key] = hit

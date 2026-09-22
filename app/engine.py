@@ -222,7 +222,7 @@ def anchor_at(anchor, dt):
     return cur.get("polygon"), (cur.get("min_dwell_min", 5) or 0)
 
 
-def build_visits(pings, anchors, deactivated=None):
+def build_visits(pings, anchors, deactivated=None, now=None):
     """
     pings:   [{plate, dt(datetime), lat, lng, speed, status}]
     anchors: [{id, name, polygon, min_dwell_min, versions?, retired_at?}]
@@ -231,6 +231,13 @@ def build_visits(pings, anchors, deactivated=None):
     Each ping is tested against the zone AS IT WAS when the ping was captured
     (see anchor_at). The dwell threshold is the one in force when the visit
     opened.
+
+    `now` (ping clock, UTC+7) is how long an OPEN visit has lasted: a truck
+    seen inside at 22:14 and nowhere since has been there until now, not for
+    the zero seconds between its first and last ping inside. Without it a
+    truck that had just arrived - one ping inside - failed the dwell and the
+    Monitor went on saying "on the road" until the provider sent a second
+    position (22/09/2026, 20H01397 at the mine). Left None, the old reading.
     """
     deactivated = deactivated or set()
     out = []
@@ -276,7 +283,10 @@ def build_visits(pings, anchors, deactivated=None):
                 last_in = current["pings_inside"][-1]
                 current["exit"] = last_in["dt"] if last_in else current["enter"]
                 current["open"] = True
-                dur = (current["exit"] - current["enter"]).total_seconds() * 1000
+                held_to = current["exit"]
+                if now is not None and now > held_to:
+                    held_to = now
+                dur = (held_to - current["enter"]).total_seconds() * 1000
                 if not (min_ms > 0 and dur < min_ms):
                     out.append(current)
 
