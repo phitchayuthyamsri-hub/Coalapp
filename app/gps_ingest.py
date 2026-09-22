@@ -348,11 +348,64 @@ class _NothingDue(Exception):
     """No truck is due this run - not an error, just nothing to ask for."""
 
 
+def _provider_key(name):
+    """The fleet's provider name ("Viettel", "TCT") as a connector key."""
+    n = str(name or "").strip().lower()
+    if not n:
+        return ""
+    for k in ("adsun", "viettel", "tct"):
+        if k in n:
+            return k
+    return n
+
+
+def registered_providers():
+    """{normalised plate: connector key} for every truck whose GPS provider
+    the fleet names. A plate the fleet does not name, or names without a
+    provider, is not in here."""
+    from .models import Truck
+    out = {}
+    for t in Truck.query.all():
+        k = _provider_key(t.gps_provider)
+        if k:
+            out[_norm_plate(t.plate)] = k
+    return out
+
+
+def foreign_to(pings, source, registered=None):
+    """The pings in `pings` that this source has no business reporting.
+
+    Two providers both list the same plate (22/09/2026): 23 of them, and the
+    positions are of different vehicles - one on the corridor, one 100 km
+    away at the same minute. The fleet register says which provider each
+    truck really carries; a position for that plate from any OTHER provider
+    is a different vehicle wearing the same number, and is dropped here
+    rather than drawn as a journey nobody made.
+    """
+    registered = registered_providers() if registered is None else registered
+    src = _provider_key(source)
+    if src == "tct2":
+        src = "tct"
+    out = []
+    for p in pings:
+        want = registered.get(_norm_plate(p.get("plate")))
+        if want and want != src:
+            out.append(p)
+    return out
+
+
 def _store(pings, source):
     """Insert new pings, skipping (plate, dt) duplicates already stored for this
-    source (idempotent — safe to re-poll overlapping windows)."""
+    source (idempotent — safe to re-poll overlapping windows). A position for
+    a plate the fleet registers with another provider is not stored."""
     if not pings:
         return 0
+    foreign = foreign_to(pings, source)
+    if foreign:
+        drop = {(p["plate"], p["dt"]) for p in foreign}
+        pings = [p for p in pings if (p["plate"], p["dt"]) not in drop]
+        if not pings:
+            return 0
     dts = [p["dt"] for p in pings]
     lo, hi = min(dts), max(dts)
     plates = list({p["plate"] for p in pings})
@@ -761,13 +814,17 @@ def _stored_trail(plate, begin, end):
     from .models import GpsPing
     from . import engine as _eng
     key = _eng.norm_plate(plate)
+    # Only the truck's own provider (22/09/2026): another provider's rows for
+    # this plate are another vehicle - see foreign_to.
+    want = registered_providers().get(key, "")
     rows = (GpsPing.query
             .filter(GpsPing.dt >= begin, GpsPing.dt <= end)
             .order_by(GpsPing.dt.asc()).all())
     return [{"dt": r.dt.strftime("%Y-%m-%d %H:%M:%S"), "lat": r.lat, "lng": r.lng,
              "speed": r.speed or 0.0}
             for r in rows
-            if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)]
+            if _eng.norm_plate(r.plate) == key and _sane_point(r.lat, r.lng)
+            and (not want or _provider_key(r.source) in (want, want + "2"))]
 
 
 def fetch_trail(app, source, plate, begin, end):
