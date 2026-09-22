@@ -356,17 +356,24 @@ def _store(pings, source):
     dts = [p["dt"] for p in pings]
     lo, hi = min(dts), max(dts)
     plates = list({p["plate"] for p in pings})
-    existing = set()
+    existing, blank = set(), {}
     for r in GpsPing.query.filter(GpsPing.source == source,
                                   GpsPing.dt >= lo, GpsPing.dt <= hi,
                                   GpsPing.plate.in_(plates)).all():
         existing.add((r.plate, r.dt))
+        if not (getattr(r, "address", "") or ""):
+            blank[(r.plate, r.dt)] = r
     n = 0
     for p in pings:
         if not _sane_point(p.get("lat"), p.get("lng")):
             continue                      # a glitch fix never enters the table
         key = (p["plate"], p["dt"])
         if key in existing:
+            # The same position again, and this time with an address the
+            # stored row lacks (rows from before addresses were kept, or a
+            # standing truck reporting the same fix): fill it in.
+            if p.get("address") and key in blank:
+                blank[key].address = p["address"]
             continue
         db.session.add(GpsPing(plate=p["plate"], dt=p["dt"], lat=p["lat"],
                                lng=p["lng"], speed=p.get("speed") or 0.0,
