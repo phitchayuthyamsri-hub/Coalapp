@@ -1086,6 +1086,23 @@ def _plan_row(r, label, sub_id, loop, from_plan):
     shapes is where a missed factor hides.
     """
     iso = lambda d: d.strftime("%Y-%m-%dT%H:%M") if d else None
+    if "t" in r:
+        # A loop planned along the truck's own route (22/09/2026): its times
+        # are already named. `arrive_mine` is where the run STARTS - the
+        # route's first stop, whatever that is - because every reader of a
+        # plan row anchors on it; `start_role` says what the place really is.
+        return {
+            "plate": r["plate"], "sub": label, "sub_id": sub_id,
+            "day": r["arrive_mine"].strftime("%Y-%m-%d"),
+            "loop": loop, "from_plan": from_plan,
+            "route": r["route"], "cycle_hours": r["cycle_hours"],
+            "route_name": r.get("route_name") or _plan_route_name(r["plate"]),
+            "start_role": r.get("start_role", ""), "start_name": r.get("start_name", ""),
+            "home_name": r.get("home_name", ""), "path": r.get("path", []),
+            "notes": r.get("notes", []), "complete": r.get("complete", True),
+            "total_wait": r["total_wait"], "waits": r["waits"],
+            "t": {k: iso(v) for k, v in r["t"].items()},
+        }
     # The QL49 gate wait is the only stop the planner reports as a duration
     # rather than a pair of timestamps; back out when the truck got there.
     ql_wait = r["waits"].get("ql49_gate", 0.0)
@@ -1097,6 +1114,7 @@ def _plan_row(r, label, sub_id, loop, from_plan):
         # The run this truck is declared onto. NOT "route" above, which is the
         # way home this loop takes - hue or ql49.
         "route_name": _plan_route_name(r["plate"]),
+        "start_role": "xppl", "start_name": "XPPL Mine", "home_name": "XPPL Mine",
         "total_wait": r["total_wait"], "waits": r["waits"],
         "t": {
             "arrive_mine": iso(r["arrive_mine"]),
@@ -1112,6 +1130,100 @@ def _plan_row(r, label, sub_id, loop, from_plan):
             "back": iso(r["arrive_mine_back"]),
         },
     }
+
+
+# ── each truck planned along its own route (22/09/2026) ─────────────────────
+# The corridor planner knows one loop: mine, border, QL49, port, home. A truck
+# on another route is handed to the route planner, which walks the route's
+# own stops out and back. Corridor trucks - no route, or a route that IS the
+# corridor - still go through the corridor planner unchanged, so nothing about
+# their plan moves.
+
+def _route_defs():
+    """{route_id: {name, stops, roles}} for routes with two or more stops the
+    GPS can recognise; and {plate key: route_id}."""
+    live = {a.id: (a.role or "") for a in Anchor.query.filter(Anchor.retired_at.is_(None)).all()}
+    names = {a.id: a.name for a in Anchor.query.all()}
+    defs = {}
+    for r in _Route.query.all():
+        stops = [i for i in (r.sequence or []) if i in live]
+        if len(stops) >= 2:
+            defs[r.id] = {"name": r.name, "stops": stops,
+                          "roles": [live[i] for i in stops],
+                          "names": [names[i] for i in stops]}
+    by_plate = {engine.norm_plate(t.plate): t.route_id
+                for t in Truck.query.all() if t.route_id in defs}
+    return defs, by_plate
+
+
+def _is_corridor(d):
+    return tuple(x for x in d["roles"] if x) == DEFAULT_PATH
+
+
+def _route_loop_row(lp, d):
+    """A route-planned loop in the corridor planner's row shape: the same
+    keys, the times named by the ROLE of the stop they happened at."""
+    t = {k: None for k in ("arrive_mine", "load_start", "load_end", "arrive_border",
+                           "cross_border", "ql49_arrive", "ql49_in", "arrive_port",
+                           "unload_start", "unload_end", "depart_port", "back",
+                           "arrive_ango", "ango_start", "ango_end", "back_ango",
+                           "depart_home")}
+    for st in lp["out"]:
+        role = st.get("role")
+        if role == "xppl":
+            t["arrive_mine"] = st["arrive"]
+        elif role == "loading":
+            t["load_start"], t["load_end"] = st["work_start"], st["work_end"]
+        elif role == "border":
+            t["arrive_border"], t["cross_border"] = st["arrive"], st["work_end"]
+        elif role == "ql49":
+            t["ql49_arrive"], t["ql49_in"] = st["arrive"], st["work_end"]
+        elif role == "port":
+            t["arrive_port"] = st["arrive"]
+            t["unload_start"], t["unload_end"] = st["work_start"], st["work_end"]
+            t["depart_port"] = st["work_end"]
+        elif role == "ango":
+            t["arrive_ango"] = st["arrive"]
+            t["ango_start"], t["ango_end"] = st["work_start"], st["work_end"]
+    # The mine's own loading area sits inside its stay: leaving the mine is
+    # leaving the loading area, as the corridor planner has it.
+    if t["arrive_mine"] is not None and t["load_end"] is None:
+        t["load_start"] = t["load_end"] = t["arrive_mine"]
+    t["depart_home"] = lp["finish"]
+    t["back"] = lp["back"]
+    if d["roles"] and d["roles"][0] == "ango":
+        t["back_ango"] = lp["back"]
+    # Where the run starts anchors every reader of a plan row.
+    if t["arrive_mine"] is None:
+        t["arrive_mine"] = lp["start"]
+    return {
+        "plate": lp["plate"], "arrive_mine": lp["start"],
+        "arrive_mine_back": lp["back"], "route": "",
+        "route_name": d["name"], "start_role": d["roles"][0],
+        "start_name": d["names"][0], "home_name": d["names"][0],
+        "path": d["names"], "notes": lp["notes"], "complete": lp["complete"],
+        "cycle_hours": lp["cycle_hours"], "total_wait": lp["total_wait"],
+        "waits": lp["waits"], "t": t,
+    }
+
+
+def _plan_all(arrivals, cfg):
+    """Every truck planned, each along its own route. Returns rows in the
+    corridor planner's shape (route loops carry a prebuilt `t`)."""
+    defs, by_plate = _route_defs()
+    corridor, by_route = [], {}
+    for plate, at in arrivals:
+        rid = by_plate.get(engine.norm_plate(plate))
+        if rid is None or _is_corridor(defs[rid]):
+            corridor.append((plate, at))
+        else:
+            by_route.setdefault(rid, []).append((plate, at))
+    out = planner.plan_trucks(corridor, cfg) if corridor else []
+    for rid, arr in by_route.items():
+        d = defs[rid]
+        for lp in planner.plan_route_loops(arr, d["stops"], cfg):
+            out.append(_route_loop_row(lp, d))
+    return out
 
 
 def _week_start(s):
@@ -1202,7 +1314,7 @@ def _week_data(start_arg, only, roll):
     horizon = datetime.strptime(days[-1], "%Y-%m-%d") + timedelta(days=1)
     gap = timedelta(hours=cfg.get("turn_gap_h", 0.0))
 
-    out = planner.plan_trucks(arrivals, cfg) if arrivals else []
+    out = _plan_all(arrivals, cfg) if arrivals else []
     if roll and arrivals:
         extra = []
         for _ in range(8):        # a 45 h cycle fits four loops in a week
@@ -1211,7 +1323,7 @@ def _week_data(start_arg, only, roll):
             if len(nxt) == len(extra):
                 break
             extra = nxt
-            out = planner.plan_trucks(arrivals + extra, cfg)
+            out = _plan_all(arrivals + extra, cfg)
     committed = set((p, t) for p, t in arrivals)
 
     rows = []
@@ -1309,7 +1421,7 @@ def _revision_data(day, only):
             no_time.append(r.plate)
 
     cfg = planner.load_config()
-    out = planner.plan_trucks(arrivals, cfg) if arrivals else []
+    out = _plan_all(arrivals, cfg) if arrivals else []
 
     rows, agg = [], {}
     for r in sorted(out, key=lambda x: x["arrive_mine"]):
@@ -1585,8 +1697,8 @@ LOC_FH = [
     # ends and A Ngo : Chan May begins. Not planned by the corridor planner,
     # so an actual with no promise; a truck whose route skips it shows "not
     # on route" here.
-    ("ango",     "At A Ngo",     None,         "ango",    "enter"),
-    ("ango_out", "Leaves A Ngo", None,         "ango",    "exit"),
+    ("ango",     "At A Ngo",     "arrive_ango", "ango",   "enter"),
+    ("ango_out", "Leaves A Ngo", "ango_end",    "ango",   "exit"),
     ("ql49",   "Enters QL49", "ql49_in",       "ql49",    "enter"),
     ("port",   "At port",     "arrive_port",   "port",    "enter"),
     ("unload", "Unloads",     "unload_start",  None,      None),
@@ -1597,7 +1709,7 @@ LOC_FH = [
 LOC_BH = [
     ("port",   "Leaves port",  "depart_port", "port",   "exit"),
     ("ql49",   "QL49",         None,          "ql49",   "enter"),
-    ("ango",   "A Ngo",        None,          "ango",   "enter"),
+    ("ango",   "A Ngo",        "back_ango",   "ango",   "enter"),
     ("border", "Border",       None,          "border", "enter"),
     ("mine",   "Back at mine", "back",        "xppl",   "enter"),
 ]
@@ -4087,6 +4199,12 @@ def _today_by_company(day, now):
         for k in sorted(planned, key=lambda x: planned[x]["plate"]):
             r = planned[k]
             item = {"plate": r["plate"], "planned": None}
+            if r.get("start_role") and r["start_role"] != "xppl":
+                # Its run starts elsewhere (A Ngo): the mine is not where it
+                # is due, so there is nothing to judge here.
+                item["elsewhere"] = r.get("start_name") or r["start_role"]
+                waiting.append(item)
+                continue
             try:
                 due = datetime.strptime((r.get("t") or {}).get("arrive_mine"),
                                         "%Y-%m-%dT%H:%M") - LOCAL_OFFSET

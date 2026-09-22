@@ -198,7 +198,15 @@ def leg_for(index, a_id, b_id, via=None):
     """
     opts = index.get((a_id, b_id))
     if not opts:
-        return None
+        # Measured the other way round only (22/09/2026). The road is the same
+        # length in both directions unless a via says otherwise, so the reverse
+        # leg answers - marked, so a plan can say the figure was borrowed.
+        back = index.get((b_id, a_id))
+        if not back:
+            return None
+        o = dict(back[0])
+        o["reverse"] = True
+        return o
     if via:
         want = str(via).strip().lower()
         for o in opts:
@@ -340,13 +348,20 @@ def plan_trucks(arrivals, cfg=None):
 # nothing - a leg worth zero hours is how a truck arrives before it left.
 
 
-def _stop_conditions(anchor_ids):
-    """What each stop says about itself, keyed by id."""
+def _stop_conditions(anchor_ids, cfg=None):
+    """What each stop says about itself, keyed by id.
+
+    The border carries the clearance figure (22/09/2026): paperwork takes its
+    hours before the gate window is even asked about, exactly as the corridor
+    planner counts it. It is a figure and not a Location field, so it is
+    attached here by role rather than read off the Location."""
     out = {}
+    clear_h = float((cfg or {}).get("clear_h", 0.0) or 0.0)
     for a in Anchor.query.filter(Anchor.id.in_(list(anchor_ids))).all():
         mins = a.loading_time_min
         out[a.id] = {
-            "name": a.name,
+            "name": a.name, "role": a.role or "",
+            "pass_h": clear_h if (a.role or "") == "border" else 0.0,
             "works": (a.loc_type or "") in ("load", "unload", "load_unload"),
             "work_h": (float(mins) / 60.0) if mins is not None else None,
             "bays": int(a.loading_bays) if a.loading_bays else 1,
@@ -356,8 +371,11 @@ def _stop_conditions(anchor_ids):
     return out
 
 
-def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
+def plan_route_trucks(arrivals, stops, cfg=None, direction="out", work=True):
     """Plan a set of trucks along one route's stops.
+
+    `work=False` walks the stops without loading or unloading at any of them -
+    the way home, where a place that loads on the way out is only passed.
 
     `arrivals` is [(plate, when it reaches the FIRST stop)] - which is the
     route's own beginning, not the mine. `direction` picks which of each
@@ -369,7 +387,7 @@ def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
     """
     cfg = cfg or load_config()
     index = legs_between(cfg)
-    cond = _stop_conditions(stops)
+    cond = _stop_conditions(stops, cfg)
     bays = {sid: Bays(cond.get(sid, {}).get("bays", 1)) for sid in stops}
     win_key = "win_back" if direction == "back" else "win_out"
     out = []
@@ -379,13 +397,17 @@ def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
              "notes": [], "direction": direction, "complete": True}
         t = arrive
         for i, sid in enumerate(stops):
-            c = cond.get(sid) or {"name": "(retired zone)", "works": False,
-                                  "work_h": None, "bays": 1, win_key: None}
-            row = {"anchor_id": sid, "name": c["name"], "arrive": t,
-                   "work_start": None, "work_end": None, "wait_h": 0.0}
+            c = cond.get(sid) or {"name": "(retired zone)", "role": "", "works": False,
+                                  "pass_h": 0.0, "work_h": None, "bays": 1, win_key: None}
+            row = {"anchor_id": sid, "name": c["name"], "role": c.get("role", ""),
+                   "arrive": t, "work_start": None, "work_end": None, "wait_h": 0.0}
             w = c.get(win_key)
             window = ((w[0], w[1]), (w[2], w[3])) if w else None
-            if c["works"]:
+            # Paperwork before the gate: the border's clearance hours.
+            if c.get("pass_h") and direction == "out":
+                t = t + timedelta(hours=c["pass_h"])
+                row["cleared"] = t
+            if c["works"] and work:
                 if c["work_h"] is None:
                     # The stop loads or unloads but nobody has said how long.
                     r["notes"].append("%s has no load/unload time" % c["name"])
@@ -419,6 +441,10 @@ def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
                                                      or {}).get("name", "?")))
                     r["complete"] = False
                     break            # stop here rather than teleport onward
+                if g.get("reverse"):
+                    r["notes"].append("%s to %s uses the leg measured the other way"
+                                      % (c["name"], (cond.get(stops[i + 1])
+                                                     or {}).get("name", "?")))
                 row["drive_h"] = round(g["hours"], 2)
                 row["drive_km"] = g["km"]
                 t = t + timedelta(hours=g["hours"])
@@ -429,3 +455,47 @@ def plan_route_trucks(arrivals, stops, cfg=None, direction="out"):
         r["drive_km"] = round(sum(s.get("drive_km", 0.0) for s in r["stops"]), 2)
         out.append(r)
     return out
+
+
+def plan_route_loops(arrivals, stops, cfg=None):
+    """One full loop per truck along a route: out through its stops, then home
+    back through them (22/09/2026).
+
+    The way home is the way out reversed, less the loading area (inside the
+    mine's stay, not a stop of its own) and less the far end, which is where
+    the truck turns. Nothing is loaded or unloaded on the way home; the gates
+    still have to be open, on their homeward windows. The corridor's own
+    backhaul choice (Hue road or QL49 by the cut-off) is the corridor
+    planner's and is not made here: a route's way home is its stops.
+
+    Each row carries `out` and `home` (the two walks), `start`, `finish`
+    (turned at the far end), `back` (home again) and `cycle_hours`.
+    """
+    cfg = cfg or load_config()
+    stops = list(stops or [])
+    if len(stops) < 2:
+        return []
+    cond = _stop_conditions(stops, cfg)
+    out = plan_route_trucks(arrivals, stops, cfg, direction="out")
+    home_stops = [sid for sid in reversed(stops[:-1])
+                  if cond.get(sid, {}).get("role") != "loading"]
+    starts = [(r["plate"], r["finish"]) for r in out]
+    home = {h["plate"]: h for h in
+            plan_route_trucks(starts, home_stops, cfg, direction="back", work=False)}
+    loops = []
+    for r in out:
+        h = home.get(r["plate"]) or {"stops": [], "waits": {}, "notes": [],
+                                     "finish": r["finish"], "complete": False}
+        waits = dict(r["waits"])
+        for k, v in h["waits"].items():
+            waits["home_" + k] = v
+        loops.append({
+            "plate": r["plate"], "start": r["start"], "finish": r["finish"],
+            "back": h["finish"], "out": r["stops"], "home": h["stops"],
+            "waits": waits, "total_wait": round(sum(waits.values()), 1),
+            "notes": r["notes"] + h["notes"],
+            "complete": r["complete"] and h["complete"],
+            "cycle_hours": round((h["finish"] - r["start"]).total_seconds() / 3600.0, 1),
+            "drive_km": round(r["drive_km"] + sum(x.get("drive_km", 0.0) for x in h["stops"]), 2),
+        })
+    return loops

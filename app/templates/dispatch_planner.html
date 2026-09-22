@@ -165,6 +165,7 @@
   .s-ql49{background-color:#f97316}
   .s-port{background-color:#0077be}
   .s-hue{background-color:#111827}
+  .s-ango{background-color:#eab308}
   /* Stopped, wherever it is standing. Colour alone would have lost the one
      thing this chart is for: seeing where the cycle goes. */
   /* Flat colour, no pattern. Where a truck is standing still is read from the
@@ -773,9 +774,10 @@ async function run(){
          + '</div>';
 
   $('#body').innerHTML = warn
-    + '<table><thead><tr>' + noHead() + '<th>Truck</th><th>Sub</th><th>Route</th><th>At mine</th><th>Load</th>'
-    + '<th>Leaves mine</th><th>At border</th><th>Crosses</th><th>Enters QL49</th>'
-    + '<th>At port</th><th>Unloads</th><th>Leaves port</th><th>Back at mine</th>'
+    + '<table><thead><tr>' + noHead() + '<th>Truck</th><th>Sub</th><th>Route</th>'
+    // The same list the cells are drawn from, so a column added to one cannot
+    // slip out from under the other.
+    + TCOLS.map(c => '<th>' + c[0] + '</th>').join('')
     + '<th>Home</th><th>Cycle</th><th>Waiting</th></tr></thead><tbody>'
     + d.rows.map(function(r, n){
         const bad = r.cycle_hours > 48;
@@ -784,10 +786,14 @@ async function run(){
           + '<td class="c-route">' + (r.route_name ? esc(r.route_name)
               : '<span style="color:var(--mut)">—</span>') + '</td>'
           + TCOLS.map(c => '<td>' + clock(r.t[c[1]]) + '</td>').join('')
-          + '<td><span class="pill" style="background:'
-            + (r.route === 'hue' ? '#11182733' : '#f9731633') + ';color:'
-            + (r.route === 'hue' ? '#cbd5e5' : '#fdba74') + '">'
-            + (r.route === 'hue' ? 'Hue' : 'QL49') + '</span></td>'
+          + '<td>' + (r.route
+              ? '<span class="pill" style="background:'
+                + (r.route === 'hue' ? '#11182733' : '#f9731633') + ';color:'
+                + (r.route === 'hue' ? '#cbd5e5' : '#fdba74') + '">'
+                + (r.route === 'hue' ? 'Hue' : 'QL49') + '</span>'
+              : '<span class="pill" style="background:#eab30833;color:#fde047" title="'
+                + esc((r.path || []).join(' → ')) + '">' + esc(r.home_name || 'route') + '</span>')
+            + '</td>'
           + '<td style="color:' + (bad ? 'var(--bad)' : 'var(--txt)')
             + ';font-weight:' + (bad ? 700 : 400) + '">' + r.cycle_hours + ' h</td>'
           + '<td title="' + esc(Object.keys(r.waits).map(k =>
@@ -882,7 +888,15 @@ const SEGS = [
   ['arrive_port',   'unload_start', 'port',   1, 'queuing at the port'],
   ['unload_start',  'unload_end',   'port',   0, 'unloading'],
   ['unload_end',    'depart_port',  'ql49',   1, 'waiting for the QL49 window out'],
-  ['depart_port',   'back',         '',       0, 'running home empty']
+  ['depart_port',   'back',         '',       0, 'running home empty'],
+  // A route through A Ngo Warehouse (22/09/2026). A loop planned along its
+  // route names only the places it goes, so the pairs above it does not
+  // have are simply not drawn.
+  ['cross_border',  'arrive_ango',  'travel', 0, 'running to A Ngo'],
+  ['arrive_ango',   'ango_start',   'ango',   1, 'queuing at A Ngo'],
+  ['ango_start',    'ango_end',     'ango',   0, 'loading / unloading at A Ngo'],
+  ['ango_end',      'ql49_arrive',  'travel', 0, 'running to QL49'],
+  ['depart_home',   'back',         'travel', 0, 'running home empty']
 ];
 // One tooltip for the whole page: anything carrying data-tip gets it, instantly,
 // wherever the cursor is.
@@ -957,6 +971,7 @@ $('#xpplXls').onclick = async () => {
 const TCOLS = [
   ['At mine', 'arrive_mine'], ['Load', 'load_start'], ['Leaves mine', 'load_end'],
   ['At border', 'arrive_border'], ['Crosses', 'cross_border'],
+  ['At A Ngo', 'arrive_ango'], ['Leaves A Ngo', 'ango_end'],
   ['Enters QL49', 'ql49_in'], ['At port', 'arrive_port'],
   ['Unloads', 'unload_start'], ['Leaves port', 'depart_port'],
   ['Back at mine', 'back']
@@ -981,10 +996,14 @@ function drawTable(d){
           + '<td>' + r.loop + '</td>'
           + '<td style="color:var(--mut)">' + (r.from_plan ? 'plan' : 'readiness') + '</td>'
           + TCOLS.map(c => '<td>' + clock(r.t[c[1]]) + '</td>').join('')
-          + '<td><span class="pill" style="background:'
-            + (r.route === 'hue' ? '#11182733' : '#f9731633') + ';color:'
-            + (r.route === 'hue' ? '#cbd5e5' : '#fdba74') + '">'
-            + (r.route === 'hue' ? 'Hue' : 'QL49') + '</span></td>'
+          + '<td>' + (r.route
+              ? '<span class="pill" style="background:'
+                + (r.route === 'hue' ? '#11182733' : '#f9731633') + ';color:'
+                + (r.route === 'hue' ? '#cbd5e5' : '#fdba74') + '">'
+                + (r.route === 'hue' ? 'Hue' : 'QL49') + '</span>'
+              : '<span class="pill" style="background:#eab30833;color:#fde047" title="'
+                + esc((r.path || []).join(' → ')) + '">' + esc(r.home_name || 'route') + '</span>')
+            + '</td>'
           + '<td style="color:' + (bad ? 'var(--bad)' : 'var(--txt)')
             + ';font-weight:' + (bad ? 700 : 400) + '">' + r.cycle_hours + ' h</td>'
           + '<td title="' + esc(Object.keys(r.waits).map(k =>
@@ -1075,6 +1094,7 @@ function drawLoops(d){
     const l = pc(a), w = pc(b) - l;
     if (w <= 0) return '';
     const hrs = Math.round((new Date(b) - new Date(a)) / 36e5 * 10) / 10;
+    if (!sg[2] && !r.route) return '';          // a route loop draws its own way home
     const place = sg[2] || (r.route === 'hue' ? 'hue' : 'ql49');
     const what = sg[2] ? sg[4]
       : ('running home empty via ' + (r.route === 'hue' ? 'Hue' : 'QL49'));
