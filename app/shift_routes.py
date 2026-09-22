@@ -2131,7 +2131,10 @@ def track():
     empty = RouteLeg.query.filter_by(leg_key="port_mine").first()
     empty_kmh = (empty.speed if empty and empty.speed else 40.0)
 
-    iso = lambda d: _local(d).strftime("%Y-%m-%dT%H:%M") if d else None
+    # Stamps and pings are on the LOCAL clock already (gps_ingest stores
+    # UTC+7); shifting them again showed a 22:14 arrival as 05:14 next day
+    # and made every delay seven hours worse (22/09/2026).
+    iso = lambda d: d.strftime("%Y-%m-%dT%H:%M") if d else None
     blind = set()
     for _k, _l, _p, role, _e in LOC_FH + LOC_BH:
         if role is None:                 # timed by the plan, marked by no zone (Unload)
@@ -4125,7 +4128,7 @@ def board():
                 continue           # its route does not pass here
             when = evidence(plate, chk.code) if role_name else None
             if when:
-                done.append({"plate": plate, "at": _fmt(when)})
+                done.append({"plate": plate, "at": when.strftime("%Y-%m-%d %H:%M")})
             elif blind:
                 unverified.append({"plate": plate})
             elif overdue:
@@ -4202,11 +4205,12 @@ def _why_not_assigned(row, day):
     return "Approved, not planned"
 
 
-def _hhmm(dt_utc, day):
-    """A local time, with the date only when it is not `day`."""
-    if not dt_utc:
+def _hhmm(dt_local, day):
+    """A local time, with the date only when it is not `day`. The value is
+    already local (a plan time or a ping time); nothing is added."""
+    if not dt_local:
         return None
-    loc = _local(dt_utc)
+    loc = dt_local
     if loc.strftime("%Y-%m-%d") == day:
         return loc.strftime("%H:%M")
     return loc.strftime("%d/%m/%Y %H:%M")
@@ -4215,6 +4219,10 @@ def _hhmm(dt_utc, day):
 def _today_by_company(day, now):
     lo, _hi = _day_bounds(day)
     grace = timedelta(minutes=ON_TIME_MINUTES)
+    # Plans, pings, stamps and mine arrivals are all on the local clock;
+    # `now` and `lo` arrive in UTC, so they are moved onto it once here.
+    now_l = now + LOCAL_OFFSET
+    lo_l = lo + LOCAL_OFFSET
 
     # Read from the mine arrivals the GPS job records (22/09/2026) - an arrival
     # once seen is a fact and is not worked out again. A mine arrival is looked
@@ -4223,13 +4231,13 @@ def _today_by_company(day, now):
     roles = geofence.roles()
     mine_id = roles.get("xppl")
     mine_enters = {}
-    for m in MineArrival.query.filter(MineArrival.at >= lo - timedelta(days=1)).all():
+    for m in MineArrival.query.filter(MineArrival.at >= lo_l - timedelta(days=1)).all():
         mine_enters.setdefault(m.key, []).append(m.at)
 
     anchors = [a for a in Anchor.query.all() if a.polygon]
     last_ping = {}
-    for g in (_own_pings(GpsPing.query.filter(GpsPing.dt >= lo - timedelta(hours=12),
-                                              GpsPing.dt <= now))
+    for g in (_own_pings(GpsPing.query.filter(GpsPing.dt >= lo_l - timedelta(hours=12),
+                                              GpsPing.dt <= now_l))
               .order_by(GpsPing.dt).all()):
         last_ping[engine.norm_plate(g.plate)] = g
 
@@ -4309,12 +4317,12 @@ def _today_by_company(day, now):
                 continue
             try:
                 due = datetime.strptime((r.get("t") or {}).get("arrive_mine"),
-                                        "%Y-%m-%dT%H:%M") - LOCAL_OFFSET
+                                        "%Y-%m-%dT%H:%M")
             except (TypeError, ValueError):
                 waiting.append(item)          # planned without a time: nothing to judge
                 continue
             item["planned"] = _hhmm(due, day)
-            window = (due - timedelta(hours=12), min(now, due + timedelta(hours=24)))
+            window = (due - timedelta(hours=12), min(now_l, due + timedelta(hours=24)))
             got = min((e for e in mine_enters.get(k, [])
                        if window[0] <= e <= window[1]), default=None)
             g = last_ping.get(k)
@@ -4328,7 +4336,7 @@ def _today_by_company(day, now):
                 arrived.append(item)
                 if mins > ON_TIME_MINUTES:
                     late.append(item)
-            elif now < due + grace:
+            elif now_l < due + grace:
                 waiting.append(item)
             elif g is not None and g.dt >= due + grace:
                 here = where(g)
