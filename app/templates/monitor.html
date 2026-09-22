@@ -327,11 +327,14 @@ function cellHtml(c, planDay){
   // A place this truck's route does not go (22/09/2026) - not a missing time.
   if (c.na) return '<span class="t-na" title="Not on the route this truck runs">off route</span>';
   if (c.actual){
+    // Day first, as the plan and the estimate already read (user 22/09/2026):
+    // a run crosses midnight, and 22:14 alone does not say which side.
+    const when = '<span class="t-dm">' + dm(c.actual) + '</span> ' + clock(c.actual);
     const d = c.delay;
     if (d === null || d === undefined || Math.abs(d) <= TOL)
-      return '<b class="t-ok">' + clock(c.actual) + '</b>';
+      return '<b class="t-ok">' + when + '</b>';
     const cls = d < 0 ? 't-early' : 't-late';
-    return '<b class="' + cls + '">' + clock(c.actual) + '</b>'
+    return '<b class="' + cls + '">' + when + '</b>'
       + ' <span class="' + cls + '" style="font-size:10.5px">'
       + (d < 0 ? '&minus;' : '+') + gap(d) + '</span>';
   }
@@ -585,7 +588,7 @@ function drawTrack(){
     const cs = cellsOf(r);
     const where = r.last_seen
       ? esc(r.last_seen.place) + ' <span style="color:var(--mut)">'
-        + clock(r.last_seen.at) + '</span>'
+        + dm(r.last_seen.at) + ' ' + clock(r.last_seen.at) + '</span>'
       : (r.enroute
          ? '<span style="color:var(--blind)">on the road</span> '
            + '<span style="color:var(--mut)">' + r.enroute.km_to_mine + ' km out</span>'

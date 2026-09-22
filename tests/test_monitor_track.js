@@ -129,6 +129,8 @@ try {
      store['track'].innerHTML.indexOf('value="border queue, driver called"') >= 0, true);
   is('...with who wrote it on hover',
      store['track'].innerHTML.indexOf('title="monitorA · 2026-09-09 12:00"') >= 0, true);
+  is('an actual carries its day too, dd/mm first',
+     out.indexOf('<b class="t-ok"><span class="t-dm">09/09</span> 05:10</b>') >= 0, true);
   is('a plan carries its day, dd/mm first',
      out.indexOf('<span class="t-dm">09/09</span> 05:00') >= 0, true);
   is('an estimate carries its day the same way',
