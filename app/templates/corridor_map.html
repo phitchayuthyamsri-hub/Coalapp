@@ -19,7 +19,7 @@
   .sub{color:var(--mut);font-size:12px}
   .spacer{margin-left:auto}
   a{color:var(--acc);text-decoration:none;font-size:13px}
-  main{padding:14px 18px;max-width:1500px;margin:0 auto}
+  main{padding:14px 18px;max-width:none;margin:0}
   .bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;background:var(--panel);
        border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-bottom:12px}
   .f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mut)}
@@ -83,7 +83,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
     <span><i style="background:#34c759"></i>plan start</span>
     <span><i style="background:#ff6b60"></i>pending start</span>
     <span><i style="background:#5ac8fa"></i>off plan</span>
-    <span><i class="hollow"></i>outside the corridor &mdash; hanging on the edge</span>
+    <span><i class="hollow"></i>outside the corridor</span>
     <span><i style="background:#8b97ad"></i>geofence</span>
   </div>
 </main>
@@ -102,14 +102,13 @@ function colourOf(t){
 
 function ensureMap(box){
   if (MAP || !window.google || !google.maps) return MAP;
-  // The window is the corridor and NOTHING else: strictBounds means the
-  // visible frame itself can never leave the box - no zooming out into half
-  // of Laos - which is also why an outside truck is clamped to the edge
-  // rather than dragging the view away from the road.
+  // Opens on the corridor, and is free from there (user 22/09/2026): the
+  // frame used to be pinned to the corridor box and an outside truck clamped
+  // to its edge. Pan and zoom go anywhere now, and a truck off the corridor
+  // is drawn where it is - hollow, so it still reads as off the road.
   const bounds = {north: box.n, south: box.s, east: box.e, west: box.w};
   MAP = new google.maps.Map($('#map'), {
-    mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
-    restriction: {latLngBounds: bounds, strictBounds: true}
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: true
   });
   MAP.fitBounds(bounds);
   INFO = new google.maps.InfoWindow();
@@ -160,7 +159,7 @@ function draw(){
         + '<br>' + (t.planned ? (t.started ? 'plan started' : 'pending start')
                               : 'not in this day\'s plan')
         + '<br>seen ' + esc(t.seen_at)
-        + (t.outside ? '<br><b>outside the corridor</b> — shown at the edge' : '')
+        + (t.outside ? '<br><b>outside the corridor</b>' : '')
         + '<br><a target="_blank" rel="noopener" href="/truck-trail?plate='
         + encodeURIComponent(t.plate) + '">◎ trail</a></div>');
       INFO.open(MAP, m);

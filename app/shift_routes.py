@@ -1869,10 +1869,9 @@ def _route_paths():
 def map_data():
     """Every truck's last position, for the corridor map.
 
-    The window is the corridor itself - geofences and route legs with a
-    margin - and it is all anybody sees: a truck beyond it is CLAMPED to the
-    nearest edge and marked as outside, so the picture never pans away from
-    the road to chase one stray. Green is a truck whose plan has started
+    The map opens on the corridor - geofences and route legs with a margin,
+    the `box` - and a truck beyond it is marked as outside and drawn where
+    it is; the map is free to pan there. Green is a truck whose plan has started
     (seen at a checkpoint since its planned mine arrival), red is planned
     but pending start, and off-plan trucks carry their own colour.
     """
@@ -1951,8 +1950,9 @@ def map_data():
         trucks.append({
             "plate": t.plate, "driver": t.driver or "",
             "sub": (p or {}).get("sub") or "",
-            "lat": min(max(lat, box["s"]), box["n"]),
-            "lng": min(max(lng, box["w"]), box["e"]),
+            # Where it really is (22/09/2026): the map is free to pan there
+            # now. `outside` still says it is off the corridor.
+            "lat": lat, "lng": lng,
             "outside": outside,
             "seen_at": g.dt.strftime("%Y-%m-%d %H:%M"),
             "planned": p is not None, "started": started,
