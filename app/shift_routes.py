@@ -204,6 +204,38 @@ GPS_MAX_AGE = timedelta(hours=24)   # a ping older than this is not a position
 
 LOCAL_OFFSET = timedelta(hours=7)   # times are shown UTC+7, as elsewhere
 
+# A truck is declared the day BEFORE it arrives (user 22/09/2026, "from
+# tomorrow onward"). A row timed for the day it is filed on - or earlier -
+# is refused: it cannot be planned, approved and issued in time, and the
+# sheet filed at midday for trucks due that morning was the pattern. Dated
+# so the lists already filed before the rule are not broken by it.
+SAME_DAY_RULE_FROM = "2026-09-23"
+
+
+def _same_day_rows(rows, today=None):
+    """Plates on `rows` (dicts with plate + arrive_date) timed for today or
+    earlier, or [] while the rule is not in force yet."""
+    today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    if today < SAME_DAY_RULE_FROM:
+        return []
+    out = []
+    for r in rows:
+        d = (r.get("arrive_date") or "").strip()
+        if d and d <= today:
+            out.append((r.get("plate") or "").strip())
+    return sorted(set(p for p in out if p))
+
+
+def _same_day_refusal(plates, today=None):
+    today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    return jsonify(
+        error="%d truck(s) are timed to reach the mine today, %s, or earlier: %s. "
+              "A truck is declared the day before it arrives, so give them "
+              "tomorrow's date or later - or mark them not running."
+              % (len(plates), _dmy(today), ", ".join(plates[:12])
+                 + ("…" if len(plates) > 12 else "")),
+        code="same_day", plates=plates), 400
+
 
 def _role():
     return (getattr(current_user, "role", "") or "monitor").lower()
@@ -930,6 +962,10 @@ def upload():
                   "again." % len(bad),
             code="invalid", problems=bad, plates=plates,
             warnings=parsed.get("warnings", [])), 400
+
+    late = _same_day_rows(rows)
+    if late:
+        return _same_day_refusal(late)
 
     roster = _roster(sub_id) if sub_id else {}
     on_sheet = {r["key"] for r in rows}
@@ -3498,6 +3534,9 @@ def save_list():
         db.session.flush()
 
     incoming = [r for r in (d.get("rows") or []) if (r.get("plate") or "").strip()]
+    late = _same_day_rows(incoming)
+    if late:
+        return _same_day_refusal(late)
 
     # Keep the state a row already has: a row sitting with the manager, or already
     # decided, must not be dragged back to pending because the supervisor saved

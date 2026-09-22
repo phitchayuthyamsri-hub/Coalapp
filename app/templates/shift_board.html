@@ -200,6 +200,7 @@
 </style>
 {% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
+<script src="/static/capture.js?v={{ asset_v('capture.js') }}"></script>
 </head>
 <body class="">
 <script>
@@ -273,6 +274,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <button id="btnSubmit" class="primary" title="Send the ticked trucks to the manager. On a revise round (sheet handed back through an amend) submitting approves directly. Unticked trucks stay pending.">Submit</button>
       <button id="btnConfirm" class="go" title="Approve the list. Monitoring starts.">Confirm</button>
       <button id="btnReject" class="no" title="Send it back to the supervisor with a written reason.">Reject</button>
+      <button id="btnCapture" title="Save the declared table as a picture, to send on in Zalo or WhatsApp">&#128247; Capture</button>
       <span id="dirty" style="display:none;color:var(--warn);font-size:12px;font-weight:600">
         ● unsaved changes — whatever you press next will use what is on screen</span>
       <span class="msg" id="listMsg"></span>
@@ -534,6 +536,38 @@ function drawRows(){
   TV.wire(document.getElementById('listTable'));
   measureFreeze();
 }
+
+// The declared table as a picture (22/09/2026): the sheet as the company
+// sent it, with where each truck stands, to send on in a chat.
+$('#btnCapture').onclick = async function(){
+  const picked = SUBS.filter(x => String(x.id) === String(SUBID))[0] || {};
+  const who = SUBID === 'all' ? 'All companies' : (picked.short || picked.name || 'Subcontractor');
+  const day = $('#day').value || '';
+  const rows = (LIST.rows || []).filter(r => !r.absent).map(r => [r.plate, r.sub,
+    r.route, r.note || r.reason || '', r.sheet_status, r.location,
+    r.arrive_date ? DateFmt.dmy(r.arrive_date) : '', r.arrive,
+    r.back_in_service ? dayFirst(r.back_in_service) : '', r.remark, r.state || 'pending']);
+  const msg = $('#bulkMsg');
+  try {
+    const out = await TableCapture.png({
+      title: who + ' — trucks declared for ' + (day ? DateFmt.dmy(day) : 'the day'),
+      subtitle: rows.length + ' truck' + (rows.length === 1 ? '' : 's') + ' · list '
+        + (LIST.state || 'none') + (LIST.submitted_at ? ' · submitted ' + LIST.submitted_at : '')
+        + (LIST.confirmed_at ? ' · confirmed ' + LIST.confirmed_at : ''),
+      cols: [{label:'Truck'}, {label:'Sub'}, {label:'Route'}, {label:'Status'},
+             {label:'Loaded / Empty'}, {label:'Location'}, {label:'Date at mine'},
+             {label:'Time'}, {label:'Back in service'}, {label:'Remark'}, {label:'State'}],
+      rows: rows,
+      footer: 'Captured ' + TableCapture.stamp() + ' · TMS : Coal project',
+      filename: who + '_' + day + '_declared'
+    });
+    msg.className = 'msg ok';
+    msg.textContent = 'Saved ' + out.name + (out.copied ? ' — and copied, ready to paste' : '');
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Could not make the picture: ' + (e.message || e);
+  }
+};
 
 function drawAmendReq(){
   const box = document.getElementById('amendReq');

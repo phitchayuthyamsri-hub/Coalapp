@@ -143,9 +143,10 @@
   .deliv .filed b{color:var(--txt)}
   .msg{font-size:12.5px;margin-left:10px}
   .ok{color:var(--grn)} .err{color:var(--red)} .warn{color:var(--amber)}
-  .stat{display:flex;gap:22px;flex-wrap:wrap;margin:12px 0 0}
-  .stat div{font-size:11px;color:var(--mut)}
-  .stat b{display:block;font-size:20px;color:var(--txt);font-weight:700}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 0 10px;align-items:flex-end}
+  .stat div{font-size:10.5px;color:var(--mut);white-space:nowrap}
+  .stat b{display:block;font-size:18px;color:var(--txt);font-weight:700;line-height:1.1}
+  #amendBox:not(:empty), #gpsNote:not(:empty){margin-top:10px}
   /* Vertically the PAGE scrolls, not this box. Capping the height here put a
      second bar inside the frame's own, and the reader had to work out which
      one moved what. Horizontal stays, because the table is genuinely wide. */
@@ -159,6 +160,7 @@
 </style>
 {% include "_rowno.html" %}
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
+<script src="/static/capture.js?v={{ asset_v('capture.js') }}"></script>
 </head>
 <body class="">
 <script>
@@ -181,9 +183,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <select id="day"></select></label>
       <label class="f" id="coWrap" style="display:none">Company<select id="sub"></select></label>
       <button class="ghost" id="reload">Reload</button>
+      <div class="stat" id="stats"></div>
       <div class="spacer"></div>
       <div id="who" class="why"></div>
     </div>
+    <div id="amendBox"></div>
+    <div id="gpsNote"></div>
   </div>
 
   <div class="tabs">
@@ -193,20 +198,6 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 
   <!-- ── on-screen ─────────────────────────────────────────────────────── -->
   <div class="pane on" id="pane-type">
-    <div class="card">
-      <h2>Fill in here</h2>
-      <p class="lede">Every truck the GPS has seen is filled in already - which leg it is on,
-        loaded or empty, where it was last, and for the empties coming back, when they should
-        reach the mine. Change anything that is wrong: you are on the ground and the GPS is not.
-        The date at the top is the day these trucks are used; the date on each row is when that
-        truck reaches the mine.
-        Trucks the GPS has not seen are left blank and marked, because a guess dressed up as a
-        fact is worse than an empty box.</p>
-      <div id="amendBox"></div>
-      <div id="gpsNote"></div>
-      <div class="stat" id="stats"></div>
-    </div>
-
     <div class="card">
       <div class="keys">
         <span><b>&larr; &uarr; &darr; &rarr;</b> move</span>
@@ -230,6 +221,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <div class="row" style="margin-top:14px">
         <button id="save">Save declaration</button>
         <button class="ghost" id="reapply">Fill every blank row from GPS</button>
+        <button class="ghost" id="capture" title="Save this table as a picture, to send on in Zalo or WhatsApp">&#128247; Capture</button>
         <span class="msg" id="saveMsg"></span>
       </div>
     </div>
@@ -395,7 +387,7 @@ async function load(){
     ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
       + ' not seen by GPS</b> in the last 24 hours, so nothing is filled in for '
       + (unseen === 1 ? 'it' : 'them') + '. Type what you know.</div>'
-    : '<div class="note n-info">Every truck has a recent GPS position.</div>';
+    : '';
   draw();
 }
 
@@ -534,6 +526,37 @@ document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => {
   GRID.draw(); paint();
   GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' set to ' + v);
 });
+
+// The declared table as a picture (22/09/2026): what is on the sheet, as
+// the company filled it in, ready to paste into a chat.
+$('#capture').onclick = async function(){
+  const me = SUBS.filter(x => String(x.id) === String(SUBID))[0] || {};
+  const who = me.short || me.name || 'Subcontractor';
+  const day = $('#day').value || '';
+  const rows = (ROWS || []).map(r => [r.plate, r.driver, r.route, r.status, r.load,
+    r.location, r.date ? DateFmt.dmy(r.date) : '', r.time, r.back ? DateFmt.dmy(r.back) : '',
+    r.remark]);
+  const msg = $('#saveMsg');
+  try {
+    const out = await TableCapture.png({
+      title: who + ' — trucks declared for ' + (day ? DateFmt.dmy(day) : 'the day'),
+      subtitle: rows.length + ' truck' + (rows.length === 1 ? '' : 's')
+        + (LOCKED ? ' · confirmed' : ' · as filled in on the page'),
+      cols: [{label:'Truck'}, {label:'Driver'}, {label:'Route out'}, {label:'Status'},
+             {label:'Loaded / Empty'}, {label:'Location'}, {label:'Date at mine'},
+             {label:'Time'}, {label:'Back in service'}, {label:'Remark'}],
+      rows: rows,
+      footer: 'Captured ' + TableCapture.stamp() + ' by ' + ((ME && ME.username) || '')
+        + ' · TMS : Coal project',
+      filename: who + '_' + day + '_declared'
+    });
+    msg.className = 'msg ok';
+    msg.textContent = 'Saved ' + out.name + (out.copied ? ' — and copied, ready to paste' : '');
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Could not make the picture: ' + (e.message || e);
+  }
+};
 
 $('#bulkOff').onclick = function(){
   if (!GRID) return;
