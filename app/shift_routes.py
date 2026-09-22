@@ -2057,6 +2057,51 @@ def track_remark():
     return jsonify(ok=True, key=key, text=m.text, by=m.by, at=_fmt(m.at))
 
 
+@bp.post("/track/actual")
+@login_required
+def track_actual():
+    """A person's actual time for one Monitor cell (22/09/2026).
+
+    The monitoring team and admins may type one in where the GPS missed it
+    or got it wrong - a time the driver phoned in, a border crossing the box
+    slept through. It is stored as a stamp with the person's name, shown
+    with a mark, and the GPS job never writes over it. Clearing removes only
+    a typed time; a GPS time is left as it is."""
+    if _role() not in ("monitor", "admin"):
+        return jsonify(error="Only the monitoring team or an admin may enter a time"), 403
+    d = request.get_json(force=True, silent=True) or {}
+    day = (d.get("date") or "").strip()
+    key = engine.norm_plate((d.get("plate") or "").strip())
+    leg = (d.get("leg") or "").strip()
+    cell = (d.get("cell") or "").strip()
+    try:
+        _day_bounds(day)
+    except ValueError:
+        return jsonify(error="Bad date: %s" % day), 400
+    if not key or leg not in ("fh", "bh"):
+        return jsonify(error="plate and leg are required"), 400
+    spec = {k: (r, e) for k, _l, _f, r, e in (LOC_FH if leg == "fh" else LOC_BH)}
+    if cell not in spec:
+        return jsonify(error="unknown cell %s" % cell), 400
+    role, edge = spec[cell]
+    if role is None:
+        leg, role, edge = actuals.MANUAL_ONLY[(leg, cell)]
+    raw = (d.get("at") or "").strip()
+    at = None
+    if raw:
+        try:
+            at = datetime.strptime(raw, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            return jsonify(error="a time reads YYYY-MM-DDTHH:MM"), 400
+    s = actuals.set_manual(day, key, leg, role, edge, at, current_user.username)
+    _act("edit", "Monitor actual %s %s/%s for %s (%s): %s"
+         % (key, leg, cell, _dmy(day), current_user.username,
+            at.strftime("%d/%m %H:%M") if at else "(cleared)"))
+    return jsonify(ok=True, plate=key, leg=leg, cell=cell,
+                   at=s.at.strftime("%Y-%m-%dT%H:%M") if s else None,
+                   by=(s.by if s else ""))
+
+
 @bp.get("/track")
 @login_required
 def track():
@@ -2118,6 +2163,7 @@ def track():
     lo, _hi = _day_bounds(day)
     seen_anchor = actuals.seen_anchor_ids()
     stamped = actuals.stamps_for(day)
+    by_hand = actuals.stamped_by(day)
     paths = _route_paths()
 
     # Only for the "on the road" estimate of a truck with nothing stamped yet:
@@ -2164,7 +2210,13 @@ def track():
         # Mine first, as the stamps were made - see actuals and _match_cycle.
         # Until the mine is stamped every later place is an estimate.
         def pick(role, edge, leg):
+            if role is None:
+                # Unloads: no zone marks it, only a person can (see actuals).
+                return stamped.get((pkey, leg, "unload", "enter"))
             return stamped.get((pkey, leg, role, edge))
+
+        def who(role, edge, leg):
+            return by_hand.get((pkey, leg, role or "unload", edge or "enter"), "")
 
         last_seen = None
         for key, label, field, role, edge in LOC_FH + LOC_BH:
@@ -2203,7 +2255,7 @@ def track():
                 planned = plan.get(field) if field else None
                 cell = {"key": key, "label": label, "plan": planned,
                         "actual": iso(got), "estimate": None, "delay": None,
-                        "blind": role in blind}
+                        "blind": role in blind, "by": who(role, edge, leg)}
                 if got and planned:
                     d = _mins(planned, iso(got))
                     cell["delay"] = d
@@ -2257,6 +2309,8 @@ def track():
     return jsonify(
         date=day, subcontractor_id=only, source=source, issued=issued,
         remarks=remarks,
+        # Who may type an actual time into a cell (right-click on the Monitor).
+        may_edit_actual=_role() in ("monitor", "admin"),
         # The page draws one table per route, in the order routes were made.
         route_order=[x.name for x in _Route.query.order_by(_Route.id).all()],
         # Named rather than dropped: approved, not dispatched, and the reason is

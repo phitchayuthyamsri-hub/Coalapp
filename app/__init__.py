@@ -156,6 +156,7 @@ def create_app(config_class=Config):
         _ensure_plan_settings()
         _ensure_routeleg_schema()
         _ensure_ping_schema()
+        _ensure_stamp_schema()
         _ensure_anchor_schema()
         _ensure_snapshot_schema()
         _ensure_shifts()
@@ -301,6 +302,18 @@ def _ensure_plan_settings():
         added += 1
     if added:
         db.session.commit()
+
+def _ensure_stamp_schema():
+    """A stamp says who set it (22/09/2026)."""
+    from sqlalchemy import inspect
+    insp = inspect(db.engine)
+    try:
+        cols = [c["name"] for c in insp.get_columns("actual_stamp")]
+    except Exception:
+        return
+    if "by" not in cols:
+        _add_column_racing("actual_stamp", "by VARCHAR(80) DEFAULT ''")
+
 
 def _ensure_ping_schema():
     """A ping carries the provider's address (22/09/2026)."""

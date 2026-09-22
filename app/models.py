@@ -606,6 +606,9 @@ class ActualStamp(db.Model):
     edge = db.Column(db.String(5), nullable=False)               # enter / exit
     at = db.Column(db.DateTime, nullable=False)                  # local time, as pings
     stamped_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Blank for a time the GPS job wrote; the username for one a person typed
+    # in on the Monitor (22/09/2026). The job never writes over either.
+    by = db.Column(db.String(80), default="")
 
 
 class MineArrival(db.Model):

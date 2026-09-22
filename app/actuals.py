@@ -161,5 +161,38 @@ def stamps_for(day):
             for s in ActualStamp.query.filter_by(day=day).all()}
 
 
+def stamped_by(day):
+    """{(key, leg, role, edge): username} for the stamps a person typed in."""
+    return {(s.key, s.leg, s.role, s.edge): s.by
+            for s in ActualStamp.query.filter_by(day=day).all() if s.by}
+
+
+# The cell a person can type into that no zone ever stamps: unloading at the
+# port is timed by the plan and marked by no geofence, so a typed time for it
+# needs a key of its own.
+MANUAL_ONLY = {("fh", "unload"): ("fh", "unload", "enter")}
+
+
+def set_manual(day, key, leg, role, edge, at, who):
+    """A person's time for one cell. Overwrites a GPS time or an earlier typed
+    one; `at=None` clears a typed time (a GPS time is left alone). Returns
+    the stamp, or None when cleared."""
+    q = ActualStamp.query.filter_by(day=day, key=key, leg=leg, role=role, edge=edge)
+    s = q.first()
+    if at is None:
+        if s is not None and s.by:
+            db.session.delete(s)
+        db.session.commit()
+        return None
+    if s is None:
+        s = ActualStamp(day=day, key=key, leg=leg, role=role, edge=edge, at=at)
+        db.session.add(s)
+    s.at = at
+    s.by = who
+    s.stamped_at = datetime.utcnow()
+    db.session.commit()
+    return s
+
+
 def seen_anchor_ids():
     return {a.anchor_id for a in AnchorSeen.query.all()}
