@@ -1970,6 +1970,10 @@ def map_data():
     for v in visits:
         if v.get("enter"):
             arrivals.setdefault((engine.norm_plate(v["plate"]), v["anchor_id"]), []).append(v["enter"])
+    # What the Monitor shows counts too (23/09/2026): a time the monitoring
+    # team typed in for a truck whose GPS is dead is an arrival like any
+    # other, and the map should not keep it red.
+    stamped = actuals.stamps_for(day)
 
     # Ping times are local (see gps_ingest), so the freshness clock is too.
     fresh_after = datetime.utcnow() + LOCAL_OFFSET - GPS_MAX_AGE
@@ -1993,9 +1997,13 @@ def map_data():
                 am = datetime.strptime((p.get("t") or {}).get("arrive_mine"),
                                        "%Y-%m-%dT%H:%M")
                 # At its first stop since shortly before it was due there.
-                first = roles.get(p.get("start_role") or "xppl")
-                started = any(e >= am - timedelta(hours=6)
-                              for e in arrivals.get((k, first), []))
+                first_role = p.get("start_role") or "xppl"
+                first = roles.get(first_role)
+                seen = list(arrivals.get((k, first), []))
+                st = stamped.get((k, "fh", first_role, "enter"))
+                if st is not None:
+                    seen.append(st)
+                started = any(e >= am - timedelta(hours=6) for e in seen)
             except (TypeError, ValueError):
                 started = False
         g = last.get(k)
