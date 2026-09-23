@@ -109,6 +109,12 @@ check("...named", cell(mon, "fh", "mine")["by"], "adm")
 r = mon.post("/api/shift/track/actual", json={"date": DAY, "plate": "20H01397", "leg": "fh", "cell": "border", "at": ""})
 check("blank clears a typed time", (r.status_code, cell(mon, "fh", "border")["actual"]), (200, None))
 
+print("\nit is on the record")
+with app.app_context():
+    from app.models import ActivityEvent
+    n = ActivityEvent.query.filter(ActivityEvent.detail.like("Monitor actual%")).count()
+    check("every typed time leaves an activity line", n >= 3, True)
+
 print("\nthe cell no zone marks")
 r = mon.post("/api/shift/track/actual", json={"date": DAY, "plate": "20H01397", "leg": "fh", "cell": "unload", "at": "2026-09-24T08:30"})
 check("Unloads takes a typed time", (r.status_code, cell(mon, "fh", "unload")["actual"]), (200, "2026-09-24T08:30"))
