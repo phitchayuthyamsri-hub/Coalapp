@@ -636,6 +636,7 @@ function drawTrack(){
             + '</td><td class="ac' + (d.may_edit_actual && !c.na ? ' can-type' : '') + '"'
             + ' data-plate="' + esc(r.plate) + '" data-leg="' + LEG + '" data-cell="' + esc(c.key) + '"'
             + ' data-when="' + esc(c.actual || c.estimate || c.plan || '') + '"'
+            + ' data-actual="' + esc(c.actual || '') + '"'
             + (d.may_edit_actual && !c.na ? ' title="Right-click to enter a time"' : '') + '>'
             + cellHtml(c, dayOf(c.plan)) + '</td>';
         }).join('')
@@ -679,16 +680,20 @@ function drawTrack(){
   document.querySelectorAll('#track .track-tbl').forEach(t => TV.wire(t));
   // Right-click an actual cell to type the time (monitoring team, admin).
   // "dd/mm HH:MM", or just "HH:MM" on the day the cell already shows; blank
-  // clears a typed time. Esc leaves it as it was.
+  // clears a typed time. ONLY Enter saves: the first cut saved on blur too,
+  // with the box pre-filled from the estimate, so a right-click to look
+  // followed by a click elsewhere recorded the estimate as a fact under the
+  // person's name (20H01385, 23/09/2026). Now the estimate is only the
+  // placeholder, and clicking away leaves the cell as it was.
   if (d.may_edit_actual) document.querySelectorAll('#track td.ac.can-type').forEach(function(td){
     td.addEventListener('contextmenu', function(ev){
       ev.preventDefault();
       if (td.querySelector('.ac-in')) return;
-      const was = td.innerHTML, ref = td.dataset.when;
+      const was = td.innerHTML, ref = td.dataset.when, had = td.dataset.actual;
       const inp = document.createElement('input');
       inp.className = 'ac-in';
-      inp.placeholder = 'dd/mm HH:MM';
-      inp.value = ref ? dm(ref) + ' ' + clock(ref) : '';
+      inp.placeholder = ref ? dm(ref) + ' ' + clock(ref) : 'dd/mm HH:MM';
+      inp.value = had ? dm(had) + ' ' + clock(had) : '';
       td.innerHTML = '';
       td.appendChild(inp);
       inp.focus(); inp.select();
@@ -713,7 +718,7 @@ function drawTrack(){
         if (e.key === 'Enter'){ e.preventDefault(); finish(true); }
         if (e.key === 'Escape'){ e.preventDefault(); finish(false); }
       });
-      inp.addEventListener('blur', function(){ finish(true); });
+      inp.addEventListener('blur', function(){ finish(false); });
     });
   });
   document.querySelectorAll('#track .rt-head').forEach(function(b){

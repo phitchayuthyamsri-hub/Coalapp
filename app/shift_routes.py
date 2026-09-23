@@ -2097,6 +2097,9 @@ def track_actual():
     _act("edit", "Monitor actual %s %s/%s for %s (%s): %s"
          % (key, leg, cell, _dmy(day), current_user.username,
             at.strftime("%d/%m %H:%M") if at else "(cleared)"))
+    # set_manual committed the stamp before the line above was queued; without
+    # this the activity line was rolled back and the feed showed nothing.
+    db.session.commit()
     return jsonify(ok=True, plate=key, leg=leg, cell=cell,
                    at=s.at.strftime("%Y-%m-%dT%H:%M") if s else None,
                    by=(s.by if s else ""))
