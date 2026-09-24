@@ -956,6 +956,9 @@ def upload():
     if _asked_all(request.form):
         return _one_company_only()
     sub_id = _req_sub_id(request.form)
+    bad_day = _not_tomorrow(day)
+    if bad_day:
+        return bad_day
     dl = _find_list(day, sub_id)
 
     # A confirmed list is the document the manager signed. Replacing it from a
@@ -973,7 +976,13 @@ def upload():
         # Tried on the sandbox, live everywhere since 18/09/2026. The companies
         # have the template with the Status drop-down in it, so the rule is one
         # they can meet before they press Upload.
-        parsed = readiness_import.parse(tmp, strict=True)
+        try:
+            parsed = readiness_import.parse(tmp, strict=True)
+        except Exception as e:  # noqa: BLE001 - a file that is not a workbook
+            return jsonify(error="That file could not be opened as an Excel workbook "
+                                 "(.xlsx). Save the readiness template as .xlsx and "
+                                 "upload it again. File không phải là Excel (.xlsx). "
+                                 "(%s)" % type(e).__name__), 400
     finally:
         try:
             os.remove(tmp)
@@ -1001,9 +1010,6 @@ def upload():
             code="invalid", problems=bad, plates=plates,
             warnings=parsed.get("warnings", [])), 400
 
-    bad_day = _not_tomorrow(day)
-    if bad_day:
-        return bad_day
     late = _same_day_rows(rows)
     if late:
         return _same_day_refusal(late)
