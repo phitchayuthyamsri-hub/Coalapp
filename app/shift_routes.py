@@ -226,6 +226,24 @@ def _same_day_rows(rows, today=None):
     return sorted(set(p for p in out if p))
 
 
+def _not_tomorrow(day, today=None):
+    """The sheet a company declares is TOMORROW's, and only tomorrow's (user
+    24/09/2026): a sheet for today is too late to plan, and one for the day
+    after is guesswork. Returns the refusal, or None when `day` is tomorrow.
+    Admins are not held to it - they fix things."""
+    if _role() == "admin":
+        return None
+    today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    tomorrow = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    if day == tomorrow:
+        return None
+    return jsonify(
+        error="The truck list is declared for tomorrow only - %s. You picked %s. "
+              "Chỉ khai báo được cho ngày mai (%s)."
+              % (_dmy(tomorrow), _dmy(day), _dmy(tomorrow)),
+        code="not_tomorrow", tomorrow=tomorrow), 400
+
+
 def _same_day_refusal(plates, today=None):
     today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     return jsonify(
@@ -983,6 +1001,9 @@ def upload():
             code="invalid", problems=bad, plates=plates,
             warnings=parsed.get("warnings", [])), 400
 
+    bad_day = _not_tomorrow(day)
+    if bad_day:
+        return bad_day
     late = _same_day_rows(rows)
     if late:
         return _same_day_refusal(late)
@@ -3668,6 +3689,10 @@ def save_list():
         db.session.flush()
 
     incoming = [r for r in (d.get("rows") or []) if (r.get("plate") or "").strip()]
+    if _role() == "subcontractor":
+        bad_day = _not_tomorrow(day)
+        if bad_day:
+            return bad_day
     late = _same_day_rows(incoming)
     if late:
         return _same_day_refusal(late)

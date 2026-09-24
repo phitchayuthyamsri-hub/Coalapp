@@ -88,5 +88,18 @@ body["rows"][0]["status"] = "Breakdown"
 r = c.post("/api/shift/list", json=body)
 check("a truck not running has no date and is not refused", r.status_code, 200)
 
+print("\nthe sheet is tomorrow's, and only tomorrow's (24/09/2026)")
+day_after = (datetime.utcnow() + sr.LOCAL_OFFSET + timedelta(days=2)).strftime("%Y-%m-%d")
+ok_rows = [{"plate": "20H01499", "status": "BH", "arrive_date": tomorrow, "arrive_time": "06:15"}]
+r = c.post("/api/shift/list", json={"date": today, "subcontractor_id": sid, "rows": ok_rows})
+check("a sheet for today is refused", (r.status_code, r.get_json().get("code")), (400, "not_tomorrow"))
+check("...and says so in Vietnamese too", "ngày mai" in r.get_json().get("error", ""), True)
+r = c.post("/api/shift/list", json={"date": yesterday, "subcontractor_id": sid, "rows": ok_rows})
+check("a sheet for yesterday is refused", r.status_code, 400)
+r = c.post("/api/shift/list", json={"date": day_after, "subcontractor_id": sid, "rows": ok_rows})
+check("the day after tomorrow is refused", r.status_code, 400)
+r = c.post("/api/shift/list", json={"date": tomorrow, "subcontractor_id": sid, "rows": ok_rows})
+check("tomorrow is accepted", r.status_code, 200)
+
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))
 sys.exit(1 if FAIL else 0)
