@@ -22,7 +22,7 @@ Run it after each GPS pull:
 Idempotent: it rewrites both blobs from current data every time.
 """
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from app import create_app
 from app import engine
@@ -34,8 +34,24 @@ TIMING_KEY = "actualGpsTiming_v1"
 
 
 def _ms(dt):
-    """The tool works in epoch milliseconds; the engine works in datetimes."""
+    """The tool works in epoch milliseconds; the engine works in datetimes.
+    For a real UTC value (Truck.added)."""
     return int(dt.timestamp() * 1000) if isinstance(dt, datetime) else None
+
+
+# GPS positions - and everything built from them: visits, cycles, last seen -
+# are stored on the UTC+7 wall clock as naive datetimes. Read as UTC (the
+# server's clock) they came out seven hours late, so the Gantt drew a 20:10
+# arrival at 03:10 the next day (26/09/2026). Say which clock they are on.
+_PING_TZ = timezone(timedelta(hours=7))
+
+
+def _ms_local(dt):
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_PING_TZ)
+    return int(dt.timestamp() * 1000)
 
 
 def _kv_set(key, obj):
@@ -111,7 +127,7 @@ def build_timing():
     tool_ids = _tool_anchor_ids()
     v_out, unmapped = [], set()
     for v in visits:
-        enter, exit_ = _ms(v.get("enter")), _ms(v.get("exit"))
+        enter, exit_ = _ms_local(v.get("enter")), _ms_local(v.get("exit"))
         name = str(v.get("anchor_name") or "").strip().lower()
         anchor_id = tool_ids.get(name)
         if anchor_id is None:
@@ -146,12 +162,12 @@ def build_timing():
         for k, val in s.items():
             if k == "plate":
                 continue
-            row[CAMEL.get(k, k)] = _ms(val) if isinstance(val, datetime) else val
+            row[CAMEL.get(k, k)] = _ms_local(val) if isinstance(val, datetime) else val
         s_out.append(row)
 
     last = {}
     for p in pings:
-        last[p["plate"]] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms(p["dt"]),
+        last[p["plate"]] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms_local(p["dt"]),
                             "speed": p["speed"], "status": p["status"]}
 
     if unmapped:
