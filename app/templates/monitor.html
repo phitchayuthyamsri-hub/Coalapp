@@ -134,6 +134,15 @@
           color:var(--txt);padding:4px 7px;font:inherit;font-size:12px}
   .rmk-in:focus{border-color:var(--acc);outline:none}
   .rmk-in::placeholder{color:#5a6a85}
+  /* The whole remark on hover (29/09/2026): the box shows about thirty
+     characters of a note that runs to three hundred. */
+  .rmk-pop{position:fixed;z-index:10001;max-width:440px;min-width:220px;
+      background:var(--panel);border:1px solid var(--acc);border-radius:10px;
+      padding:10px 12px;box-shadow:0 12px 34px rgba(0,0,0,.6);
+      font-size:12.5px;line-height:1.55;color:var(--txt);
+      white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none}
+  .rmk-pop .who{display:block;margin-top:7px;padding-top:6px;
+      border-top:1px solid var(--line);color:var(--mut);font-size:10.5px}
   /* An estimate is the one time on this table nobody measured. Pale grey,
      neutral where every confirmed time is tinted, so the eye passes over
      it and lands on what was actually seen. */
@@ -345,6 +354,38 @@ function parseWhen(v, ref){
   const p = n => (n < 10 ? '0' : '') + n;
   return y + '-' + p(mo) + '-' + p(da) + 'T' + p(h) + ':' + p(mi);
 }
+
+// The remark pop-up. One element, moved to whichever box the mouse is over;
+// built with textContent, so a remark is shown as text whatever is in it.
+let RMK_POP = null;
+function hideRemark(){ if (RMK_POP) RMK_POP.style.display = 'none'; }
+function showRemark(inp){
+  const text = (inp.value || '').trim();
+  if (!text || document.activeElement === inp) return;
+  if (!RMK_POP){
+    RMK_POP = document.createElement('div');
+    RMK_POP.className = 'rmk-pop';
+    document.body.appendChild(RMK_POP);
+  }
+  RMK_POP.textContent = text;
+  if (inp.dataset.who){
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = inp.dataset.who;
+    RMK_POP.appendChild(who);
+  }
+  RMK_POP.style.display = 'block';
+  // Under the box, or above it when there is no room below; never off the
+  // right edge of the window.
+  const r = inp.getBoundingClientRect();
+  const w = RMK_POP.offsetWidth, h = RMK_POP.offsetHeight;
+  const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  let top = r.bottom + 6;
+  if (top + h > vh - 8) top = Math.max(8, r.top - h - 6);
+  RMK_POP.style.top = top + 'px';
+  RMK_POP.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + 'px';
+}
+window.addEventListener('scroll', hideRemark, true);
 
 function cellHtml(c, planDay){
   // A place this truck's route does not go (22/09/2026) - not a missing time.
@@ -626,7 +667,7 @@ function drawTrack(){
       + '<td class="rmk"><input class="rmk-in" maxlength="300"'
         + ' data-plate="' + esc(r.plate) + '"'
         + ' value="' + esc(rm.text || '') + '"'
-        + (rm.by ? ' title="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
+        + (rm.by ? ' data-who="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
         + ' placeholder="note for the team…"></td>'
       + cols.map(function(j){
           const c = cs[j];
@@ -735,6 +776,12 @@ function drawTrack(){
   // A remark saves when the writer leaves the box; the answer comes back with
   // the writer's name on it so the next shift knows who to ask.
   document.querySelectorAll('#track .rmk-in').forEach(function(inp){
+    // Hover shows the whole note, and who wrote it and when. Not while it is
+    // being typed in - the writer can see what they are writing.
+    inp.addEventListener('mouseenter', function(){ showRemark(inp); });
+    inp.addEventListener('mouseleave', hideRemark);
+    inp.addEventListener('focus', hideRemark);
+    inp.addEventListener('input', hideRemark);
     inp.addEventListener('change', async function(){
       try {
         const r = await fetch('/api/shift/track/remark', {method: 'POST',
@@ -745,7 +792,7 @@ function drawTrack(){
         if (!r.ok) throw new Error(j.error || 'Could not save');
         (TRACK.remarks = TRACK.remarks || {})[j.key] =
           {text: j.text, by: j.by, at: j.at};
-        inp.title = j.by + ' · ' + j.at;
+        inp.dataset.who = j.by + ' · ' + j.at;
         inp.style.borderColor = 'var(--ok)';
         setTimeout(function(){ inp.style.borderColor = ''; }, 1200);
       } catch (e) { alert(e.message || 'Could not save the remark'); }
