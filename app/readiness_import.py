@@ -3,8 +3,11 @@
 
 One layout, the same shape as the declaration page:
 
-  No · Plate · Driver · Status · Location · Loaded / Empty ·
+  No · Plate · Driver · Route · Status · Location · Loaded / Empty ·
   Date arrive Mine · Time arrive Mine · Back in service · Remark
+
+Route is the run the truck is on that day (30/09/2026). It is optional: a sheet
+without the column, or a cell left blank, means the fleet's own route.
 
 Status carries the leg while a truck is working (FH / BH) and the reason when it
 is not (Maintenance, Breakdown ...). Loaded / Empty carries the load. Nothing
@@ -31,6 +34,9 @@ HEADER_MAP = {
     "plate": "plate", "licenseplate": "plate", "bienso": "plate", "truck": "plate",
     "driver": "driver", "taixe": "driver",
     "location": "location", "vitri": "location",
+    # The route the truck runs on this day. The name as the Route page has it.
+    "route": "route", "routeout": "route", "routing": "route",
+    "tuyen": "route", "tuyenduong": "route",
     # FH / BH while working, the reason when not. The one column that decides it.
     "status": "status", "trangthai": "status", "truckstatus": "status",
     "loadedempty": "load", "loadempty": "load", "loadedorempty": "load",
@@ -231,6 +237,10 @@ def parse(path, strict=False):
             "remark": " · ".join(texts(r, "remark")),
             "row": r,
         }
+        # Only when the sheet HAS the column: a sheet that does not mention
+        # routes is not saying "no route", and must not blank one.
+        if "route" in cols:
+            rec["route"] = text(r, "route")
         seen[key] = rec
         rows.append(rec)
 

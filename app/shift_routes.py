@@ -620,6 +620,82 @@ def _visits_and_roles(since=None):
     return [dict(v) for v in hit], roles
 
 
+# ── the route is declared per truck, per day (30/09/2026) ───────────────────
+# A truck used to have one standing route, set on the fleet, and every page
+# read that. Trucks now change route from day to day, so the declaration says
+# which one - a Route cell on the sheet, a Route column on the page - and the
+# fleet's route is only what a declaration that does not say falls back to.
+
+DECLARED_ROUTE_DAYS = 7     # how far back a truck's last declared route holds
+
+
+def _route_key(name):
+    """A route name as people type it: case, spaces and colons forgiven."""
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+def _resolve_routes(rows):
+    """Turn each row's `route` - a name, as the sheet and the page give it -
+    into `route_id`. -> [(plate, name)] for names that are no route.
+
+    A row that does not mention a route is left alone, so whatever the row
+    already says survives. A blank one says "the fleet's route"."""
+    by_name, unknown = None, []
+    for r in rows:
+        if "route" not in r or "route_id" in r:
+            continue
+        name = str(r.get("route") or "").strip()
+        if not name:
+            r["route_id"] = None
+            continue
+        if by_name is None:
+            by_name = {_route_key(x.name): x.id for x in _Route.query.all()}
+        rid = by_name.get(_route_key(name))
+        if rid is None:
+            unknown.append(((r.get("plate") or "").strip(), name))
+        else:
+            r["route_id"] = rid
+    return unknown
+
+
+def _declared_routes(day):
+    """{plate key: route_id} - the route each truck was last declared onto, on
+    this run day or in the week before it.
+
+    The week, not the day alone: a run started yesterday is still on the road
+    today, and the plan rolls a truck's later loops along the route it was
+    declared onto. Older than that and the declaration describes a run long
+    finished - the fleet's route is the better answer."""
+    try:
+        d = datetime.strptime(day, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return {}
+    lo = (d - timedelta(days=DECLARED_ROUTE_DAYS)).strftime("%Y-%m-%d")
+    best = {}
+    q = (db.session.query(DailyListRow.key, DailyListRow.plate, DailyListRow.route_id,
+                          DailyListRow.arrive_date, DailyList.list_date, DailyListRow.id)
+         .join(DailyList, DailyList.id == DailyListRow.list_id)
+         .filter(DailyListRow.route_id.isnot(None)))
+    for key, plate, rid, adate, ldate, row_id in q.all():
+        on = adate or ldate or ""
+        if not (lo <= on <= day):
+            continue
+        k = key or engine.norm_plate(plate)
+        if k not in best or (on, row_id) > best[k][0]:
+            best[k] = ((on, row_id), rid)
+    return {k: v[1] for k, v in best.items()}
+
+
+def _day_route_ids(day=None):
+    """{plate key: route_id} for a run day: what was declared, laid over the
+    fleet's standing routes. With no day, the standing routes alone."""
+    out = {engine.norm_plate(t.plate): t.route_id
+           for t in Truck.query.all() if t.route_id}
+    if day:
+        out.update(_declared_routes(day))
+    return out
+
+
 def _content_hash(list_id):
     """What this list SAYS, independent of when it was filed or who touched it.
 
@@ -633,7 +709,11 @@ def _content_hash(list_id):
         rows.append([r.key or "", (r.note or "").strip(), (r.sheet_status or "").strip(),
                      (r.location or "").strip(), (r.arrive_date or "").strip(),
                      (r.arrive_hhmm or "").strip(), (r.back_in_service or "").strip(),
-                     (r.remark or "").strip()])
+                     (r.remark or "").strip()]
+                    # Yesterday's sheet with only the routes changed is a new
+                    # declaration. Added only when a route is said, so a list
+                    # filed before routes were declared keeps its fingerprint.
+                    + (["route:%d" % r.route_id] if r.route_id else []))
     rows.sort()
     if not rows:
         return ""
@@ -684,6 +764,12 @@ def _declared_row(r, list_id, prior_state, prior=None):
     plate = (r.get("plate") or "").strip()
     status = (keep("activity", "note", "status_text") or "").strip()
     runs = readiness_import.is_running(status)
+    # The day's route, already turned from a name into an id by
+    # _resolve_routes. Not mentioned -> the row keeps the one it has.
+    if "route_id" in r:
+        route_id = r.get("route_id") or None
+    else:
+        route_id = getattr(prior, "route_id", None) if prior is not None else None
     st = prior_state if prior_state in ("pending", "applied", "approved", "denied") \
         else "pending"
     return DailyListRow(
@@ -707,7 +793,7 @@ def _declared_row(r, list_id, prior_state, prior=None):
         # decides whether a truck has been answered for at all. A truck with
         # no status then looked answered everywhere, and the one place that
         # would have caught it was reading the same fallback. Blank is blank.
-        note=status[:300]), runs
+        note=status[:300], route_id=route_id), runs
 
 
 def _list_payload(dl, day):
@@ -728,16 +814,19 @@ def _list_payload(dl, day):
         if dl.subcontractor_id:
             roster = {c.key: c.plate for c in FleetCommitment.query.filter_by(
                 subcontractor_id=dl.subcontractor_id, released_on="").all()}
-        # The truck's standing route, for the Route column on the declaration
-        # list. Looked up by normalised plate, the way trucks are matched
-        # everywhere else here.
+        # The route for the Route column: the one declared on this row, else
+        # the truck's standing route. Looked up by normalised plate, the way
+        # trucks are matched everywhere else here.
         _trucks = {engine.norm_plate(t.plate): t for t in Truck.query.all()}
         _rnames = {x.id: x.name for x in _Route.query.all()}
         for r in recs:
             _t = _trucks.get(r.key or engine.norm_plate(r.plate))
+            _rid = r.route_id or (_t.route_id if _t else None)
             rows.append({
-                "route": _rnames.get(_t.route_id, "") if _t and _t.route_id else "",
-                "route_id": (_t.route_id if _t else None),
+                "route": _rnames.get(_rid, "") if _rid else "",
+                "route_id": _rid,
+                # Said on the sheet, or filled in from the fleet.
+                "route_declared": bool(r.route_id),
                 "plate": r.plate, "sub": short,
                 "ready": bool(r.ready),
                 "state": r.state or "pending",
@@ -1000,7 +1089,17 @@ def upload():
     # half one version and half another, and nobody can see which rows are
     # which - and these faults are the kind that put a truck into the plan
     # without anyone declaring it, so they are refused rather than warned about.
-    bad = parsed.get("problems") or []
+    bad = list(parsed.get("problems") or [])
+    # A Route that is not one of the routes is refused like a Status that is
+    # not one of the statuses: guessing which run was meant plans the truck
+    # down the wrong road.
+    unknown = _resolve_routes(rows)
+    if unknown:
+        row_of = {r["plate"]: r.get("row") for r in rows}
+        names = ", ".join(sorted(x.name for x in _Route.query.all()))
+        for plate, name in unknown:
+            bad.append({"row": row_of.get(plate), "plate": plate, "column": "Route",
+                        "why": 'Route says "%s" - pick one of: %s' % (name[:40], names)})
     if bad:
         plates = sorted({p["plate"] for p in bad if p.get("plate")})
         return jsonify(
@@ -1042,16 +1141,27 @@ def upload():
 
     # A truck already sent, or already decided, keeps where it is. Re-uploading a
     # corrected sheet must not drag a decided row back to the start.
-    running = 0
+    running, fleet_route = 0, []
     for r in rows:
         old = existing.get(r["key"])
+        # A sheet with no Route column says nothing about routes, so a route
+        # already declared for the truck on this day stands.
+        if "route_id" not in r and old is not None:
+            r["route_id"] = old.route_id
         row, runs = _declared_row(
             r, dl.id, (old.state or "pending") if old is not None else "pending")
         if old is not None:
             db.session.delete(old)
         if runs:
             running += 1
+            if "route" in r and not row.route_id:
+                fleet_route.append(row.plate)
         db.session.add(row)
+    if fleet_route:
+        parsed.setdefault("warnings", []).append(
+            "%d running truck(s) have no Route on the sheet (%s%s). Each was put on "
+            "its fleet route." % (len(fleet_route), ", ".join(sorted(fleet_route)[:5]),
+                                  "..." if len(fleet_route) > 5 else ""))
 
     db.session.flush()
     dl.content_hash = _content_hash(dl.id)
@@ -1196,7 +1306,8 @@ def _plan_row(r, label, sub_id, loop, from_plan):
         "route": r["route"], "cycle_hours": r["cycle_hours"],
         # The run this truck is declared onto. NOT "route" above, which is the
         # way home this loop takes - hue or ql49.
-        "route_name": _plan_route_name(r["plate"]),
+        "route_name": (r["route_name"] if "route_name" in r
+                       else _plan_route_name(r["plate"])),
         "start_role": "xppl", "start_name": "XPPL Mine", "home_name": "XPPL Mine",
         "total_wait": r["total_wait"], "waits": r["waits"],
         "t": {
@@ -1290,18 +1401,26 @@ def _route_loop_row(lp, d):
     }
 
 
-def _plan_all(arrivals, cfg):
+def _plan_all(arrivals, cfg, routes=None):
     """Every truck planned, each along its own route. Returns rows in the
-    corridor planner's shape (route loops carry a prebuilt `t`)."""
-    defs, by_plate = _route_defs()
+    corridor planner's shape (route loops carry a prebuilt `t`).
+
+    `routes` is {plate key: route_id} as DECLARED for these arrivals
+    (30/09/2026). A truck it does not name runs its fleet route."""
+    defs, _standing_in_defs = _route_defs()
+    ids = _day_route_ids()
+    ids.update({k: v for k, v in (routes or {}).items() if v})
+    names = {x.id: x.name for x in _Route.query.all()}
     corridor, by_route = [], {}
     for plate, at in arrivals:
-        rid = by_plate.get(engine.norm_plate(plate))
-        if rid is None or _is_corridor(defs[rid]):
+        rid = ids.get(engine.norm_plate(plate))
+        if rid not in defs or _is_corridor(defs[rid]):
             corridor.append((plate, at))
         else:
             by_route.setdefault(rid, []).append((plate, at))
     out = planner.plan_trucks(corridor, cfg) if corridor else []
+    for r in out:
+        r["route_name"] = names.get(ids.get(engine.norm_plate(r["plate"])), "")
     for rid, arr in by_route.items():
         d = defs[rid]
         for lp in planner.plan_route_loops(arr, d["stops"], cfg):
@@ -1348,6 +1467,7 @@ def _week_data(start_arg, only, roll):
 
     approved = DailyListRow.query.filter(DailyListRow.state == "approved").all()
     arrivals, who, no_time, touched = [], {}, [], set()
+    said = {}       # (plate, arrival) -> the route declared with it
     elsewhere = {}
     for r in approved:
         sub_id, label = owner.get(r.list_id, (None, ""))
@@ -1363,6 +1483,7 @@ def _week_data(start_arg, only, roll):
                 arrivals.append((r.plate,
                                  datetime.strptime(r.arrive_date, "%Y-%m-%d")
                                  + timedelta(hours=int(h), minutes=int(m))))
+                said[arrivals[-1]] = r.route_id
                 who[r.plate] = (sub_id, label)
                 touched.add(r.list_id)
                 continue
@@ -1392,12 +1513,15 @@ def _week_data(start_arg, only, roll):
             continue
         first_only.append((plate, dt))
     arrivals = first_only
+    # The route that came with the arrival the plan is built on; the loops
+    # the plan rolls after it stay on that route.
+    routes = {engine.norm_plate(p): said.get((p, dt)) for p, dt in arrivals}
 
     cfg = planner.load_config()
     horizon = datetime.strptime(days[-1], "%Y-%m-%d") + timedelta(days=1)
     gap = timedelta(hours=cfg.get("turn_gap_h", 0.0))
 
-    out = _plan_all(arrivals, cfg) if arrivals else []
+    out = _plan_all(arrivals, cfg, routes) if arrivals else []
     if roll and arrivals:
         extra = []
         for _ in range(8):        # a 45 h cycle fits four loops in a week
@@ -1406,7 +1530,7 @@ def _week_data(start_arg, only, roll):
             if len(nxt) == len(extra):
                 break
             extra = nxt
-            out = _plan_all(arrivals + extra, cfg)
+            out = _plan_all(arrivals + extra, cfg, routes)
     committed = set((p, t) for p, t in arrivals)
 
     rows = []
@@ -1483,6 +1607,7 @@ def _revision_data(day, only):
 
     arrivals, who, no_time = [], {}, []
     elsewhere = {}
+    routes = {}     # the route each truck is declared onto for this day
     for r in DailyListRow.query.filter(DailyListRow.state == "approved").all():
         sub_id, label = owner.get(r.list_id, (None, ""))
         if r.arrive_date != day:
@@ -1496,6 +1621,7 @@ def _revision_data(day, only):
                 h, m = r.arrive_hhmm.split(":")
                 arrivals.append((r.plate, datetime.strptime(day, "%Y-%m-%d")
                                  + timedelta(hours=int(h), minutes=int(m))))
+                routes[engine.norm_plate(r.plate)] = r.route_id
                 who[r.plate] = (sub_id, label)
                 continue
             except ValueError:
@@ -1504,7 +1630,7 @@ def _revision_data(day, only):
             no_time.append(r.plate)
 
     cfg = planner.load_config()
-    out = _plan_all(arrivals, cfg) if arrivals else []
+    out = _plan_all(arrivals, cfg, routes) if arrivals else []
 
     rows, agg = [], {}
     for r in sorted(out, key=lambda x: x["arrive_mine"]):
@@ -1900,18 +2026,20 @@ def _applies(leg, role, edge, path):
     return role in path[:-1] and role != "loading"
 
 
-def _route_paths():
+def _route_paths(day=None):
     """{normalised plate: its route's roles in order} for trucks whose route
     names at least two places the GPS can recognise. Anything else runs the
-    corridor."""
+    corridor.
+
+    With a run day, the route is the one declared for that day
+    (_day_route_ids); without, the fleet's standing route."""
     by_id = {a.id: a.role for a in Anchor.query.all() if a.role and a.retired_at is None}
     seqs = {}
     for r in _Route.query.all():
         path = [by_id[i] for i in (r.sequence or []) if i in by_id]
         if len(path) >= 2:
             seqs[r.id] = tuple(path)
-    return {engine.norm_plate(t.plate): seqs[t.route_id]
-            for t in Truck.query.all() if t.route_id in seqs}
+    return {k: seqs[rid] for k, rid in _day_route_ids(day).items() if rid in seqs}
 
 
 IDLE_RADIUS_M = 150      # still "here" while the fixes scatter within this
@@ -2202,7 +2330,7 @@ def track():
     seen_anchor = actuals.seen_anchor_ids()
     stamped = actuals.stamps_for(day)
     by_hand = actuals.stamped_by(day)
-    paths = _route_paths()
+    paths = _route_paths(day)
 
     # Only for the "on the road" estimate of a truck with nothing stamped yet:
     # where each truck last was, in this run's window. Columns, not objects.
@@ -2237,7 +2365,7 @@ def track():
     # that was never promised.
     not_planned = sorted(set(listed) - set(by_plate.keys()))
     rows = []
-    _ttrucks = {engine.norm_plate(t.plate): t for t in Truck.query.all()}
+    _droutes = _day_route_ids(day)
     _troutes = {x.id: x.name for x in _Route.query.all()}
     for plate in sorted(by_plate.keys()):
         p = by_plate.get(plate)
@@ -2325,13 +2453,11 @@ def track():
             "phone": phone or DEFAULT_DRIVER_PHONE,
             "phone_known": bool(phone),
             "planned": bool(p), "route": (p or {}).get("route"),
-            # The truck's STANDING route, which is not the same thing as
-            # "route" above - that one is the way home the corridor planner
-            # picked, hue or ql49. Named apart so neither can be read as the
-            # other.
-            "route_name": _troutes.get(_ttrucks[engine.norm_plate(plate)].route_id, "")
-                          if engine.norm_plate(plate) in _ttrucks
-                          and _ttrucks[engine.norm_plate(plate)].route_id else "",
+            # The route the truck is declared onto for THIS day (else its
+            # fleet route), which is not the same thing as "route" above -
+            # that one is the way home the corridor planner picked, hue or
+            # ql49. Named apart so neither can be read as the other.
+            "route_name": _troutes.get(_droutes.get(engine.norm_plate(plate)), ""),
             "cycle_hours": (p or {}).get("cycle_hours"),
             "fh": by_column(cells(LOC_FH, "fh")),
             "bh": by_column(cells(LOC_BH, "bh")),
@@ -3486,12 +3612,13 @@ def approvals():
                     and gp.lower() != dp.lower()):
                 diffs.append("place: declared %s, GPS at %s" % (dp, gp))
             _t = _mtrucks.get(r.key or engine.norm_plate(r.plate))
+            _rid = r.route_id or (_t.route_id if _t else None)
             items.append({
                 "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
-                # The truck's standing route, so the manager sees which run
-                # each truck is approving onto - the same fact the supervisor
-                # and the declaration list already show.
-                "route": _mroutes.get(_t.route_id, "") if _t and _t.route_id else "",
+                # The route declared for the day (else the fleet's), so the
+                # manager sees which run each truck is approving onto - the
+                # same fact the supervisor and the declaration list show.
+                "route": _mroutes.get(_rid, "") if _rid else "",
                 "status": r.note or "", "load": r.sheet_status or "",
                 "location": r.location or "", "reason": r.reason or "",
                 "arrive_date": r.arrive_date or "", "arrive_hhmm": r.arrive_hhmm or "",
@@ -3702,6 +3829,12 @@ def save_list():
     late = _same_day_rows(incoming)
     if late:
         return _same_day_refusal(late)
+    unknown = _resolve_routes(incoming)
+    if unknown:
+        return jsonify(error="%d truck(s) name a route that does not exist: %s. "
+                             "Pick a route from the list."
+                             % (len(unknown), ", ".join("%s (%s)" % u for u in unknown[:6])),
+                       code="unknown_route", plates=[u[0] for u in unknown]), 400
 
     # Keep the state a row already has: a row sitting with the manager, or already
     # decided, must not be dragged back to pending because the supervisor saved
@@ -4201,7 +4334,7 @@ def board():
     # blind checkpoint report trucks as 'missed' - that manufactures alarms.
     seen_anchor = actuals.seen_anchor_ids()
     stamped = actuals.stamps_for(day)
-    paths = _route_paths()
+    paths = _route_paths(day)
 
     def on_route(plate, code):
         ev = CHECK_EVENTS.get(code)

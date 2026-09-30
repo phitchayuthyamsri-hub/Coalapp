@@ -2792,7 +2792,8 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         nothing is refused for disagreeing with it. The name is just a name — it need not describe the stops.
         Click a name to rename it, ✎ to build its stops, × to delete it. Renames, types and stops are held
         here until you press <b>Save</b>; creating and deleting a route happen at once.
-        <b>Trucks</b> shows who is declared onto a route on the declaration list — the way <i>out</i> only.
+        <b>Trucks</b> shows whose <i>usual</i> route this is, as set on the Fleet page — the way <i>out</i> only.
+        The route a truck actually runs is declared day by day on the readiness sheet; the usual route is what a sheet that does not say falls back to.
         A backhaul is not declared per truck: which way a truck comes home varies by trip.</div>
     </div>
 
@@ -3367,7 +3368,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <th data-fsort="status">Status</th>
             <th data-fsort="driver">Driver</th>
             <th data-fsort="phone">Phone</th>
-            <th data-fsort="route">Route</th>
+            <th data-fsort="route" title="The truck's usual route. The route it runs on a given day is declared on the readiness sheet; this one is used when the sheet does not say.">Usual route</th>
             <th data-fsort="effFrom">Effective From</th>
             <th data-fsort="effTo">Effective To</th>
             <th data-fsort="gps">GPS Company</th>

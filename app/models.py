@@ -472,6 +472,10 @@ class DailyListRow(db.Model):
     # itself, so a remark is not overwritten by it.
     remark = db.Column(db.String(300), default="")
     note = db.Column(db.String(300), default="")
+    # The route this truck runs on THIS day (30/09/2026). A truck no longer
+    # has one route for good: the declaration says which, day by day. NULL
+    # means the sheet did not say, and the fleet's own route applies.
+    route_id = db.Column(db.Integer)
 
 
 class MonitorRemark(db.Model):

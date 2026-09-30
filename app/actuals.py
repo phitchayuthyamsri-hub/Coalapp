@@ -55,7 +55,6 @@ def stamp_days(days, visits, roles):
     # Each truck is walked along its own route (22/09/2026): Mine : A Ngo ends
     # at A Ngo the way the corridor ends at the port. A stamp already written
     # stays as it is if the truck later changes route.
-    paths = _route_paths()
     by_plate = {}
     for v in visits:
         by_plate.setdefault(engine.norm_plate(v["plate"]), []).append(v)
@@ -65,6 +64,9 @@ def stamp_days(days, visits, roles):
     wrote = 0
     for day in days:
         lo, _hi = _day_bounds(day)
+        # The route is the one declared for THIS run day (30/09/2026): the
+        # same truck may run Mine : A Ngo today and A Ngo : Chan May tomorrow.
+        paths = _route_paths(day)
         for key in sorted(by_plate):
             vs = [v for v in by_plate.get(key, [])
                   if lo <= v["enter"] <= lo + CYCLE_SPAN]

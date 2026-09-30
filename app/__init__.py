@@ -613,6 +613,10 @@ def _ensure_listrow_schema():
         db.session.execute(text(
             "UPDATE daily_list_row SET state='pending' WHERE ready=0"))
         db.session.commit()
+    # Not through `stmts`: that path re-derives every row's state from its
+    # tick, which is a one-time conversion and must never run again.
+    if "route_id" not in cols:
+        _add_column_racing("daily_list_row", "route_id INTEGER")
     # 'sent'/'rejected' were the old words for the same decision.
     db.session.execute(text("UPDATE daily_list_row SET state='approved' WHERE state='sent'"))
     db.session.execute(text("UPDATE daily_list_row SET state='denied' WHERE state='rejected'"))
