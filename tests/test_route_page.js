@@ -93,6 +93,12 @@ const sub = fs.readFileSync(path.join(root, 'app', 'templates', 'subcontractor.h
 check('the declaration list drops backhaul routes from the picker',
       /ROUTES\.filter\(r => \(r\.kind \|\| 'any'\) !== 'backhaul'\)/.test(sub), true);
 check('...and the column says it is the way out', /label:'Route out'/.test(sub), true);
+// The route is declared per truck, per day (user, 30/09): the cell is part of
+// the sheet and is saved with it. It used to be written onto the truck the
+// moment it was picked, which made one day's choice the truck's route for good.
+check('the route goes out with the sheet', /\n\s+route: r\.route \|\| '',/.test(sub), true);
+check('...what the sheet says wins over the fleet', /route: d\.route \|\| routeOfPlate\[_k\(pl\)\] \|\| ''/.test(sub), true);
+check('...and picking one no longer rewrites the truck', /\/api\/trucks\/|lockRoute/.test(sub), false);
 check('a backhaul route says why its Trucks cell is empty',
       /kind === 'backhaul' \?[\s\S]{0,120}?not declared/.test(html), true);
 
