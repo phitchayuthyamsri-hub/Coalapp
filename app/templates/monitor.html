@@ -424,12 +424,28 @@ function phoneCell(r){
   return '<a href="tel:' + esc(r.phone) + '" title="Call this number">'
     + esc(r.phone) + '</a>'
     + '<a class="wa" title="Open the chat in the WhatsApp app"'
+    + ' data-plate="' + esc(r.plate) + '"'
     + ' href="whatsapp://send?phone=' + digits + '">WhatsApp</a>'
     + '<a class="waw" target="_blank" rel="noopener"'
+    + ' data-plate="' + esc(r.plate) + '"'
     + ' title="Open the chat in WhatsApp Web, for a machine without the app"'
     + ' href="https://web.whatsapp.com/send?phone=' + digits + '">web</a>'
     + (r.phone_known ? '' : '<span class="ph">placeholder</span>');
 }
+
+// Who opened a driver's WhatsApp chat from here (01/10/2026): one line in the
+// activity log, by truck. It records the press, not the conversation - and the
+// plate only, never the number. Never in the way of the link itself.
+document.addEventListener('click', function(e){
+  const a = e.target.closest && e.target.closest('a.wa, a.waw');
+  if (!a) return;
+  try {
+    fetch('/api/event', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      keepalive: true,
+      body: JSON.stringify({action: 'whatsapp',
+        detail: 'Driver chat: ' + (a.dataset.plate || '') + (a.classList.contains('waw') ? ' (web)' : '')})});
+  } catch (err) {}
+}, true);
 
 /* Pin the identity columns on the left of the track (user 2026-09-19). Which
    ones is decided by class - No#, Last location, Truck - and the offsets are

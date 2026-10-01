@@ -1192,7 +1192,18 @@ def track():
 
 
 _EVENT_ACTIONS = {"open_tab", "sort", "upload", "calculate", "export",
-                  "manual_time", "language", "edit", "delete", "draw"}
+                  "manual_time", "language", "edit", "delete", "draw",
+                  # A WhatsApp button pressed (01/10/2026): a driver's plan
+                  # message opened from Send Plan, or a driver's chat opened
+                  # from the Monitor. It records the press - whether the
+                  # message was then sent is WhatsApp's to know, not ours.
+                  "whatsapp"}
+
+# How a WhatsApp press says what it was. The pages write these; the activity
+# summary counts by them.
+WA_SEND = "Send plan "          # + "<plan day>: <plate>"
+WA_SEND_ALL = "Send all started"
+WA_CHAT = "Driver chat: "       # + "<plate>"
 
 
 @bp.post("/event")
@@ -1227,7 +1238,23 @@ def admin_activity():
     out = {}
 
     def U(name):
-        return out.setdefault(name, {"total_seconds": 0, "areas": {}, "countries": {}, "logins": [], "events": []})
+        return out.setdefault(name, {"total_seconds": 0, "areas": {}, "countries": {}, "logins": [], "events": [],
+                                     "whatsapp": {"sends": 0, "chats": 0, "last": ""}})
+
+    # Every WhatsApp press, not only the recent ones: "does the team use it"
+    # is a question about the whole record, and the feed below stops at sixty.
+    for e in (ActivityEvent.query.filter_by(action="whatsapp")
+              .order_by(ActivityEvent.ts.desc()).all()):
+        w = U(e.username or "?")["whatsapp"]
+        d = e.detail or ""
+        if d.startswith(WA_CHAT):
+            w["chats"] += 1
+        elif d.startswith(WA_SEND) and WA_SEND_ALL not in d:
+            w["sends"] += 1
+        else:
+            continue
+        if not w["last"] and e.ts:
+            w["last"] = e.ts.isoformat()
 
     for r in AreaTime.query.all():
         u = U(r.username or "?")
@@ -1256,7 +1283,8 @@ def admin_activity():
         countries = sorted(([{"country": c, "code": v["code"], "count": v["count"]} for c, v in u["countries"].items()]),
                            key=lambda x: -x["count"])
         res[name] = {"total_seconds": u["total_seconds"], "areas": areas,
-                     "countries": countries, "logins": u["logins"], "events": u["events"]}
+                     "countries": countries, "logins": u["logins"], "events": u["events"],
+                     "whatsapp": u["whatsapp"]}
     return jsonify(res)
 
 

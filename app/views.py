@@ -277,6 +277,21 @@ _EVENTS = """<script>
     if(lb){ push('language', lb.getAttribute('data-lang')); return; }
     var cx=t.closest && t.closest('#dinCtxPop button');
     if(cx){ push('manual_time', txt(cx) || 'set'); return; }
+    // Send Plan: a driver's WhatsApp message opened (01/10/2026). One line per
+    // driver - by the truck's own button, or by Open WhatsApp while stepping
+    // through Send all - so the record says who sent which truck's plan. The
+    // plate only: a phone number has no business in an activity log.
+    var planDay=function(){ var s=document.getElementById('sendDateSel'); return (s && s.value) || ''; };
+    var ws=t.closest && t.closest('.wa-send');
+    if(ws){ push('whatsapp', 'Send plan '+planDay()+': '+(ws.getAttribute('data-plate')||'')); return; }
+    var wo=t.closest && t.closest('#waOpen');
+    if(wo){
+      var ti=document.getElementById('waTitle');
+      var pl=((ti && ti.textContent) || '').split('\\u00B7')[0].trim();
+      push('whatsapp', 'Send plan '+planDay()+': '+pl+' (Send all)'); return;
+    }
+    var sa=t.closest && t.closest('#sendAllBtn');
+    if(sa){ push('whatsapp', 'Send plan '+planDay()+': Send all started ('+(txt(sa).replace(/[^0-9]/g,'')||'0')+' drivers)'); return; }
     var btn=t.closest && t.closest('button,a.btn,[role=button]');
     if(btn){
       var s=txt(btn);

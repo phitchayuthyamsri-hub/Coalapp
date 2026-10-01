@@ -38,6 +38,12 @@
   .evrow .evd{color:var(--ink);word-break:break-word}
   @media(max-width:560px){.evrow{grid-template-columns:1fr;gap:0}}
   .err{color:#ff6b6b}
+  /* WhatsApp use, by person (01/10/2026). */
+  .wa-sum{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+  .wa-sum table{border-collapse:collapse;font-size:13px;width:100%;max-width:640px}
+  .wa-sum th{color:var(--mut);font-weight:500;text-align:left;padding:3px 10px 5px 0;border-bottom:1px solid var(--line)}
+  .wa-sum td{padding:4px 10px 4px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .wa-tag{color:var(--blue);font-size:13px}
 </style>
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
@@ -52,6 +58,7 @@
 </header>
 <div class="wrap">
   <p class="note">Per-user usage: which areas they spend the most time in, total time, and where they log in from (approximate, by IP). Time is aggregated from the tool; country is recorded at login. Login times shown in UTC+7 (Indochina).</p>
+  <div id="waSum"></div>
   <div id="list">Loading…</div>
 </div>
 
@@ -60,7 +67,7 @@ const LABEL = {
   perf:'Performance', daily:'Daily performance', pva:'Plan vs Actual', subfleet:'Subcontractor fleet status',
   anchors:'Parameter', data:'Sequence/Route', 'data:sequence':'Sequence', 'data:route':'Route', 'data:timeline':'Timeline',
   gps:'GPS Data', plan:'Dispatch Plan', truckstatus:'Truck Status', weigh:'Weighbridge', fleet:'Fleet', guide:'Guide',
-  ops:'Operations',
+  ops:'Operations', send:'Send Plan',
   'ops:subcontractor':'Ops › Subcontractor', 'ops:readiness':'Ops › Supervisor',
   'ops:approvals':'Ops › Managers', 'ops:planner':'Ops › Planner',
   'ops:monitor':'Ops › Monitor', 'ops:map':'Ops › Map', 'ops:flow':'Ops › Process'
@@ -69,7 +76,7 @@ const lab = p => LABEL[p] || p;
 const ACT = {
   open_tab:'Opened', sort:'Sorted', upload:'Uploaded', calculate:'Calculate',
   export:'Exported', manual_time:'Manual time', language:'Language',
-  edit:'Edited', delete:'Removed', draw:'Drew'
+  edit:'Edited', delete:'Removed', draw:'Drew', whatsapp:'WhatsApp'
 };
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function dur(sec){ sec=Math.round(sec||0); if(sec<60) return sec+'s'; const m=Math.round(sec/60); if(m<60) return m+'m'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
@@ -90,7 +97,10 @@ function userBlock(name, u){
   const ev = (u.events||[]).map(e =>
     '<div class="evrow"><span class="evt">'+fmtTs(e.ts)+'</span><span class="eva">'+esc(ACT[e.action]||e.action)+'</span><span class="evd">'+esc(e.detail||'')+'</span></div>'
   ).join('') || '<div class="note">No actions recorded yet.</div>';
-  return '<div class="user"><div class="uhead"><span class="uname">'+esc(name)+'</span><span class="total">total '+dur(u.total_seconds)+'</span></div>'
+  const w = u.whatsapp || {};
+  const wa = (w.sends || w.chats)
+    ? '<span class="wa-tag">WhatsApp: '+(w.sends||0)+' plan sent · '+(w.chats||0)+' driver chat</span>' : '';
+  return '<div class="user"><div class="uhead"><span class="uname">'+esc(name)+'</span><span class="total">total '+dur(u.total_seconds)+'</span>'+wa+'</div>'
     + '<div class="cols"><div><h3>Time by area (most used first)</h3>'+bars+'</div>'
     + '<div><h3>Logged in from</h3>'+ctry+'<div class="logins"><h3>Recent logins</h3>'+(logins||'<div>—</div>')+'</div></div></div>'
     + '<div class="feed"><h3>Recent actions (newest first)</h3><div class="evlist">'+ev+'</div></div></div>';
@@ -102,6 +112,18 @@ fetch('/api/admin/activity').then(r=>{
 }).then(data=>{
   if(!data) return;
   const names = Object.keys(data).sort((a,b)=>data[b].total_seconds-data[a].total_seconds);
+  // Who uses the WhatsApp buttons - the question the feed below cannot answer,
+  // because it stops at each person's last sixty actions. Counted since
+  // 01/10/2026, when a press began to be recorded.
+  const wu = Object.keys(data).filter(n => { const w = data[n].whatsapp || {}; return w.sends || w.chats; })
+    .sort((a, b) => (data[b].whatsapp.sends + data[b].whatsapp.chats) - (data[a].whatsapp.sends + data[a].whatsapp.chats));
+  document.getElementById('waSum').innerHTML = '<div class="wa-sum"><h3>WhatsApp to drivers — recorded since 01/10/2026</h3>'
+    + (wu.length
+      ? '<table><thead><tr><th>User</th><th>Plans sent (Send Plan)</th><th>Driver chats (Monitor)</th><th>Last</th></tr></thead><tbody>'
+        + wu.map(n => { const w = data[n].whatsapp; return '<tr><td>'+esc(n)+'</td><td>'+w.sends+'</td><td>'+w.chats+'</td><td>'+fmtTs(w.last)+'</td></tr>'; }).join('')
+        + '</tbody></table>'
+      : '<div class="note">Nobody has pressed a WhatsApp button since it began to be recorded.</div>')
+    + '<div class="note" style="margin-top:8px">A press opens WhatsApp with the message ready. Whether it was then sent is not something this system can see.</div></div>';
   const el = document.getElementById('list');
   el.innerHTML = names.length ? names.map(n=>userBlock(n,data[n])).join('') : '<p class="note">No activity yet.</p>';
 }).catch(()=>{ document.getElementById('list').innerHTML='<p class="err">Could not load activity.</p>'; });
