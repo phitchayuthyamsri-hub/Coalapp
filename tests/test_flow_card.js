@@ -83,6 +83,27 @@ is('no banner', /class="noload"/.test(out), false);
 is('it reads Complete', out.indexOf('<b>Complete</b>') >= 0, true);
 is('no dashes', /s-none/.test(out), false);
 is('the rail is green', /class="steps noload"/.test(out), false);
+is('a stage with no time shows none', /class="at/.test(out), false);
+
+// When each desk actually did it (02/10/2026): the window is when it was due.
+console.log('\nthe time each desk did its part');
+const timed = (who, key, at, by, late, first) => Object.assign(stage(who, 'done', ''),
+  {key, at, by, late_min: late, first_at: first});
+out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',
+  stages: [timed('Subcontractor', 'declare', '2026-10-02 11:35', 'khanh@bacnamltd.com', 0, '2026-10-02 09:10'),
+           timed('Supervisor', 'submit', '2026-10-02 13:40', 'anh.lp@nam-tien.vn', 0),
+           timed('Manager', 'approve', '2026-10-02 16:12', 'tuan.hh@nam-tien.vn', 72),
+           timed('Planner', 'plan', '2026-10-02 16:05', 'PhitchayuthYamsri', 0),
+           stage('Monitor', 'done', 'the day is live on Monitor')],
+  now: {who: '', note: 'the whole chain has run'}});
+is('the company: declared, day first, 24 h', out.indexOf('declared 02/10 11:35') >= 0, true);
+is('...by the name before the @', out.indexOf('&middot; khanh</span>') >= 0, true);
+is('...the first filing is on hover', out.indexOf('first filed 02/10 09:10') >= 0, true);
+is('the supervisor: submitted', out.indexOf('submitted 02/10 13:40') >= 0, true);
+is('the manager: approved, and how late', /approved 02\/10 16:12[\s\S]{0,80}?1 h 12 m late/.test(out), true);
+is('...in the late colour, alone', (out.match(/class="at late"/g) || []).length, 1);
+is('the planner: issued', out.indexOf('issued 02/10 16:05') >= 0, true);
+is('four desks carry a time, the monitor none', (out.match(/class="at/g) || []).length, 4);
 
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

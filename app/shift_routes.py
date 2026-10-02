@@ -3935,6 +3935,35 @@ def _stage_window(day, key):
     return {"label": "%s–%s · %s" % (a, b, _dmy(iso)), "ends": iso + "T" + b}
 
 
+def _declared_stamp(day, sub_id):
+    """When the company filed this day's sheet: (last, by whom, first), local
+    time, or (None, "", None).
+
+    Read from the activity log, because the sheet itself keeps no time of its
+    own: every upload and every save writes a line naming the day. Only the
+    company's own people count - the supervisor's board saves the same sheet
+    and writes the same line - unless nobody from the company ever touched it,
+    in which case the sheet was put in for them and the first upload is the
+    honest answer."""
+    tag = _dmy(day)
+    evs = (ActivityEvent.query
+           .filter(ActivityEvent.action.in_(("upload", "edit")),
+                   db.or_(ActivityEvent.detail.like("Readiness sheet for %s %%" % tag),
+                          ActivityEvent.detail.like("Saved the declaration for %s %%" % tag)))
+           .order_by(ActivityEvent.ts).all())
+    if not evs:
+        return None, "", None
+    own = ({u.username for u in User.query.filter_by(subcontractor_id=sub_id).all()}
+           if sub_id else set())
+    mine = [e for e in evs if e.username in own]
+    if not mine:
+        up = [e for e in evs if e.action == "upload"]
+        if not up:
+            return None, "", None
+        return _local(up[0].ts), up[0].username or "", _local(up[0].ts)
+    return _local(mine[-1].ts), mine[-1].username or "", _local(mine[0].ts)
+
+
 def _flow_entry(day, dl, subs):
     """One company's day, as five stages: declare, submit, approve, plan,
     watch. Each stage is done, doing (started but unfinished), waiting (the
@@ -4052,7 +4081,6 @@ def _flow_entry(day, dl, subs):
     if snap is not None:
         stages.append({"key": "plan", "who": "Planner", "state": "done",
                        "note": "plan issued"
-                               + ((" " + _fmt(snap.issued_at)) if snap.issued_at else "")
                                + ((" by " + snap.issued_by)
                                   if getattr(snap, "issued_by", "") else "")})
     elif nothing_to_plan:
@@ -4077,9 +4105,36 @@ def _flow_entry(day, dl, subs):
 
     # Each stage carries its window, and a stage still open past its window
     # says so - "pending" and "pending, and late" are different situations.
+    # When each desk actually did its part (02/10/2026): the window says when
+    # it was due, this says when it happened and who did it. Local time.
+    did = {}
+    if dl is not None:
+        d_last, d_by, d_first = _declared_stamp(day, sub_id)
+        if d_last:
+            did["declare"] = (d_last, d_by, d_first)
+        if dl.submitted_at:
+            did["submit"] = (_local(dl.submitted_at), dl.submitted_by or "", None)
+        if dl.confirmed_at:
+            did["approve"] = (_local(dl.confirmed_at), dl.confirmed_by or "", None)
+    if snap is not None and snap.issued_at:
+        did["plan"] = (_local(snap.issued_at), getattr(snap, "issued_by", "") or "", None)
+
     now_local = datetime.utcnow() + LOCAL_OFFSET
     for s in stages:
         w = _stage_window(day, s["key"])
+        got = did.get(s["key"])
+        if got:
+            s["at"] = got[0].strftime("%Y-%m-%d %H:%M")
+            s["by"] = got[1]
+            if got[2] and got[2].strftime("%Y-%m-%d %H:%M") != s["at"]:
+                s["first_at"] = got[2].strftime("%Y-%m-%d %H:%M")
+            if w:
+                try:
+                    over = (got[0] - datetime.strptime(w["ends"], "%Y-%m-%dT%H:%M")
+                            ).total_seconds() // 60
+                    s["late_min"] = int(over) if over > 0 else 0
+                except ValueError:
+                    pass
         if w:
             s["window"] = w["label"]
             if s["state"] in ("waiting", "doing"):

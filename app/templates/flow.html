@@ -60,6 +60,12 @@
   .note{font-size:10.5px;color:var(--mut);margin-top:2px;max-width:180px;line-height:1.4}
   .win{font-size:9.5px;color:#5a6a85;margin-top:2px;letter-spacing:.2px}
   .win.late{color:var(--bad);font-weight:700}
+  /* When the desk actually did it, and who (02/10/2026). Green inside its
+     window, amber after it - late is a fact about the day, not an alarm. */
+  .at{font-size:10.5px;color:#86efac;margin-top:3px;font-weight:600;
+      font-variant-numeric:tabular-nums}
+  .at.late{color:var(--warn)}
+  .at .by{font-weight:400;opacity:.85}
 
   .now{margin-top:12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
        background:#2a1f10;border:1px solid #5a4020;color:#fcd34d}
@@ -97,12 +103,32 @@ const jget = async u => (await fetch(u)).json();
 const dmy = iso => iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4);
 const MARK = {done:'✓', waiting:'⏳', doing:'⏳', idle:'·', none:'—'};
 
+// "declared 02/10 11:42 · khanhtd · 1 h 12 m late". The full date, the whole
+// login and - for the company - when the sheet was first filed are on hover.
+const DID = {declare: 'declared', submit: 'submitted', approve: 'approved', plan: 'issued'};
+function lateText(m){
+  return m < 60 ? m + ' m' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' m' : '');
+}
+function atHtml(s){
+  if (!s.at) return '';
+  const hm = t => t.slice(8, 10) + '/' + t.slice(5, 7) + ' ' + t.slice(11, 16);
+  const did = DID[s.key] || 'done';
+  const late = s.late_min > 0;
+  const tip = did + ' ' + dmy(s.at) + ' ' + s.at.slice(11, 16) + (s.by ? ' by ' + s.by : '')
+    + (s.first_at ? ' - first filed ' + hm(s.first_at) : '');
+  return '<div class="at' + (late ? ' late' : '') + '" title="' + esc(tip) + '">'
+    + esc(did + ' ' + hm(s.at))
+    + (s.by ? '<span class="by"> &middot; ' + esc(String(s.by).split('@')[0]) + '</span>' : '')
+    + (late ? ' &middot; ' + esc(lateText(s.late_min)) + ' late' : '') + '</div>';
+}
+
 function stepHtml(s){
   return '<div class="step s-' + s.state + (s.state === 'done' ? ' p-done' : '') + '">'
     + '<div class="dot">' + (MARK[s.state] || '·') + '</div>'
     + '<div class="who">' + esc(s.who) + '</div>'
     + (s.window ? '<div class="win' + (s.overdue ? ' late' : '') + '">'
         + esc(s.window) + (s.overdue ? ' — passed' : '') + '</div>' : '')
+    + atHtml(s)
     + (s.note ? '<div class="note">' + esc(s.note) + '</div>' : '')
     + '</div>';
 }
