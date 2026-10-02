@@ -104,6 +104,11 @@ is('the manager: approved, and how late', /approved 02\/10 16:12[\s\S]{0,80}?1 h
 is('...in the late colour, alone', (out.match(/class="at late"/g) || []).length, 1);
 is('the planner: issued', out.indexOf('issued 02/10 16:05') >= 0, true);
 is('four desks carry a time, the monitor none', (out.match(/class="at/g) || []).length, 4);
+out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',
+  stages: [Object.assign(timed('Planner', 'plan', '2026-10-02 16:05', 'plan', 0), {again_at: '2026-10-03 17:48'})],
+  now: {who: '', note: 'the whole chain has run'}});
+is('a plan issued again says so, under the first time',
+   /issued 02\/10 16:05[\s\S]*?class="at again">issued again 03\/10 17:48/.test(out), true);
 
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

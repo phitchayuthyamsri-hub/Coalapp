@@ -4116,8 +4116,19 @@ def _flow_entry(day, dl, subs):
             did["submit"] = (_local(dl.submitted_at), dl.submitted_by or "", None)
         if dl.confirmed_at:
             did["approve"] = (_local(dl.confirmed_at), dl.confirmed_by or "", None)
+    again = None
     if snap is not None and snap.issued_at:
-        did["plan"] = (_local(snap.issued_at), getattr(snap, "issued_by", "") or "", None)
+        # The FIRST issue is when the planner did the job. A plan issued again
+        # the next evening is a revision, and timing the desk by it made a
+        # plan that went out on time read as a day late (29/09/2026).
+        first = snap
+        if snap.day == day:
+            first = (PlanSnapshot.query.filter_by(day=day)
+                     .filter(PlanSnapshot.issued_at.isnot(None))
+                     .order_by(PlanSnapshot.issued_at).first()) or snap
+        did["plan"] = (_local(first.issued_at), getattr(first, "issued_by", "") or "", None)
+        if first.id != snap.id:
+            again = _local(snap.issued_at).strftime("%Y-%m-%d %H:%M")
 
     now_local = datetime.utcnow() + LOCAL_OFFSET
     for s in stages:
@@ -4128,6 +4139,8 @@ def _flow_entry(day, dl, subs):
             s["by"] = got[1]
             if got[2] and got[2].strftime("%Y-%m-%d %H:%M") != s["at"]:
                 s["first_at"] = got[2].strftime("%Y-%m-%d %H:%M")
+            if s["key"] == "plan" and again:
+                s["again_at"] = again
             if w:
                 try:
                     over = (got[0] - datetime.strptime(w["ends"], "%Y-%m-%dT%H:%M")

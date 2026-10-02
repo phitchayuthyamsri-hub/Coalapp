@@ -66,6 +66,7 @@
       font-variant-numeric:tabular-nums}
   .at.late{color:var(--warn)}
   .at .by{font-weight:400;opacity:.85}
+  .at.again{color:var(--mut);font-weight:400;margin-top:1px}
 
   .now{margin-top:12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
        background:#2a1f10;border:1px solid #5a4020;color:#fcd34d}
@@ -115,11 +116,13 @@ function atHtml(s){
   const did = DID[s.key] || 'done';
   const late = s.late_min > 0;
   const tip = did + ' ' + dmy(s.at) + ' ' + s.at.slice(11, 16) + (s.by ? ' by ' + s.by : '')
-    + (s.first_at ? ' - first filed ' + hm(s.first_at) : '');
+    + (s.first_at ? ' - first filed ' + hm(s.first_at) : '')
+    + (s.again_at ? ' - issued again ' + hm(s.again_at) : '');
   return '<div class="at' + (late ? ' late' : '') + '" title="' + esc(tip) + '">'
     + esc(did + ' ' + hm(s.at))
     + (s.by ? '<span class="by"> &middot; ' + esc(String(s.by).split('@')[0]) + '</span>' : '')
-    + (late ? ' &middot; ' + esc(lateText(s.late_min)) + ' late' : '') + '</div>';
+    + (late ? ' &middot; ' + esc(lateText(s.late_min)) + ' late' : '') + '</div>'
+    + (s.again_at ? '<div class="at again">issued again ' + esc(hm(s.again_at)) + '</div>' : '');
 }
 
 function stepHtml(s){

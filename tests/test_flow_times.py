@@ -94,6 +94,18 @@ with app.app_context():
     check("issued 16:05", (st["plan"].get("at"), st["plan"].get("by")), ("2026-10-02 16:05", "plan@nt"))
     check("...inside the 15:30-16:30 window", st["plan"].get("late_min"), 0)
     check("the note no longer repeats the time", st["plan"]["note"], "plan issued by plan@nt")
+    check("issued once: nothing about a second issue", "again_at" in st["plan"], False)
+
+    print("\nthe plan issued again the next evening")
+    db.session.add(PlanSnapshot(week_start="2026-09-28", day=DAY, subcontractor_id=None,
+                                issued_by="plan@nt", issued_at=datetime(2026, 10, 3, 10, 48),
+                                rows=[], figures=[]))
+    db.session.commit()
+    with app.test_request_context():
+        e2 = sr._flow_entry(DAY, dl, {sub.id: "Bac Nam"})
+    p2 = {s["key"]: s for s in e2["stages"]}["plan"]
+    check("the desk is timed by its first issue", (p2.get("at"), p2.get("late_min")), ("2026-10-02 16:05", 0))
+    check("...and the later one is named", p2.get("again_at"), "2026-10-03 17:48")
 
     print("\nthe monitor, and a desk that has not acted")
     check("the monitor submits nothing, so it carries no time", "at" in st["watch"], False)
