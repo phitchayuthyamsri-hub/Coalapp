@@ -110,5 +110,34 @@ out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',
 is('a plan issued again says so, under the first time',
    /issued 02\/10 16:05[\s\S]*?class="at again">issued again 03\/10 17:48/.test(out), true);
 
+console.log('\na run day that came with no sheet (05/10/2026)');
+vm.runInContext('draw(' + JSON.stringify({back: 7,
+  missed: [{date: '2026-10-04', company: 'Bac Nam'}],
+  days: [{date: '2026-10-04', today: false, tomorrow: false, companies: [{
+    company: 'Bac Nam', missed: true, no_load: false, no_load_note: '',
+    stages: [Object.assign(stage('Subcontractor','missed','no sheet was declared'),
+                           {window: '08:00–12:00 · 03/10/2026', overdue: true}),
+             stage('Supervisor','idle',''), stage('Manager','idle',''),
+             stage('Planner','idle',''), stage('Monitor','idle','')],
+    now: {who: 'Subcontractor', missed: true, overdue: true, window: '08:00–12:00 · 03/10/2026',
+          note: 'no sheet was declared for 04/10/2026, so no truck was approved and no plan was issued'}}]}]})
+  + ')', sandbox);
+out = store['body'].innerHTML;
+is('the tally leads the page', out.indexOf('<div class="card tally bad">') === 0, true);
+is('...naming the day and the company', /Missed in the last 7 days: 1[\s\S]*?04\/10\/2026 Bac Nam/.test(out), true);
+is('the card is marked missed', /class="card missed"/.test(out), true);
+is('...with a chip', /class="chip miss">missed</.test(out), true);
+is('the subcontractor is a red cross', /s-missed[^>]*><div class="dot">✕<\/div>/.test(out), true);
+is('the banner says Missed, not Pending', /class="now miss"><b>Missed<\/b>/.test(out)
+   && out.indexOf('Pending at') < 0, true);
+is('...and when the sheet was due', out.indexOf('the sheet was due 08:00–12:00 · 03/10/2026') >= 0, true);
+vm.runInContext('draw(' + JSON.stringify({back: 7, missed: [], days: [{date: '2026-10-05',
+  today: true, tomorrow: false, companies: [{company: 'Bac Nam', no_load: false, no_load_note: '',
+  stages: [stage('Subcontractor','done','37 trucks declared')], now: {who: '', note: 'the whole chain has run'}}]}]})
+  + ')', sandbox);
+out = store['body'].innerHTML;
+is('no misses: the tally says so', /class="card tally good"><b>No missed days<\/b>/.test(out), true);
+is('...and nothing is red', /miss/.test(out.replace('No missed days', '')), false);
+
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

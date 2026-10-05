@@ -3964,14 +3964,21 @@ def _declared_stamp(day, sub_id):
     return _local(mine[-1].ts), mine[-1].username or "", _local(mine[0].ts)
 
 
-def _flow_entry(day, dl, subs):
+def _flow_entry(day, dl, subs, sub_id=None, today=None):
     """One company's day, as five stages: declare, submit, approve, plan,
     watch. Each stage is done, doing (started but unfinished), waiting (the
-    chain is stuck on it), idle (not reached), or none - there was nothing for
-    this desk to do, so nobody at it did anything. That last one is NOT done:
-    a tick says a person did their work, and on a day with no coal load the
-    planner and the monitor did no work. `now` names the first stage that is
-    waiting or doing - whose desk the day is sitting on."""
+    chain is stuck on it), idle (not reached), none - there was nothing for
+    this desk to do, so nobody at it did anything - or missed. None is NOT
+    done: a tick says a person did their work, and on a day with no coal load
+    the planner and the monitor did no work. `now` names the first stage that
+    is waiting or doing - whose desk the day is sitting on.
+
+    Missed (05/10/2026): the run day came and the company never declared a
+    sheet for it. That day used to drop off the page - a quiet past day earned
+    no card - so the one day the chain broke was the one day nobody could
+    see. A sheet that never came is not "pending" either: nothing can still
+    be done about a day that has already run. `sub_id` names the company when
+    there is no sheet to read it from."""
     st = {"pending": 0, "applied": 0, "approved": 0, "denied": 0}
     rows = []
     if dl is not None:
@@ -3979,12 +3986,23 @@ def _flow_entry(day, dl, subs):
         for r in rows:
             k = r.state or "pending"
             st[k] = st.get(k, 0) + 1
-    sub_id = dl.subcontractor_id if dl is not None else None
+    if dl is not None:
+        sub_id = dl.subcontractor_id
+    if today is None:
+        today = (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    missed = dl is None and day <= today
     gaps = _fleet_gaps(dl, sub_id) if dl is not None else []
     snap = _issued_for(day, sub_id)
+    if missed and snap is not None and snap.day != day:
+        # The week's plan covers the day on paper, but no truck was declared
+        # for it, so it is not a plan anybody made for this day.
+        snap = None
 
     stages = []
-    if dl is None:
+    if missed:
+        stages.append({"key": "declare", "who": "Subcontractor",
+                       "state": "missed", "note": "no sheet was declared"})
+    elif dl is None:
         stages.append({"key": "declare", "who": "Subcontractor",
                        "state": "waiting", "note": "no sheet declared for this day"})
     elif gaps:
@@ -4160,6 +4178,16 @@ def _flow_entry(day, dl, subs):
             s["window"] = "run day · " + _dmy(day)
 
     now = next((s for s in stages if s["state"] in ("waiting", "doing")), None)
+    if missed:
+        return {"company": subs.get(sub_id) if sub_id else None,
+                "sheet_state": "", "no_load": False, "no_load_note": "",
+                "missed": True, "stages": stages,
+                "now": {"who": "Subcontractor", "missed": True, "overdue": True,
+                        "window": stages[0].get("window", ""),
+                        "note": "no sheet was declared for %s, so no truck was "
+                                "approved and %s" % (_dmy(day),
+                                "a plan was issued without one" if snap is not None
+                                else "no plan was issued")}}
 
     # Said once, at the top of the card, from the moment the sheet lands: a
     # day with no coal load is the single most important fact about that day,
@@ -4175,7 +4203,8 @@ def _flow_entry(day, dl, subs):
     else:
         no_load = ""
 
-    return {"company": (subs.get(sub_id, "(no company)") if dl is not None else None),
+    return {"company": (subs.get(sub_id, "(no company)") if dl is not None
+                        else subs.get(sub_id) if sub_id else None),
             "sheet_state": dl.state if dl is not None else "",
             "no_load": bool(no_load),
             "no_load_note": no_load,
@@ -4203,15 +4232,32 @@ def flow():
     days = sorted({(now_local - timedelta(days=i)).strftime("%Y-%m-%d")
                    for i in range(back)} | {today, tomorrow}, reverse=True)
     subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
-    out = []
+    # Who is expected to declare: every company that has declared a day, from
+    # its first one on. Before a company's first sheet it was not on the
+    # system yet, and that is not a day it missed.
+    since = dict(db.session.query(DailyList.subcontractor_id,
+                                  db.func.min(DailyList.list_date))
+                 .filter(DailyList.subcontractor_id.isnot(None))
+                 .group_by(DailyList.subcontractor_id).all())
+    out, missed = [], []
     for day in days:
         lists = DailyList.query.filter_by(list_date=day).order_by(DailyList.id).all()
-        if not lists and day not in (today, tomorrow):
-            continue    # a quiet past day earns no card
+        have = {dl.subcontractor_id for dl in lists}
+        absent = sorted((sid for sid, first in since.items()
+                         if first <= day and sid not in have),
+                        key=lambda sid: subs.get(sid, ""))
+        entries = ([_flow_entry(day, dl, subs, today=today) for dl in lists]
+                   + [_flow_entry(day, None, subs, sub_id=sid, today=today)
+                      for sid in absent])
+        if not entries:
+            if day not in (today, tomorrow):
+                continue    # before anybody was on the system
+            entries = [_flow_entry(day, None, subs, today=today)]
+        missed += [{"date": day, "company": e["company"]}
+                   for e in entries if e.get("missed")]
         out.append({"date": day, "today": day == today, "tomorrow": day == tomorrow,
-                    "companies": [_flow_entry(day, dl, subs)
-                                  for dl in (lists or [None])]})
-    return jsonify(days=out, today=today)
+                    "companies": entries})
+    return jsonify(days=out, today=today, missed=missed, back=back)
 
 
 @bp.post("/list/<action>")
