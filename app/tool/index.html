@@ -5486,6 +5486,13 @@ function setTruckStatus(plate, status) {
   // Re-adding/editing a plate un-hides it.
   if (STATE.hiddenPlates.has(p)) { STATE.hiddenPlates.delete(p); saveHiddenPlates(); }
   saveFleetToStorage();
+  // Written through to the truck table, like every other fleet field
+  // (05/10/2026): a status kept only in this browser was a truck the rest of
+  // the system - the daily sheet, the GPS pull - still saw as it was.
+  try {
+    fetch('/api/fleet', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({plate: plate, status: st})});
+  } catch (e) {}
   return true;
 }
 
@@ -5550,6 +5557,11 @@ function removeTruck(plate) {
   saveHiddenPlates();
   const had = !!STATE.fleet[p];
   if (had) { delete STATE.fleet[p]; saveFleetToStorage(); }
+  // And off the server's truck table, which is the fleet everything else
+  // reads. Removing it here only hid it in this browser (05/10/2026): the
+  // truck vanished from the page while the daily sheet still asked for it
+  // and the supervisor's Submit refused the day over it.
+  try { fetch('/api/fleet/' + encodeURIComponent(plate), {method: 'DELETE'}); } catch (e) {}
   return true;
 }
 
