@@ -2922,6 +2922,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
         <div class="fb-item" style="align-self:center"><span class="help-text" id="dinStatusCount"></span></div>
       </div>
       <div class="table-wrap" style="margin-top:8px"><table class="seq-table" id="dinStatusTable"><thead></thead><tbody></tbody></table></div>
+      <!-- The same grid from the GPS (06/10/2026): what the truck was doing by
+           the system's own leg rule, beside what the company declared. -->
+      <h2 style="margin-top:18px">Truck Status &mdash; GPS</h2>
+      <div class="help-text" id="dinGpsStatusNote">FH / BH from the GPS snapshot taken when the supervisor opened each day: seen at the port since it last left the mine = BH, otherwise FH. Blank = declared not running (e.g. Repair), or no GPS answer. Hover a cell for why.</div>
+      <div class="table-wrap" style="margin-top:8px"><table class="seq-table" id="dinGpsStatusTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 </div>
@@ -6185,24 +6190,33 @@ function exportDinWeigh(){
 }
 
 function renderDinStatus() {
-  const tbl = document.getElementById('dinStatusTable'); if (!tbl) return;
-  const st = STATE.din.status;
+  _renderStatusGrid('dinStatusTable', STATE.din.status, renderDinStatus);
+  renderDinGpsStatus();
+}
+function renderDinGpsStatus() {
+  _renderStatusGrid('dinGpsStatusTable', STATE.din.gpsStatus, renderDinGpsStatus);
+}
+// One grid, two sources: the declared Truck Status and the GPS one share the
+// columns, the date range and the sort, so they read side by side.
+function _renderStatusGrid(tblId, st, again) {
+  const tbl = document.getElementById(tblId); if (!tbl) return;
+  const isGps = tblId === 'dinGpsStatusTable';
   const filt = document.getElementById('dinStatusFilter');
   if (!st || !st.plates.length) {
-    if (filt) filt.style.display = 'none';
+    if (filt && !isGps) filt.style.display = 'none';
     tbl.querySelector('thead').innerHTML = '';
-    tbl.querySelector('tbody').innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:18px">No truck status loaded.</td></tr>';
-    const c = document.getElementById('dinStatusCount'); if (c) c.textContent = '';
+    tbl.querySelector('tbody').innerHTML = '<tr><td style="text-align:center;color:var(--muted);padding:18px">' + (isGps ? 'No GPS snapshot yet.' : 'No truck status loaded.') + '</td></tr>';
+    const c = document.getElementById('dinStatusCount'); if (c && !isGps) c.textContent = '';
     return;
   }
-  if (filt) filt.style.display = '';
+  if (filt && !isGps) filt.style.display = '';
   // date-range filter
   let dates = st.dates.slice();
   const from = STATE.din.statusFrom, to = STATE.din.statusTo;
   if (from) dates = dates.filter(d => d >= from);
   if (to) dates = dates.filter(d => d <= to);
   const cntEl = document.getElementById('dinStatusCount');
-  if (cntEl) cntEl.textContent = `${st.plates.length} trucks · ${dates.length} days`;
+  if (cntEl && !isGps) cntEl.textContent = `${st.plates.length} trucks · ${dates.length} days`;
   // read-only fleet lookup keyed by normalized plate (don't mutate STATE.fleet)
   const fleetByNorm = {};
   for (const fp in (STATE.fleet || {})) { fleetByNorm[_dinNorm(fp)] = STATE.fleet[fp]; }
@@ -6216,22 +6230,23 @@ function renderDinStatus() {
     if (k.indexOf('d:') === 0) { const dv = st.cell[p] && st.cell[p][k.slice(2)]; return dv || null; }  // note on that date
     return p;
   };
-  if (_DIN_SORT['dinStatusTable'] && _DIN_SORT['dinStatusTable'].key) plates = _dinSortRows('dinStatusTable', plates, sVal);
+  if (_DIN_SORT[tblId] && _DIN_SORT[tblId].key) plates = _dinSortRows(tblId, plates, sVal);
   // header: Plate + GPS + Status (sortable) + each date (dd/mm)
   const dlabel = d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; };
-  const sortHd = _dinSortHead('dinStatusTable', [['plate', 'Plate'], ['gps', 'GPS provider'], ['status', 'Truck status']], renderDinStatus).replace(/^<tr>|<\/tr>$/g, '');
-  const _ss = _DIN_SORT['dinStatusTable'] || {};
-  const dateHd = dates.map(d => { const k = 'd:' + d; const ind = _ss.key === k ? (_ss.dir === 1 ? ' \u25B2' : ' \u25BC') : ''; return `<th data-dsort="dinStatusTable|${k}" style="cursor:pointer;user-select:none" title="Sort by ${dlabel(d)} status A\u2192Z">${dlabel(d)}${ind}</th>`; }).join('');
+  const sortHd = _dinSortHead(tblId, [['plate', 'Plate'], ['gps', 'GPS provider'], ['status', 'Truck status']], again).replace(/^<tr>|<\/tr>$/g, '');
+  const _ss = _DIN_SORT[tblId] || {};
+  const dateHd = dates.map(d => { const k = 'd:' + d; const ind = _ss.key === k ? (_ss.dir === 1 ? ' \u25B2' : ' \u25BC') : ''; const pulled = isGps && st.taken && st.taken[d] ? ' - GPS pulled ' + st.taken[d] : ''; return `<th data-dsort="${tblId}|${k}" style="cursor:pointer;user-select:none" title="Sort by ${dlabel(d)} status A\u2192Z${escapeHtml(pulled)}">${dlabel(d)}${ind}</th>`; }).join('');
   tbl.querySelector('thead').innerHTML = '<tr>' + sortHd + dateHd + '</tr>';
   tbl.querySelector('tbody').innerHTML = plates.map(p => {
     const fm = fleetByNorm[p] || null;
     const gps = fm && fm.gps ? fm.gps : '<span style="color:var(--muted)">—</span>';
     const status = fm && fm.status ? `<span class="stcell ${_dinFleetStatusCls(fm.status)}">${escapeHtml(fm.status)}</span>` : '<span style="color:var(--muted)">—</span>';
-    const cells = dates.map(d => { const v = (st.cell[p] && st.cell[p][d]) || ''; return v ? `<td><span class="stcell ${_dinNoteCls(v)}" title="${escapeHtml(v)}">${escapeHtml(v)}</span></td>` : '<td></td>'; }).join('');
+    const cells = dates.map(d => { const v = (st.cell[p] && st.cell[p][d]) || ''; const t = (isGps && st.tip && st.tip[p] && st.tip[p][d]) || v; return v ? `<td><span class="stcell ${_dinNoteCls(v)}" title="${escapeHtml(t)}">${escapeHtml(v)}</span></td>` : (t ? `<td title="${escapeHtml(t)}"></td>` : '<td></td>'); }).join('');
     return `<tr><td>${escapeHtml(st.disp[p] || p)}</td><td>${gps}</td><td>${status}</td>${cells}</tr>`;
   }).join('');
 }
 _DIN_SORT_RENDER['dinStatusTable'] = renderDinStatus;
+_DIN_SORT_RENDER['dinGpsStatusTable'] = renderDinGpsStatus;
 function _dinFleetStatusCls(s) { const x = (s || '').toLowerCase(); if (x === 'online') return 'st-front'; if (x === 'maintenance') return 'st-maint'; if (x === 'breakdown') return 'st-lic'; if (x === 'deactivated') return 'st-other'; return 'st-other'; }
 const _DIN_NOTE_CLS = { 'back haul': 'st-back', 'front haul': 'st-front', 'maintenance': 'st-maint', 'waiting to unload': 'st-wait', 'driver on vacation': 'st-vac', 'out of date of truck license': 'st-lic' };
 function _dinNoteCls(n) { const s = (n || '').toLowerCase().trim(); if (_DIN_NOTE_CLS[s]) return _DIN_NOTE_CLS[s]; if (s.indexOf('accident') >= 0) return 'st-accident'; if (s.indexOf('remov') >= 0) return 'st-remove'; return 'st-other'; }

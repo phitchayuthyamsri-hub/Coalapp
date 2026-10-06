@@ -13,6 +13,7 @@ rest of the system uses:
     fleet   <- truck                    (actualGpsFleet_v2)
     plan    <- the issued PlanSnapshot  (actualGpsDataInput_v1 .plan)
     status  <- the readiness rows       (actualGpsDataInput_v1 .status)
+    gpsStatus <- the day's GPS snapshot  (actualGpsDataInput_v1 .gpsStatus)
     pings   <- gps_ping                 (IndexedDB 'actual_gps')
 
 The weighbridge is deliberately NOT seeded. It is the one input that comes from
@@ -37,9 +38,9 @@ from datetime import datetime, timedelta
 from flask import Blueprint, Response, request
 from flask_login import current_user, login_required
 
-from . import engine
+from . import engine, readiness_import
 from .models import (DailyList, DailyListRow, FleetCommitment, GpsPing,
-                     PlanSnapshot, Route, Truck, db)
+                     GpsSnapshot, PlanSnapshot, Route, Truck, db)
 
 bp = Blueprint("tool_link", __name__)
 
@@ -160,11 +161,65 @@ def _status(only):
     return {"plates": plates, "disp": disp, "dates": sorted(dates), "cell": cell}
 
 
+def _gps_status(only):
+    """The same grid as _status, but what the GPS said instead of what the
+    company declared (06/10/2026) - FH or BH per truck per day, from the day's
+    GPS snapshot: the picture the supervisor pulled when opening that day, and
+    the one the manager approved against. The leg is the system's own rule:
+    seen at the port since it last left the mine is BH, otherwise FH.
+
+    Blank where the GPS had no answer (no position in the last 24 hours, or
+    not at any checkpoint yet), and blank on a day the company declared the
+    truck not running - a truck in the workshop has no leg, whatever its last
+    position says. `tip` carries the why, for the cell's hover."""
+    snaps = GpsSnapshot.query.order_by(GpsSnapshot.day).all()
+    if not snaps:
+        return None
+    days = [s.day for s in snaps]
+    down = set()
+    for row, dl in (db.session.query(DailyListRow, DailyList)
+                    .join(DailyList, DailyList.id == DailyListRow.list_id)
+                    .filter(DailyList.list_date.in_(days)).all()):
+        note = (row.note or row.reason or "").strip()
+        if note and not readiness_import.is_running(note):
+            down.add((engine.norm_plate(row.plate or ""), dl.list_date))
+    cell, tip, disp, plates, taken = {}, {}, {}, [], {}
+    for snap in snaps:
+        if snap.taken_at:
+            taken[snap.day] = ((snap.taken_at + timedelta(hours=7)).strftime("%d/%m %H:%M")
+                               + ((" by " + snap.taken_by.split("@")[0]) if snap.taken_by else ""))
+        for r in ((snap.data or {}).get("rows") or []):
+            key = engine.norm_plate(r.get("plate") or "")
+            if not key or (only is not None and key not in only):
+                continue
+            if key not in disp:
+                disp[key] = r.get("plate")
+                plates.append(key)
+                cell[key], tip[key] = {}, {}
+            if (key, snap.day) in down:
+                tip[key][snap.day] = "declared not running - no leg"
+                continue
+            leg = (r.get("status") or "").strip()
+            seen = r.get("seen_at") or ""
+            why = r.get("why") or ""
+            where = r.get("location") or ""
+            tip[key][snap.day] = " · ".join(x for x in (
+                ("GPS " + seen[8:10] + "/" + seen[5:7] + " " + seen[11:16]) if seen else "",
+                where, why) if x)
+            if leg in ("FH", "BH"):
+                cell[key][snap.day] = leg
+    if not plates:
+        return None
+    return {"plates": sorted(plates), "disp": disp, "dates": days, "cell": cell,
+            "tip": tip, "taken": taken}
+
+
 @bp.get("/api/tool/seed.js")
 @login_required
 def tool_seed_js():
     only = _own_plates()
     seed = {"fleet": _fleet(only), "plan": _plan(only), "status": _status(only),
+            "gpsStatus": _gps_status(only),
             "at": datetime.utcnow().isoformat(timespec="seconds")}
     js = SEED_JS.replace("__SEED__", json.dumps(seed)) \
                 .replace("__FLEET_KEY__", json.dumps(FLEET_KEY)) \
@@ -200,6 +255,7 @@ SEED_JS = r"""
     // manual overrides, assignments and weighbridge fills are theirs.
     din.plan = SEED.plan || {};
     if (SEED.status) din.status = SEED.status;
+    din.gpsStatus = SEED.gpsStatus || null;
     localStorage.setItem(DIN_KEY, JSON.stringify(din));
     window.__TOOL_SEEDED_AT = SEED.at;
   } catch (e) { console.warn('[tool-link] store seed failed', e); }
