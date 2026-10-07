@@ -419,6 +419,20 @@ def _list_for_run_day(day, sub_id):
     return got[0] if got else None
 
 
+def _plannable_rows():
+    """The rows the PLANNER works from: every truck a company has declared,
+    whether or not the chain has approved it yet (07/10/2026).
+
+    The planner used to see only approved rows, so a sheet in by noon sat
+    invisible to planning until the supervisor and the manager had both
+    acted - on 05/10 and 06/10 that was hours. The chain still runs exactly as
+    before, and the Process page still reads it as before; it no longer holds
+    the planner up. A truck the manager DENIED is the one answer that still
+    keeps it out of the plan."""
+    return DailyListRow.query.filter(db.or_(DailyListRow.state.is_(None),
+                                            DailyListRow.state != "denied"))
+
+
 def _lists_for_run_day(day, sub_id):
     """EVERY list whose approved trucks are due at the mine on `day`.
 
@@ -1465,7 +1479,7 @@ def _week_data(start_arg, only, roll):
                      subs.get(dl.subcontractor_id, "(no company)"))
              for dl in DailyList.query.all()}
 
-    approved = DailyListRow.query.filter(DailyListRow.state == "approved").all()
+    approved = _plannable_rows().all()
     arrivals, who, no_time, touched = [], {}, [], set()
     said = {}       # (plate, arrival) -> the route declared with it
     elsewhere = {}
@@ -1608,7 +1622,7 @@ def _revision_data(day, only):
     arrivals, who, no_time = [], {}, []
     elsewhere = {}
     routes = {}     # the route each truck is declared onto for this day
-    for r in DailyListRow.query.filter(DailyListRow.state == "approved").all():
+    for r in _plannable_rows().all():
         sub_id, label = owner.get(r.list_id, (None, ""))
         if r.arrive_date != day:
             # Not this day, but worth knowing about: a revision opened on a
@@ -3258,11 +3272,11 @@ def plan_day():
     today = (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id()
 
-    # Only approved rows carry a promise; a pending truck is not due anywhere.
+    # Every declared truck is due where it says (07/10/2026) - the planner no
+    # longer waits for the approval chain; only a denied truck is left out.
     owner = {dl.id: dl.subcontractor_id for dl in DailyList.query.all()}
     days = {}
-    for r in (DailyListRow.query
-              .filter(DailyListRow.state == "approved").all()):
+    for r in _plannable_rows().all():
         if not r.arrive_date or not r.arrive_hhmm:
             continue
         if only is not None and owner.get(r.list_id) != only:
@@ -4540,8 +4554,8 @@ def _why_not_assigned(row, day):
     status = (row.note or "").strip()
     if status and status not in _RUNNING:
         return status                       # Breakdown, Maintenance, No driver ...
-    if (row.state or "pending") != "approved":
-        return "Not approved"
+    if (row.state or "pending") == "denied":
+        return "Denied by the manager"
     if status == "FH":
         return "FH - loaded, not due at the mine"
     if not row.arrive_date:

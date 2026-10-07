@@ -251,7 +251,7 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
 
 <header>
   <div><h1>Dispatch Planner</h1>
-    <div class="sub">computed from the approved truck list &middot; local time (UTC+7)</div></div>
+    <div class="sub">computed from the declared truck list &middot; local time (UTC+7)</div></div>
   <nav class="tabs">
     <button class="tab on" data-tab="revision">Revision</button>
     <button class="tab" data-tab="week">Week</button>
@@ -769,7 +769,7 @@ async function run(){
          + '</div>';
   if (d.no_time && d.no_time.length)
     warn += '<div class="banner b-none">' + d.no_time.length
-         + ' approved truck(s) are down for this day with no arrival time, so the '
+         + ' declared truck(s) are down for this day with no arrival time, so the '
          + 'revision cannot schedule them: ' + d.no_time.slice(0, 8).map(esc).join(', ')
          + '</div>';
 
@@ -1054,7 +1054,7 @@ function drawLoops(d){
   if (!d.rows.length){
     const away = (d.elsewhere || []);
     $('#wChart').innerHTML = '<div class="banner b-none">'
-      + (d.lists ? 'No approved truck in this week has a mine arrival time, so there '
+      + (d.lists ? 'No declared truck in this week has a mine arrival time, so there '
                  + 'is nothing to schedule.'
                  : 'No readiness list covers this week.')
       + (away.length ? '<div style="margin-top:8px">Approved trucks are timed for '
@@ -1153,7 +1153,7 @@ function drawLoops(d){
     + '<span><i style="background:#0f766e;width:8px;height:8px"></i>entered the'
     + ' cycle from a readiness sheet</span></div></div>'
     + (d.no_time.length ? '<div class="banner b-none" style="margin-top:12px">'
-        + d.no_time.length + ' approved truck(s) have never been given a first '
+        + d.no_time.length + ' declared truck(s) have never been given a first '
         + 'arrival time, so they are not in the cycle at all: '
         + d.no_time.slice(0, 8).map(esc).join(', ') + '</div>' : '')
     + (d.superseded ? '<div class="banner b-none" style="margin-top:8px">'
