@@ -3529,6 +3529,9 @@ const ROLE_COLORS = {
   border:  '#7b1fa2',  // purple — Lalay border
   ql49:    '#f57c00',  // orange — QL49
   port:    '#0d47a1',  // dark blue — ChanMay port
+  // A Ngo had no colour of its own (07/10/2026), so it drew in the red that
+  // means "unmapped" and the legend could not tell the two apart.
+  ango:    '#8d6e63',  // brown — A Ngo Warehouse
 };
 
 const UNMAPPED_COLOR = '#ff3b30';   // red
@@ -3543,6 +3546,16 @@ function effectiveColor(anchorId, anchorName) {
   const roles = STATE.roles || {};
   for (const [rid, aid] of Object.entries(roles)) {
     if (aid === anchorId && ROLE_COLORS[rid]) return ROLE_COLORS[rid];
+  }
+  // The same place can be held under two ids - the server's and an older
+  // browser copy (anc_default_N) the roles still point at. A copy with no role
+  // of its own takes its twin's colour, so one place is one colour.
+  const nm = String(anchorName || (a && a.name) || '').trim().toLowerCase();
+  if (nm) {
+    for (const [rid, aid] of Object.entries(roles)) {
+      const twin = STATE.anchors.find(x => x.id === aid);
+      if (twin && ROLE_COLORS[rid] && String(twin.name || '').trim().toLowerCase() === nm) return ROLE_COLORS[rid];
+    }
   }
   if (/detour/i.test(anchorName || '')) return DETOUR_COLOR;
   return UNMAPPED_COLOR;
@@ -10210,13 +10223,25 @@ function renderTimelineLabels(rows) {
 function renderTimelineLegend() {
   const el = document.getElementById('timelineLegend');
   if (!el) return;
-  const items = STATE.anchors.map(a => {
-    const c = effectiveColor(a.id, a.name);
-    const hidden = STATE.timelineHidden.has(a.id);
+  // One entry per place, not per id (07/10/2026): the server's copy and an
+  // older browser copy of each zone were both listed, so every place appeared
+  // twice and the unused copy showed in red beside a bar of another colour.
+  const groups = [];
+  const byName = {};
+  STATE.anchors.forEach(a => {
+    const k = String(a.name || a.id).trim().toLowerCase();
+    if (!byName[k]) { byName[k] = { name: a.name, ids: [] }; groups.push(byName[k]); }
+    byName[k].ids.push(String(a.id));
+  });
+  const roleIds = new Set(Object.values(STATE.roles || {}).map(String));
+  const items = groups.map(g => {
+    const lead = g.ids.find(id => roleIds.has(id)) || g.ids[0];
+    const c = effectiveColor(lead, g.name);
+    const hidden = g.ids.every(id => STATE.timelineHidden.has(id));
     return `<label style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;cursor:pointer;${hidden ? 'opacity:0.4;' : ''}">
-       <input type="checkbox" data-tl-anchor="${a.id}" ${hidden ? '' : 'checked'} style="margin:0;cursor:pointer">
-       <span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px"></span>
-       ${escapeHtml(a.name)}
+       <input type="checkbox" data-tl-anchor="${escapeHtml(g.ids.join('|'))}" ${hidden ? '' : 'checked'} style="margin:0;cursor:pointer">
+       <span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.45)"></span>
+       ${escapeHtml(g.name)}
      </label>`;
   }).join('');
   el.innerHTML = items +
@@ -10228,9 +10253,11 @@ function renderTimelineLegend() {
   // Wire checkbox handlers
   el.querySelectorAll('[data-tl-anchor]').forEach(cb => {
     cb.addEventListener('change', (e) => {
-      const aid = e.target.dataset.tlAnchor;
-      if (e.target.checked) STATE.timelineHidden.delete(aid);
-      else STATE.timelineHidden.add(aid);
+      // Every id the place is held under, so hiding a place hides all of it.
+      e.target.dataset.tlAnchor.split('|').forEach(aid => {
+        if (e.target.checked) STATE.timelineHidden.delete(aid);
+        else STATE.timelineHidden.add(aid);
+      });
       renderTimeline();
     });
   });
