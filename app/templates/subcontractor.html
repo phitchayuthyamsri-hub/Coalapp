@@ -384,11 +384,19 @@ async function load(){
   }
 
   const seen = (sug.seen || 0), unseen = (sug.unseen || 0);
-  $('#gpsNote').innerHTML = unseen
-    ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
-      + ' not seen by GPS</b> in the last 24 hours, so nothing is filled in for '
-      + (unseen === 1 ? 'it' : 'them') + '. Type what you know.</div>'
+  // The hint is frozen at the first declaration (08/10/2026), so say from
+  // when: a GPS column that does not move with the trucks must not look live.
+  const hm = t => t ? t.slice(8, 10) + '/' + t.slice(5, 7) + ' ' + t.slice(11, 16) : '';
+  const stampNote = sug.stamped
+    ? '<div class="note n-info"><b>GPS as at ' + esc(hm(sug.stamped_at)) + '</b> &mdash; when this '
+      + 'day was first declared' + (sug.stamped_by ? ' (' + esc(String(sug.stamped_by).split('@')[0]) + ')' : '')
+      + '. It stays as it was then; later uploads do not change it.</div>'
     : '';
+  $('#gpsNote').innerHTML = stampNote + (unseen
+    ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
+      + ' not seen by GPS</b> in the 24 hours before ' + (sug.stamped ? 'that' : 'now')
+      + ', so nothing is filled in for ' + (unseen === 1 ? 'it' : 'them') + '. Type what you know.</div>'
+    : '');
   draw();
 }
 

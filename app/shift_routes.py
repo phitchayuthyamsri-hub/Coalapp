@@ -1191,6 +1191,7 @@ def upload():
          % (_dmy(day), len(rows), len(overlap)))
     _restate(dl)
     db.session.commit()
+    _stamp_hint(dl, day, sub_id)
     # The supervisor pulling the declaration pulls the GPS with it.
     if _role() in GPS_PULLERS:
         _take_gps_snapshot(day, retake=True)
@@ -3322,7 +3323,34 @@ def suggest():
     day = request.args.get("date") or (
         datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id()
-    return jsonify(**_gps_view(day, only))
+    # Once the day is declared, the hint is the one stamped at that moment -
+    # read back, not recomputed, so it neither moves nor costs anything.
+    dl = _find_list(day, only) if only is not None else None
+    if dl is not None and dl.hint_at and dl.hint:
+        return jsonify(**dict(dl.hint, stamped=True,
+                              stamped_at=_local(dl.hint_at).strftime("%Y-%m-%d %H:%M"),
+                              stamped_by=dl.hint_by or ""))
+    return jsonify(**dict(_gps_view(day, only), stamped=False))
+
+
+def _stamp_hint(dl, day, sub_id):
+    """Keep the GPS hint as it stands now, the first time the day is declared.
+
+    Never again after that (user, 08/10/2026: "if uploaded at 10 am, hint
+    should use the location at 10 am and it stays there" - and a corrected
+    sheet later does not move it). A failure here never fails the declaration:
+    the sheet is already saved, and the page falls back to the live hint."""
+    if dl is None or dl.hint_at is not None:
+        return
+    try:
+        if not DailyListRow.query.filter_by(list_id=dl.id).count():
+            return
+        dl.hint = _gps_view(day, sub_id)
+        dl.hint_at = datetime.utcnow()
+        dl.hint_by = current_user.username or ""
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 # The loop, in the order the road forces: out one way, back the same way.
@@ -3882,6 +3910,7 @@ def save_list():
     _act("edit", "Saved the declaration for %s — %d truck(s)"
          % (_dmy(day), len(incoming)))
     db.session.commit()
+    _stamp_hint(dl, day, sub_id)
     out = _list_payload(dl, day)
     # Saving stays free - a half-filled sheet is normal while answers are being
     # chased - but the gap is named NOW, to the person who can fill it, rather

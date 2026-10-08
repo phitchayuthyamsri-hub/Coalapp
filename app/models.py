@@ -426,6 +426,12 @@ class DailyList(db.Model):
     amend_at = db.Column(db.DateTime)
     amend_note = db.Column(db.String(300), default="")
     amend_by_role = db.Column(db.String(20), default="")
+    # The GPS hint as it stood when the company FIRST declared the day
+    # (08/10/2026): stamped once, never moved by a later upload or save, so the
+    # hint beside a declaration is what the GPS said when it was made.
+    hint_at = db.Column(db.DateTime)                 # UTC
+    hint_by = db.Column(db.String(80), default="")
+    hint = db.Column(db.JSON)                        # _gps_view(day, sub)
     amend_decided_by = db.Column(db.String(80), default="")
     amend_decided_at = db.Column(db.DateTime)
     amend_reason = db.Column(db.String(300), default="")

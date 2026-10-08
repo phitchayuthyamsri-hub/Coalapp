@@ -542,7 +542,10 @@ def _ensure_daily_list_schema():
             ("amend_decided_by", "VARCHAR(80) DEFAULT ''"),
             ("amend_decided_at", "DATETIME"),
             ("amend_reason", "VARCHAR(300) DEFAULT ''"),
-            ("date_basis", "VARCHAR(8) DEFAULT ''")]
+            ("date_basis", "VARCHAR(8) DEFAULT ''"),
+            ("hint_at", "DATETIME"),
+            ("hint_by", "VARCHAR(80) DEFAULT ''"),
+            ("hint", "JSON")]
     stmts = ["ALTER TABLE daily_list ADD COLUMN %s %s" % (n, t)
              for n, t in want if n not in cols]
     for st in stmts:
