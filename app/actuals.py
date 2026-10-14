@@ -61,26 +61,55 @@ def stamp_days(days, visits, roles):
     have = {}
     for s in ActualStamp.query.filter(ActualStamp.day.in_(list(days))).all():
         have[(s.day, s.key, s.leg, s.role, s.edge)] = True
+    # Who each sheet declared, for the day and the day after (14/10/2026).
+    nxt = {d: (datetime.strptime(d, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+           for d in days}
+    declared = _declared_keys(set(days) | set(nxt.values()))
+    mine_id = roles.get("xppl")
     wrote = 0
     for day in days:
         lo, _hi = _day_bounds(day)
+        next_lo = _day_bounds(nxt[day])[0]
         # The route is the one declared for THIS run day (30/09/2026): the
         # same truck may run Mine : A Ngo today and A Ngo : Chan May tomorrow.
         paths = _route_paths(day)
         for key in sorted(by_plate):
-            vs = [v for v in by_plate.get(key, [])
-                  if lo <= v["enter"] <= lo + CYCLE_SPAN]
+            mine = by_plate.get(key, [])
+            vs = [v for v in mine if lo <= v["enter"] <= lo + CYCLE_SPAN]
+            # A truck already waiting inside the mine when the day opens
+            # (14/10/2026): 20H01485 entered on 10/10 19:50, was declared for
+            # 11/10 and again for 12/10, and loaded on 12/10 12:33. The 12/10
+            # window only looked at visits that started inside it, so it never
+            # saw the truck arrive and stamped nothing after it either - the
+            # team typed the times by hand. For a truck on this day's sheet,
+            # the mine stay it is still in counts as its arrival.
+            if mine_id is not None and key in declared.get(day, ()):
+                waiting = [v for v in mine if v.get("anchor_id") == mine_id
+                           and v["enter"] < lo
+                           and (v.get("open") or (v.get("exit") or v["enter"]) > lo)]
+                if waiting:
+                    vs = sorted(vs + [max(waiting, key=lambda v: v["enter"])],
+                                key=lambda v: v["enter"])
             if not vs:
                 continue
             path = paths.get(key, DEFAULT_PATH)
             matched = _match_route(vs, roles, path)
             end = matched.get(("fh", path[-1]))
             home_ready = end is not None and not end.get("open")
+            # ...and the run is the later sheet's. Declared again for the next
+            # day and not loaded until that day opened, the truck did not run
+            # this day: it waited. This day keeps its arrival at the mine; the
+            # loading and everything after it belong to the next day's row.
+            load = matched.get(("fh", "loading"))
+            handed_on = (key in declared.get(nxt[day], ())
+                         and load is not None and load["enter"] >= next_lo)
             for leg, role, edge in events:
                 if (day, key, leg, role, edge) in have:
                     continue               # already said - permanent
                 if not _applies(leg, role, edge, path):
                     continue               # not a place on this truck's route
+                if handed_on and not (leg == "fh" and role == path[0] and edge == "enter"):
+                    continue               # the next day's run, not this one's
                 v = matched.get((leg, role))
                 if v is None:
                     continue
@@ -96,6 +125,25 @@ def stamp_days(days, visits, roles):
                 have[(day, key, leg, role, edge)] = True
                 wrote += 1
     return wrote
+
+
+def _declared_keys(days):
+    """{run day: {plate key}} - the trucks each day's sheets declared running.
+    A denied truck and one declared not running (Repair and the like) are not
+    on that day's run."""
+    from .models import DailyList, DailyListRow
+    from . import readiness_import
+    out = {}
+    if not days:
+        return out
+    q = (db.session.query(DailyListRow, DailyList.list_date)
+         .join(DailyList, DailyList.id == DailyListRow.list_id)
+         .filter(DailyList.list_date.in_(list(days))))
+    for r, d in q.all():
+        if (r.state or "") == "denied" or not readiness_import.is_running(r.note):
+            continue
+        out.setdefault(d, set()).add(r.key or engine.norm_plate(r.plate))
+    return out
 
 
 def record_arrivals(visits, roles):
