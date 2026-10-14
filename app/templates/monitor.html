@@ -550,9 +550,22 @@ function drawTrack(){
   // The server names each leg's events in that leg's journey order. (An
   // older answer sent one array for both legs, with the run home to be read
   // backwards - kept readable so a saved page from before still draws.)
-  const locs = Array.isArray(d.locations)
+  let locs = Array.isArray(d.locations)
     ? (LEG === 'bh' ? d.locations.slice().reverse() : d.locations)
     : (d.locations[LEG] || []);
+  // The loaded run ends when the truck leaves the port (14/10/2026): that is
+  // the first event of the run home, so it lived only on the BH view and a
+  // truck already on its way back showed no departure on FH. The same cell is
+  // shown at the end of FH too - read from the run home, and a time typed
+  // into it is the run home's.
+  const portOut = (!Array.isArray(d.locations) && LEG === 'fh')
+    ? (d.locations.bh || []).filter(l => l.key === 'port')[0] : null;
+  if (portOut) locs = locs.concat([{key: 'port_out', label: portOut.label}]);
+  const tailOf = r => {
+    const c = (r.bh || []).filter(x => x.key === 'port')[0];
+    return c ? Object.assign({}, c, {_leg: 'bh'})
+             : {key: 'port', na: true, plan: null, actual: null, estimate: null, _leg: 'bh'};
+  };
   const key = '<div class="key">'
     + '<span><b class="t-ok">14:24</b> <i>on time, within ' + TOL + ' min of plan</i></span>'
     + '<span><b class="t-early">14:24 &minus;1.6 h</b> <i>early</i></span>'
@@ -565,7 +578,7 @@ function drawTrack(){
   // back to front on the back-haul - the same reversal the headings get.
   const cellsOf = r => (LEG === 'bh'
     ? (Array.isArray(d.locations) ? r.bh.slice().reverse() : r.bh)
-    : r.fh);
+    : (portOut ? r.fh.concat([tailOf(r)]) : r.fh));
   const whereOf = r => r.last_seen ? r.last_seen.place
                      : (r.enroute ? 'on the road' : 'not seen');
   // Places order along the corridor, mine first - not alphabetically, where
@@ -691,7 +704,7 @@ function drawTrack(){
             + (c.plan ? '<span class="t-dm">' + dm(c.plan) + '</span> ' + clock(c.plan)
                       : '<span style="color:var(--mut)">&mdash;</span>')
             + '</td><td class="ac' + (d.may_edit_actual && !c.na ? ' can-type' : '') + '"'
-            + ' data-plate="' + esc(r.plate) + '" data-leg="' + LEG + '" data-cell="' + esc(c.key) + '"'
+            + ' data-plate="' + esc(r.plate) + '" data-leg="' + (c._leg || LEG) + '" data-cell="' + esc(c.key) + '"'
             + ' data-when="' + esc(c.actual || c.estimate || c.plan || '') + '"'
             + ' data-actual="' + esc(c.actual || '') + '"'
             + (d.may_edit_actual && !c.na ? ' title="Right-click to enter a time"' : '') + '>'

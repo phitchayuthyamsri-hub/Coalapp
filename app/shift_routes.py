@@ -3354,10 +3354,12 @@ def _stamp_hint(dl, day, sub_id):
 
 
 # The loop, in the order the road forces: out one way, back the same way.
-# Each position may have several geofences on it: the Detour route sits on
-# the same stretch as the Lalay border, so passing either says the same
-# thing about where the truck is along the chain. The first role names the
-# position on screen.
+# Each position may have several geofences on it. The first role names the
+# position on screen. NOTE (14/10/2026): the Detour route zone is NOT on the
+# Lalay border's stretch - it is ~37 km north of it, and trucks coming home run
+# port -> Detour -> A Ngo -> border -> mine. Grouping it with the border here
+# only labels a truck's stretch of road for the GPS hint; it is deliberately
+# NOT treated as the border for actual times.
 ROAD_CHAIN = (("xppl",), ("border", "detour"), ("ql49",), ("port",))
 
 

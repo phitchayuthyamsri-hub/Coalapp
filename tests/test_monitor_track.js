@@ -248,6 +248,38 @@ try {
         .map(s => s.replace(/\D/g, '')).join(',');
     })(), '1');
 
+  // 14/10/2026: the port departure, first event of the run home, also ends
+  // the FH view - read from the run home and typed back into it.
+  (function(){
+    const c = (plan, actual) => ({plan, actual: actual || null, delay: null, estimate: null});
+    const row = {plate:'20H01364', sub:'Bac Nam', phone:'', phone_known:false, planned:true,
+      drift:0, last_seen:{place:'Leaves port', leg:'bh', at:'2026-10-14T09:39'}, enroute:null,
+      route_name:'Mine : A Ngo : Chan May',
+      fh:[c('2026-10-12T12:00','2026-10-12T12:58'), c('2026-10-14T08:00')],
+      bh:[Object.assign(c('2026-10-14T10:00','2026-10-14T09:39'), {key:'port'}), c(null)]};
+    row.fh[0].key = 'mine'; row.fh[1].key = 'unload'; row.bh[1].key = 'ql49';
+    const routeA = JSON.parse(JSON.stringify(row));
+    routeA.plate = '20H00701'; routeA.route_name = 'Mine : A Ngo';
+    routeA.bh[0] = {key:'port', na:true, plan:null, actual:null, delay:null, estimate:null};
+    vm.runInContext("TV = null; LEG = 'fh'; TRACK = " + JSON.stringify({date:'2026-10-12',
+      rows:[row, routeA], locations:{fh:[{key:'mine',label:'At mine'},{key:'unload',label:'Unloads'}],
+      bh:[{key:'port',label:'Leaves port'},{key:'ql49',label:'QL49'}]}, blind:[], issued:true,
+      source:'plan', not_planned:[], not_planned_count:0, on_time_minutes:60,
+      route_order:['Mine : A Ngo : Chan May','Mine : A Ngo'], summary:{trucks:2}}) + "; drawTrack();", sandbox);
+    const h = store['track'].innerHTML;
+    const chanMay = h.slice(0, h.indexOf('data-route="Mine : A Ngo"'));
+    const angoOnly = h.slice(h.indexOf('data-route="Mine : A Ngo"'));
+    is('FH ends with Leaves port', /<th colspan="2" class="loc">Leaves port<\/th><\/tr>/.test(chanMay), true);
+    is('...showing the departure the run home recorded', /data-leg="bh" data-cell="port"[^>]*data-actual="2026-10-14T09:39"/.test(chanMay), true);
+    is('...after Unloads', chanMay.indexOf('>Unloads<') < chanMay.indexOf('>Leaves port<'), true);
+    is('a route that never reaches the port has no such column', /Leaves port<\/th>/.test(angoOnly), false);
+    vm.runInContext("TV = null; LEG = 'bh'; drawTrack();", sandbox);
+    is('BH still starts with Leaves port, once', (store['track'].innerHTML.match(/>Leaves port<\/th>/g) || []).length, 1);
+    vm.runInContext("TV = null; LEG = 'fh'; TRACK = " + JSON.stringify({date:'2026-09-09', rows: ROWS,
+      locations: LOCS, blind: [], issued: true, source: 'plan', not_planned: [], not_planned_count: 0,
+      on_time_minutes: 60, summary:{trucks:4}}) + "; drawTrack();", sandbox);
+  })();
+
   // Typing a time into a cell (22/09/2026): the parser behind the right-click box.
   const pw = html.match(/function parseWhen[\s\S]*?\n}/)[0];
   vm.runInContext(pw, sandbox);
