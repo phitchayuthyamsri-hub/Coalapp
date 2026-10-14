@@ -102,6 +102,7 @@ is('...the first filing is on hover', out.indexOf('first filed 02/10 09:10') >= 
 is('the supervisor: submitted', out.indexOf('submitted 02/10 13:40') >= 0, true);
 is('the manager: approved, and how late', /approved 02\/10 16:12[\s\S]{0,80}?1 h 12 m late/.test(out), true);
 is('...in the late colour, alone', (out.match(/class="at late"/g) || []).length, 1);
+is('...and how late is in red', /<span class="lt"> &middot; 1 h 12 m late<\/span>/.test(out), true);
 is('the planner: issued', out.indexOf('issued 02/10 16:05') >= 0, true);
 is('four desks carry a time, the monitor none', (out.match(/class="at/g) || []).length, 4);
 out = drawn({company: 'Bac Nam', no_load: false, no_load_note: '',

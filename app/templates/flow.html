@@ -69,6 +69,9 @@
   .at{font-size:10.5px;color:#86efac;margin-top:3px;font-weight:600;
       font-variant-numeric:tabular-nums}
   .at.late{color:var(--warn)}
+  /* How late, in red (14/10/2026): the amber time says when it was done, the
+     red says by how much it missed its window. */
+  .at .lt{color:var(--bad);font-weight:700}
   .at .by{font-weight:400;opacity:.85}
   .at.again{color:var(--mut);font-weight:400;margin-top:1px}
 
@@ -132,7 +135,7 @@ function atHtml(s){
   return '<div class="at' + (late ? ' late' : '') + '" title="' + esc(tip) + '">'
     + esc(did + ' ' + hm(s.at))
     + (s.by ? '<span class="by"> &middot; ' + esc(String(s.by).split('@')[0]) + '</span>' : '')
-    + (late ? ' &middot; ' + esc(lateText(s.late_min)) + ' late' : '') + '</div>'
+    + (late ? '<span class="lt"> &middot; ' + esc(lateText(s.late_min)) + ' late</span>' : '') + '</div>'
     + (s.again_at ? '<div class="at again">issued again ' + esc(hm(s.again_at)) + '</div>' : '');
 }
 
