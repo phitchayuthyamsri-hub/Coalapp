@@ -4823,7 +4823,7 @@ function renderAnchorList() {
           <span class="swatch" data-act="color" style="background:${effectiveColor(a.id, a.name)};cursor:pointer"></span>
         </label>
       </td>
-      <td><span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${String(a.id).startsWith('anc_') ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span></td>
+      <td><span class="name" title="${escapeHtml(a.name)} — click to rename">${escapeHtml(a.name)}${isUnsavedZone(a) ? '<span class="unsaved" title="Drawn here, not on the server yet — press Apply">unsaved</span>' : ''}</span></td>
       <td class="cell-type">
         <select data-act="c-type" title="What is done here">
           ${['', 'load', 'unload', 'load_unload', 'border', 'highway'].map(v =>
@@ -8475,13 +8475,31 @@ async function syncAnchorsFromServer() {
   renderAnchorList(); renderAnchorFilter();
   try { populateLegAnchorDropdowns(); } catch (e) {}
   try { recomputeVisits(); } catch (e) {}
-  if (unsaved.length) toast(unsaved.length + ' zone' + (unsaved.length === 1 ? '' : 's') + ' drawn here ' + (unsaved.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
+  const fresh = unsaved.filter(isUnsavedZone);
+  if (fresh.length) toast(fresh.length + ' zone' + (fresh.length === 1 ? '' : 's') + ' drawn here ' + (fresh.length === 1 ? 'is' : 'are') + ' not on the server yet — press Apply to save.');
+}
+// The browser's old copy of a zone the server already has (19/10/2026). The
+// first six zones were drawn here as anc_default_0..5 before the server held
+// them; the server's copies came later under their own ids, and the roles and
+// the stored visits still point at the old ones, so they stay in the list. But
+// they are not work waiting to be saved: counted as unsaved they made every
+// close or refresh of this page ask "Leave site?", and Apply would have sent
+// them to the server as six new duplicate zones.
+function isLegacyTwin(a) {
+  const id = String(a.id);
+  if (!id.startsWith('anc_default_')) return false;
+  const n = String(a.name || '').trim().toLowerCase();
+  return (STATE.anchors || []).some(b => !String(b.id).startsWith('anc_')
+    && String(b.name || '').trim().toLowerCase() === n);
+}
+function isUnsavedZone(a) {
+  return String(a.id).startsWith('anc_') && !isLegacyTwin(a);
 }
 function unsavedZoneCount() {
   // A changed condition counts as one piece of unsaved work: it lights the
   // Save button and makes the browser ask before the tab closes, the same as
   // a zone drawn and not yet applied.
-  return STATE.anchors.filter(a => String(a.id).startsWith('anc_')).length
+  return STATE.anchors.filter(isUnsavedZone).length
        + (STATE.retiredAnchorIds || []).length
        + (STATE.condDirty ? 1 : 0);
 }
@@ -8494,6 +8512,7 @@ async function pushAnchorsToServer() {
   const hdr = { 'Content-Type': 'application/json' };
   const idMap = {};
   for (const a of STATE.anchors) {
+    if (isLegacyTwin(a)) continue;   // the server already has this zone
     const body = { name: a.name, color: a.color, category: a.category || '', caption: a.caption || '',
                    polygon: a.polygon, min_dwell_min: (a.minDwellMin != null ? a.minDwellMin : 5),
                    loc_type: a.locType || '',
