@@ -26,6 +26,30 @@ def _unauthorized():
     return redirect(login_url(login_manager.login_view, request.url))
 
 
+# Reads and writes stop blocking each other (20/10/2026). In SQLite's default
+# "delete" journal a write locks every reader out until it commits, and the
+# GPS pull (every minute) and the tool sync (every five) write all day: any
+# request that waited more than five seconds failed with "database is locked"
+# - 90 an hour at the worst, and on 20/10 the admin page's Create user among
+# them. WAL lets readers carry on beside a writer, and a request now waits up
+# to 30 s for a busy writer instead of failing at 5. Set on every connection;
+# WAL is a property of the file, so the first one switches it for good.
+from sqlalchemy import event as _sa_event
+from sqlalchemy.engine import Engine as _SAEngine
+
+
+@_sa_event.listens_for(_SAEngine, "connect")
+def _sqlite_concurrency(dbapi_conn, _record):
+    if not type(dbapi_conn).__module__.startswith("sqlite3"):
+        return
+    cur = dbapi_conn.cursor()
+    try:
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA journal_mode=WAL")
+    finally:
+        cur.close()
+
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     # The grid is served from /static. With Flask's default twelve-hour cache a
