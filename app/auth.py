@@ -126,6 +126,8 @@ def login():
                 logout_user()
             login_user(u)
             session.permanent = True
+            import time
+            session["login_at"] = int(time.time())      # see _forced_logout
             activity.record_login(u, request)
             return redirect(target or url_for("views.dashboard"))
         flash("Invalid username or password.")

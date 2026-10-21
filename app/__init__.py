@@ -124,6 +124,29 @@ def create_app(config_class=Config):
         from flask import session
         session.permanent = True
 
+    # A forced sign-out (21/10/2026). A session is a signed cookie, so there is
+    # nothing on the server to delete; instead each login carries the moment
+    # it was made, and a session older than its user's logout_before is ended
+    # here and sent back to the login page. An admin is never signed out this
+    # way. A session from before login times were kept counts as old.
+    @app.before_request
+    def _forced_logout():
+        from flask import session, request, redirect, url_for, jsonify
+        from flask_login import current_user, logout_user
+        if not current_user.is_authenticated:
+            return None
+        cut = getattr(current_user, "logout_before", None)
+        if cut is None or current_user.is_admin or (current_user.role or "") == "admin":
+            return None
+        import calendar
+        if (session.get("login_at") or 0) >= calendar.timegm(cut.timetuple()):
+            return None
+        logout_user()
+        session.pop("login_at", None)
+        if request.path == "/api" or request.path.startswith("/api/"):
+            return jsonify(error="signed out - please log in again"), 401
+        return redirect(url_for("auth.login"))
+
     # A login is only as good as the key it is signed with. On the shipped
     # default, anyone who has read the source can mint a session cookie for
     # this box - and nothing said so, which is how the sandbox ran that way
@@ -221,6 +244,8 @@ def _ensure_user_schema():
         stmts.append('ALTER TABLE "user" ADD COLUMN subcontractor_id INTEGER')
     if "alerts_seen_at" not in cols:
         stmts.append('ALTER TABLE "user" ADD COLUMN alerts_seen_at DATETIME')
+    if "logout_before" not in cols:
+        stmts.append('ALTER TABLE "user" ADD COLUMN logout_before DATETIME')
     if "allowed_views" not in cols:
         stmts.append('ALTER TABLE "user" ADD COLUMN allowed_views TEXT')
     added_role = "role" not in cols

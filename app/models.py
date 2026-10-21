@@ -21,6 +21,9 @@ class User(UserMixin, db.Model):
     default_page = db.Column(db.String(20))   # tab key to open on login
     can_edit = db.Column(db.Boolean, default=True, nullable=False)
     allowed_apps = db.Column(db.Text)   # JSON list of app keys; NULL = all apps
+    # Sessions this login opened before this moment are ended on their next
+    # request (21/10/2026) - "log everyone out". UTC. Never set for an admin.
+    logout_before = db.Column(db.DateTime)
     # spectator = read-only observer (no submit, no confirm, no upload)
     role = db.Column(db.String(20), default="monitor")
     # spectator | subcontractor | monitor | supervisor | manager | admin
