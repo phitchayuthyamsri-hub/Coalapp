@@ -14,7 +14,8 @@ from sqlalchemy import func
 
 from . import geofence
 from .models import (db, User, Truck, GpsPing, Anchor, RouteLeg, KVStore, LoginEvent, AreaTime, Route,
-                     ActivityEvent, DispatchPlanRow, LoadActualRow, SubFleetRow)
+                     ActivityEvent, DispatchPlanRow, LoadActualRow, SubFleetRow,
+                     Subcontractor)
 from . import parsers, engine
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -120,29 +121,61 @@ def upload_subfleet():
 @bp.get("/fleet")
 @login_required
 def fleet():
-    trucks = Truck.query.order_by(Truck.plate).all()
+    from .fleet_scope import visible_keys
+    only = visible_keys(current_user)
+    trucks = [t for t in Truck.query.order_by(Truck.plate).all()
+              if only is None or engine.norm_plate(t.plate) in only]
     names = {r.id: r.name for r in Route.query.all()}
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
     return jsonify([{"plate": t.plate, "status": t.status,
                      "driver": t.driver or "", "phone": t.phone,
                      "gps_provider": t.gps_provider, "eff_from": t.eff_from,
                      "eff_to": t.eff_to,
                      "route": names.get(t.route_id, ""),
-                     "route_id": t.route_id} for t in trucks])
+                     "route_id": t.route_id,
+                     "subcontractor_id": t.subcontractor_id,
+                     "company": subs.get(t.subcontractor_id, "")} for t in trucks])
+
+
+def _local_today():
+    from datetime import timedelta
+    return (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d")
 
 
 @bp.post("/fleet")
 @login_required
 def fleet_upsert():
+    from .fleet_scope import visible_keys
     d = request.get_json(force=True)
     plate = engine.norm_plate(d.get("plate"))
     if not plate:
         return jsonify(error="plate required"), 400
-    t = Truck.query.filter_by(plate=plate).first() or Truck(plate=plate)
+    admin = bool(current_user.is_admin)
+    t = Truck.query.filter_by(plate=plate).first()
+    # Only the admin adds a truck to the fleet (21/10/2026); the others edit
+    # the trucks they can see - a subcontractor, its own company's.
+    if t is None:
+        if not admin:
+            return jsonify(error="Only an admin may add a truck to the fleet"), 403
+        t = Truck(plate=plate)
+        # A new truck is in service from the day it is added, unless told.
+        if not (d.get("eff_from") or "").strip():
+            t.eff_from = _local_today()
+    else:
+        only = visible_keys(current_user)
+        if only is not None and plate not in only:
+            return jsonify(error="That truck is not in your fleet"), 403
+    if "subcontractor_id" in d:
+        if not admin:
+            return jsonify(error="Only an admin may set a truck's company"), 403
+        sid = d.get("subcontractor_id")
+        t.subcontractor_id = int(sid) if str(sid or "").strip() else None
     t.status = d.get("status", t.status or "online")
     t.driver = d.get("driver", t.driver or "")
     t.phone = d.get("phone", t.phone or "")
     t.gps_provider = d.get("gps_provider", t.gps_provider or "")
-    t.eff_from = d.get("eff_from", t.eff_from or "")
+    if "eff_from" in d:
+        t.eff_from = d.get("eff_from") or ""
     t.eff_to = d.get("eff_to", t.eff_to or "")
     if "route" in d:
         # Which run a truck makes is the declaration list's decision, so it
@@ -159,7 +192,7 @@ def fleet_upsert():
             t.route_id = r.id
     db.session.add(t)
     changed = [k for k in ("status", "driver", "phone", "gps_provider",
-                           "eff_from", "eff_to", "route") if k in d]
+                           "eff_from", "eff_to", "route", "subcontractor_id") if k in d]
     db.session.add(ActivityEvent(user_id=current_user.id,
                                  username=current_user.username, action="edit",
                                  detail="Fleet %s: %s changed"
@@ -171,6 +204,8 @@ def fleet_upsert():
 @bp.delete("/fleet/<plate>")
 @login_required
 def fleet_delete(plate):
+    if not current_user.is_admin:
+        return jsonify(error="Only an admin may remove a truck from the fleet"), 403
     t = Truck.query.filter_by(plate=engine.norm_plate(plate)).first()
     if t:
         db.session.delete(t)

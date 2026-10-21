@@ -60,23 +60,18 @@ def _own_plates():
 
     Same rule the rest of the system applies. Returns None for "everything".
     """
-    if _role() != "subcontractor":
-        return None
-    sub_id = getattr(current_user, "subcontractor_id", None)
-    if not sub_id:
-        return set()
-    plates = {c.key for c in FleetCommitment.query.filter_by(
-        subcontractor_id=sub_id, released_on=None).all()}
-    rows = (db.session.query(DailyListRow.key)
-            .join(DailyList, DailyList.id == DailyListRow.list_id)
-            .filter(DailyList.subcontractor_id == sub_id).all())
-    return plates | {r[0] for r in rows}
+    # Since 21/10/2026 also the trucks the fleet register gives the company -
+    # one rule, shared with /api/fleet (see fleet_scope).
+    from .fleet_scope import visible_keys
+    return visible_keys(current_user)
 
 
 def _fleet(only):
     # The route by NAME, because the tool keys everything on names a person
     # would recognise. One query, not one per truck.
     names = {r.id: r.name for r in Route.query.all()}
+    from .models import Subcontractor
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
     out = {}
     for t in Truck.query.order_by(Truck.plate).all():
         key = engine.norm_plate(t.plate)
@@ -91,6 +86,8 @@ def _fleet(only):
             "route": names.get(t.route_id, ""),
             "effFrom": t.eff_from or "",
             "effTo": t.eff_to or "",
+            "companyId": t.subcontractor_id or "",
+            "company": subs.get(t.subcontractor_id, ""),
         }
     return out
 

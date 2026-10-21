@@ -66,7 +66,12 @@ class Truck(db.Model):
     # The one route this truck runs. Set on the declaration list, kept here
     # because a truck keeps its route across days. One column, so one route -
     # a truck cannot be on two, and readiness will later be split by it.
+    # Since 30/09 only the fallback for a day whose sheet names no route, and
+    # since 21/10 no longer shown on the Fleet page.
     route_id = db.Column(db.Integer, index=True)
+    # The subcontractor company the truck belongs to (21/10/2026). Decides
+    # which company's logins see it on the Fleet page; set by the admin.
+    subcontractor_id = db.Column(db.Integer, index=True)
 
 
 class Route(db.Model):

@@ -2188,6 +2188,10 @@ tr.no-exit td:nth-child(7) { color: #ff9500; font-style: italic; }
 .filter-bar .double { display: flex; gap: 4px; }
 
 th[data-gsort], th[data-fsort], th[data-ssort] { cursor: pointer; user-select: none; }
+/* An empty Effective From / To shows nothing, not dd/mm/yyyy (21/10/2026);
+   the date appears while the box is being edited. */
+input.fleet-date[data-empty="1"]:not(:focus)::-webkit-datetime-edit { color: transparent; }
+input.fleet-date[data-empty="1"]:not(:focus) { color: transparent; }
 th[data-gsort]:hover, th[data-fsort]:hover, th[data-ssort]:hover { color: #0071e3; }
 .sort-ind { font-size: 9px; opacity: .6; margin-left: 3px; }
 
@@ -3351,19 +3355,19 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <h2>Fleet database</h2>
       <div id="fleetSummary" style="font-size:11px; color:var(--ink); margin-bottom:8px;"></div>
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-        <input type="text" id="fleetPlateInput" placeholder="Plate e.g. 50H35094"
-          style="font-size:12px; padding:4px 8px; flex:0 0 160px;">
-        <select id="fleetStatusInput" style="font-size:12px; padding:4px 8px;">
+        <input type="text" id="fleetPlateInput" placeholder="Plate e.g. 50H35094" data-fleet-admin
+          style="display:none; font-size:12px; padding:4px 8px; flex:0 0 160px;">
+        <select id="fleetStatusInput" data-fleet-admin style="display:none; font-size:12px; padding:4px 8px;">
           <option value="online">Online</option>
           <option value="maintenance">Maintenance</option>
           <option value="breakdown">Breakdown</option>
           <option value="deactivated">Deactivated</option>
         </select>
-        <button class="small" id="fleetAddBtn">Add / Update</button>
-        <button class="small secondary" id="fleetTemplateBtn">Download template</button>
-        <button class="small secondary" id="fleetUploadBtn">Upload xlsx</button>
+        <button class="small" id="fleetAddBtn" data-fleet-admin style="display:none">Add / Update</button>
+        <button class="small secondary" id="fleetTemplateBtn" data-fleet-admin style="display:none">Download template</button>
+        <button class="small secondary" id="fleetUploadBtn" data-fleet-admin style="display:none">Upload xlsx</button>
         <button class="small secondary" id="fleetExportBtn">Export to Excel</button>
-        <button class="small secondary" id="fleetClearBtn" style="color:#f87171;border-color:#7a3a3a">Clear all</button>
+        <button class="small secondary" id="fleetClearBtn" data-fleet-admin style="display:none;color:#f87171;border-color:#7a3a3a">Clear all</button>
         <input type="file" id="fleetFileInput" accept=".xlsx,.xls,.csv" style="display:none">
       </div>
       <div class="table-wrap">
@@ -3373,10 +3377,10 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
             <th data-fsort="status">Status</th>
             <th data-fsort="driver">Driver</th>
             <th data-fsort="phone">Phone</th>
-            <th data-fsort="route" title="The truck's usual route. The route it runs on a given day is declared on the readiness sheet; this one is used when the sheet does not say.">Usual route</th>
             <th data-fsort="effFrom">Effective From</th>
             <th data-fsort="effTo">Effective To</th>
             <th data-fsort="gps">GPS Company</th>
+            <th data-fsort="company" title="The subcontractor company this truck belongs to. A company's logins see its trucks.">Company</th>
             <th data-fsort="added">Date added</th>
             <th data-fsort="ytd">Trips YTD</th>
             <th data-fsort="month">Trips this month</th>
@@ -5453,7 +5457,8 @@ function loadFleetFromStorage() {
             added: r?.added || Date.now(),
             driver: r?.driver || '', route: r?.route || '',
             phone: r?.phone || '', gps: r?.gps || '',
-            effFrom: r?.effFrom || '', effTo: r?.effTo || ''
+            effFrom: r?.effFrom || '', effTo: r?.effTo || '',
+            companyId: r?.companyId || '', company: r?.company || ''
           };
         }
         return;
@@ -5536,7 +5541,8 @@ function setFleetField(plate, key, val) {
   // silently wiped. Fields the truck table owns are written through to it.
   const api = {phone: 'phone', gps: 'gps_provider', driver: 'driver',
                route: 'route',
-               effFrom: 'eff_from', effTo: 'eff_to', status: 'status'}[key];
+               effFrom: 'eff_from', effTo: 'eff_to', status: 'status',
+               companyId: 'subcontractor_id'}[key];
   if (api) {
     const body = {plate: plate}; body[api] = val || '';
     try {
@@ -5692,6 +5698,34 @@ function fleetRouteCell(r) {
 
 let _routeDefsAsked = false;
 
+// Who is looking (21/10/2026). Adding, uploading, clearing and removing
+// trucks, and setting a truck's company, are the admin's; everyone else edits
+// the trucks they can see. The server enforces the same - this only stops
+// offering buttons that would be refused.
+var FLEET_ADMIN = false, FLEET_SUBS = [];
+(function () {
+  fetch('/api/me', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .then(me => {
+      FLEET_ADMIN = !!(me && me.is_admin);
+      document.querySelectorAll('[data-fleet-admin]').forEach(el => { el.style.display = FLEET_ADMIN ? '' : 'none'; });
+      if (!FLEET_ADMIN) { try { renderFleetUI(); } catch (e) {} return; }
+      return fetch('/api/shift/subcontractors', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : {})
+        .then(j => { FLEET_SUBS = (j && j.subcontractors) || []; try { renderFleetUI(); } catch (e) {} });
+    })
+    .catch(() => {});
+})();
+function fleetCompanyCell(r) {
+  if (!FLEET_ADMIN) return escapeHtml(r.company || '');
+  const cur = String(r.companyId || '');
+  const opts = ['<option value=""' + (cur ? '' : ' selected') + '>&mdash;</option>']
+    .concat(FLEET_SUBS.map(x => '<option value="' + x.id + '"' + (String(x.id) === cur ? ' selected' : '') + '>'
+      + escapeHtml(x.short || x.name) + '</option>'));
+  return '<select class="fleet-fld" data-plate="' + escapeHtml(r.plate) + '" data-k="companyId" style="font-size:11px;padding:2px 4px">'
+    + opts.join('') + '</select>';
+}
+
 function renderFleetUI() {
   const body = document.getElementById('fleetBody');
   const sumEl = document.getElementById('fleetSummary');
@@ -5704,7 +5738,7 @@ function renderFleetUI() {
     _routeDefsAsked = true;
     try { loadRoutes(); } catch (e) {}
   }
-  const plates = allFleetPlates();
+  const plates = FLEET_ADMIN ? allFleetPlates() : Object.keys(STATE.fleet || {}).sort();
   const counts = { online: 0, maintenance: 0, breakdown: 0, deactivated: 0 };
   plates.forEach(p => { counts[effectiveStatus(p)]++; });
   sumEl.innerHTML = `${plates.length} trucks · `
@@ -5726,6 +5760,7 @@ function renderFleetUI() {
       driver: r.driver || '', route: r.route || '',
       phone: r.phone || '', gps: r.gps || '',
       effFrom: r.effFrom || '', effTo: r.effTo || '',
+      companyId: r.companyId || '', company: r.company || '',
       ytd: ts.ytd, month: ts.month, avg: ts.avg
     };
   });
@@ -5755,10 +5790,10 @@ function renderFleetUI() {
       <td>${statusPill(r.status)}</td>
       <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="driver" value="${escapeHtml(r.driver || '')}" placeholder="driver" style="width:140px;font-size:11px;padding:2px 4px"></td>
       <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="phone" value="${escapeHtml(r.phone)}" placeholder="+66…" style="width:120px;font-size:11px;padding:2px 4px"></td>
-      <td>${fleetRouteCell(r)}</td>
-      <td><input type="date" class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="effFrom" value="${escapeHtml(r.effFrom)}" style="font-size:11px;padding:2px 4px"></td>
-      <td><input type="date" class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="effTo" value="${escapeHtml(r.effTo)}" title="blank = ongoing (Now)" style="font-size:11px;padding:2px 4px">${r.effTo ? '' : ' <span style="font-size:10px;color:#86868b">→ Now</span>'}</td>
+      <td><input type="date" class="fleet-fld fleet-date" data-empty="${r.effFrom ? '' : '1'}" data-plate="${escapeHtml(r.plate)}" data-k="effFrom" value="${escapeHtml(r.effFrom)}" style="font-size:11px;padding:2px 4px"></td>
+      <td><input type="date" class="fleet-fld fleet-date" data-empty="${r.effTo ? '' : '1'}" data-plate="${escapeHtml(r.plate)}" data-k="effTo" value="${escapeHtml(r.effTo)}" title="blank = ongoing" style="font-size:11px;padding:2px 4px"></td>
       <td><input class="fleet-fld" data-plate="${escapeHtml(r.plate)}" data-k="gps" value="${escapeHtml(r.gps)}" placeholder="GPS provider" style="width:110px;font-size:11px;padding:2px 4px"></td>
+      <td>${fleetCompanyCell(r)}</td>
       <td>${r.added ? isoDate(new Date(r.added)) : '—'}</td>
       <td>${r.ytd}</td>
       <td>${r.month}</td>
@@ -5767,14 +5802,18 @@ function renderFleetUI() {
         <select class="fleet-status-sel" data-plate="${escapeHtml(r.plate)}" style="font-size:11px;padding:2px 4px">
           ${FLEET_STATUSES.map(s => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${FLEET_STATUS_LABEL[s]}</option>`).join('')}
         </select>
-        <button class="small secondary fleet-remove" data-plate="${escapeHtml(r.plate)}" style="padding:1px 6px;font-size:10px;margin-left:4px">Remove</button>
+        ${FLEET_ADMIN ? `<button class="small secondary fleet-remove" data-plate="${escapeHtml(r.plate)}" style="padding:1px 6px;font-size:10px;margin-left:4px">Remove</button>` : ''}
       </td>
     </tr>`).join('');
 
   body.querySelectorAll('.fleet-fld').forEach(inp => {
     inp.addEventListener('change', () => {
       setFleetField(inp.getAttribute('data-plate'), inp.getAttribute('data-k'), inp.value);
-      if (inp.dataset.k === 'effTo' || inp.dataset.k === 'effFrom') renderFleetUI();
+      if (inp.dataset.k === 'companyId') {
+        const m = fleetMeta(inp.getAttribute('data-plate'));
+        m.company = (FLEET_SUBS.filter(x => String(x.id) === inp.value)[0] || {}).short || '';
+      }
+      if (inp.dataset.k === 'effTo' || inp.dataset.k === 'effFrom' || inp.dataset.k === 'companyId') renderFleetUI();
     });
   });
 

@@ -508,6 +508,8 @@ def _ensure_truck_schema():
         db.session.commit()
     if "route_id" not in cols:
         _add_column_racing("truck", "route_id INTEGER")
+    if "subcontractor_id" not in cols:
+        _add_column_racing("truck", "subcontractor_id INTEGER")
 
 
 def _ensure_route_schema():

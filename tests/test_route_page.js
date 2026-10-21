@@ -204,10 +204,10 @@ if (!fleetHead || !fleetRow) {
   console.log('  FAIL  could not find the fleet header or row');
   process.exit(1);
 }
-// "Usual route" since 30/09/2026: the route a truck runs on a given day is
-// declared on the sheet, and the fleet's is only what a sheet falls back to.
-check('the fleet table has a Route column, named as the usual one',
-      /<th data-fsort="route"[^>]*>Usual route<\/th>/.test(fleetHead[0]), true);
+// No route column since 21/10/2026 (user: "truck no longer strict to one
+// route"): the route a truck runs is declared on the sheet, day by day.
+check('the fleet table has no Route column',
+      /<th data-fsort="route"/.test(fleetHead[0]), false);
 check('...and a Driver column, which it never had',
       /<th data-fsort="driver">Driver<\/th>/.test(fleetHead[0]), true);
 check('header and row agree on the count',
