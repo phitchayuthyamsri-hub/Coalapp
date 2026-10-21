@@ -19,7 +19,12 @@ def visible_keys(user):
     role = (getattr(user, "role", "") or "").lower()
     if getattr(user, "is_admin", False) or role != "subcontractor":
         return None
-    sub = getattr(user, "subcontractor_id", None)
+    return company_keys(getattr(user, "subcontractor_id", None))
+
+
+def company_keys(sub):
+    """One company's trucks, as normalised plates - the same rule, asked of a
+    company rather than of a login (the GPS hint on the Subcontractor page)."""
     if not sub:
         return set()
     keys = {engine.norm_plate(t.plate)

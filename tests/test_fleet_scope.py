@@ -91,6 +91,25 @@ check("...and the tool page is seeded with the same", ("75C11111" in seed, "20H0
 check("the company is named on each truck",
       {t["plate"]: t["company"] for t in client("boss").get("/api/fleet").get_json()}["75C11111"], "Hoanh Son")
 
+print("\nthe Subcontractor page and Process (21/10/2026)")
+# Hoanh Son's first login: no sheet of its own for the day.
+hint = client("hieu").get("/api/shift/suggest?date=2026-10-23").get_json()
+check("the GPS hint lists only Hoanh Son's trucks, not the fleet",
+      sorted(r["plate"] for r in hint.get("rows", [])), ["75C11111", "75C22222"])
+check("...and Bac Nam's lists only Bac Nam's",
+      sorted(r["plate"] for r in client("huytrv").get("/api/shift/suggest?date=2026-10-23").get_json().get("rows", [])),
+      ["20H01469", "20H01474"])
+with app.app_context():
+    dlb = DailyList(list_date="2026-10-22", subcontractor_id=BN, state="draft")
+    db.session.add(dlb)
+    db.session.commit()
+fl = client("hieu").get("/api/shift/flow").get_json()
+companies = sorted({c.get("company") or "" for d in fl.get("days", []) for c in d["companies"]})
+check("Process shows a subcontractor its own company only", companies, ["Hoanh Son"])
+fl = client("anh").get("/api/shift/flow").get_json()
+companies = sorted({c.get("company") for d in fl.get("days", []) for c in d["companies"]} - {None})
+check("...and the desks every company", companies, ["Bac Nam", "Hoanh Son"])
+
 print("\nwho may change what")
 r = client("hieu").post("/api/fleet", json={"plate": "75C99999", "status": "online"})
 check("a subcontractor cannot add a truck", r.status_code, 403)

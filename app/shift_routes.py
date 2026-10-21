@@ -3517,13 +3517,14 @@ def _gps_view(day, only):
     trucks = Truck.query.order_by(Truck.plate).all()
     if only is not None:
         names = {only}
-        # A company's fleet is whatever is on its most recent list; the truck
-        # table is not divided by company.
-        dl = (DailyList.query.filter_by(subcontractor_id=only)
-              .order_by(DailyList.list_date.desc()).first())
-        if dl:
-            keys = {r.key for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
-            trucks = [t for t in trucks if engine.norm_plate(t.plate) in keys]
+        # A company's fleet is its own trucks, its commitments and what its
+        # sheets have declared (fleet_scope, 21/10/2026). This used to be its
+        # most recent list only - and a company with no list yet fell through
+        # to the WHOLE fleet: a new Hoanh Son login opened its Subcontractor
+        # page on Bac Nam's 54 trucks.
+        from .fleet_scope import company_keys
+        keys = company_keys(only)
+        trucks = [t for t in trucks if engine.norm_plate(t.plate) in keys]
 
     out = []
     port_id = roles.get("port")
@@ -4284,9 +4285,18 @@ def flow():
                                   db.func.min(DailyList.list_date))
                  .filter(DailyList.subcontractor_id.isnot(None))
                  .group_by(DailyList.subcontractor_id).all())
+    # A subcontractor login sees its own company's days only (21/10/2026) -
+    # another company's card names that company's trucks.
+    mine = (getattr(current_user, "subcontractor_id", None)
+            if _role() == "subcontractor" else None)
+    if _role() == "subcontractor":
+        since = {k: v for k, v in since.items() if k == mine}
     out, missed = [], []
     for day in days:
-        lists = DailyList.query.filter_by(list_date=day).order_by(DailyList.id).all()
+        q = DailyList.query.filter_by(list_date=day)
+        if _role() == "subcontractor":
+            q = q.filter(DailyList.subcontractor_id == mine)
+        lists = q.order_by(DailyList.id).all()
         have = {dl.subcontractor_id for dl in lists}
         absent = sorted((sid for sid, first in since.items()
                          if first <= day and sid not in have),
@@ -4297,7 +4307,7 @@ def flow():
         if not entries:
             if day not in (today, tomorrow):
                 continue    # before anybody was on the system
-            entries = [_flow_entry(day, None, subs, today=today)]
+            entries = [_flow_entry(day, None, subs, sub_id=mine, today=today)]
         missed += [{"date": day, "company": e["company"]}
                    for e in entries if e.get("missed")]
         out.append({"date": day, "today": day == today, "tomorrow": day == tomorrow,
