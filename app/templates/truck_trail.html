@@ -151,6 +151,9 @@ async function drawFences(){
 }
 
 function hhmm(s){ return String(s || '').slice(11, 16); }
+// Day and time (22/10/2026): a trail spans days, and "last seen 12:08" read
+// as today when it was yesterday - a dead tracker looked like a live one.
+function dmhm(s){ s = String(s || ''); return s.slice(8, 10) + '/' + s.slice(5, 7) + ' ' + s.slice(11, 16); }
 
 async function load(){
   const f = $('#from').value, t = $('#to').value;
@@ -182,11 +185,21 @@ function draw(j){
     ? ('From captured positions, not a live pull. ' + (j.note || '')) : '';
   $('#stat').innerHTML =
       '<div>points<b>' + (j.count != null ? j.count : pts.length) + '</b></div>'
-    + '<div>first seen<b>' + (pts.length ? hhmm(pts[0].dt) : '—') + '</b></div>'
-    + '<div>last seen<b>' + (pts.length ? hhmm(pts[pts.length-1].dt) : '—') + '</b></div>'
+    + '<div>first seen<b>' + (pts.length ? dmhm(pts[0].dt) : '—') + '</b></div>'
+    + '<div>last seen<b>' + (pts.length ? dmhm(pts[pts.length-1].dt) : '—') + '</b></div>'
     + '<div>distance<b>' + (pts.length ? runKm(pts).toFixed(0) + ' km' : '—') + '</b></div>';
 
   if (j.note) $('#notes').innerHTML += '<div class="note n-info">' + esc(j.note) + '</div>';
+  // A tracker that has gone quiet says so, rather than leaving the last dot
+  // on the map to be read as where the truck is now.
+  if (pts.length){
+    const last = new Date(String(pts[pts.length-1].dt).replace(' ', 'T'));
+    const quiet = (Date.now() - last.getTime()) / 3600000;
+    if (quiet > 3)
+      $('#notes').innerHTML += '<div class="note n-warn">No GPS position since <b>'
+        + esc(dmhm(pts[pts.length-1].dt)) + '</b> (' + Math.round(quiet) + ' h ago). The tracker has '
+        + 'stopped reporting, or the truck now reports to another GPS company than the one on the Fleet page.</div>';
+  }
   if (!pts.length){
     $('#notes').innerHTML += '<div class="note n-warn"><b>Nothing recorded for '
       + esc(PLATE) + ' in this window.</b> The provider is pulled every few hours, '
