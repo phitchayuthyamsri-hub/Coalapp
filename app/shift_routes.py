@@ -3036,7 +3036,12 @@ def _standing(day, only):
             if only is not None and owner.get(r.list_id) != only:
                 continue
             expected[engine.norm_plate(r.plate)] = (r.plate, r.arrive_hhmm)
-        visits, roles = _visits_and_roles()
+        # Only the mine arrivals of that one day are read below, so only the
+        # pings from just before it are needed (22/10/2026). Built from the
+        # whole history this took 60 s - 527,000 pings, every one against every
+        # zone - and the worker was killed at 30: "Issue revision & notify"
+        # failed with a page of HTML where the planner expected an answer.
+        visits, roles = _visits_and_roles(since=datetime.strptime(past, "%Y-%m-%d"))
         mine_id = roles.get("xppl")
         seen = {}
         for v in visits:
