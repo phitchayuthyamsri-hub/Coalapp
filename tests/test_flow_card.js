@@ -140,5 +140,18 @@ out = store['body'].innerHTML;
 is('no misses: the tally says so', /class="card tally good"><b>No missed days<\/b>/.test(out), true);
 is('...and nothing is red', /miss/.test(out.replace('No missed days', '')), false);
 
+console.log('\nan approval that closed unapproved (22/10/2026)');
+vm.runInContext('draw(' + JSON.stringify({back: 7, missed: [], days: [{date: '2026-10-22', today: true,
+  tomorrow: false, companies: [{company: 'Bac Nam', no_load: false, no_load_note: '',
+  stages: [stage('Subcontractor','done','54 trucks declared'), stage('Supervisor','done','54 sent'),
+           stage('Manager','missed','approval closed - 54 truck(s) never approved'),
+           stage('Planner','idle',''), stage('Monitor','idle','')],
+  now: {who: 'Manager', closed: true, overdue: true, window: '14:00–15:00 · 21/10/2026',
+        note: 'approval closed - 54 truck(s) never approved'}}]}]}) + ')', sandbox);
+out = store['body'].innerHTML;
+is('a red Closed banner, not Pending', /class="now miss"><b>Closed at: Manager<\/b>/.test(out) && !/Pending at/.test(out), true);
+is('...saying the day is not monitored', /not monitored/.test(out), true);
+is('the manager is a red cross', /s-missed[^>]*><div class="dot">✕<\/div>\s*<div class="who">Manager/.test(out), true);
+
 console.log(fail ? '\n  ' + fail + ' FAILING' : '\n  all pass');
 process.exit(fail ? 1 : 0);

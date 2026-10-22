@@ -185,6 +185,9 @@ function draw(d){
       const now = done
         ? (c.no_load ? ''
            : '<div class="now ok"><b>Complete</b> &mdash; ' + esc(c.now.note) + '</div>')
+        : c.now.closed
+        ? '<div class="now miss"><b>Closed at: ' + esc(c.now.who) + '</b> &mdash; '
+          + esc(c.now.note) + ' &middot; the day was not approved, so it is not monitored.</div>'
         : '<div class="now"><b>Pending at: ' + esc(c.now.who) + '</b> &mdash; '
           + esc(c.now.note)
           + (c.now.overdue ? ' &middot; <b style="color:var(--bad)">its window ('

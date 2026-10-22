@@ -71,7 +71,9 @@ def entry(statuses, tick=None, decide=None, times=None):
         db.session.commit()
         sr._restate(dl)
         db.session.commit()
-        return sr._flow_entry(DAY, dl, {})
+        # As of the approval day (19/09): since 22/10 a run day that has begun
+        # closes its approval, and these checks are about the day before it.
+        return sr._flow_entry(DAY, dl, {}, today="2026-09-19")
 
 
 def stage(e, key):

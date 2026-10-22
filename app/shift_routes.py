@@ -3683,7 +3683,9 @@ def approvals():
             "reject_reason": dl.reject_reason or "",
             "counts": counts, "rows": items,
             "waiting": counts.get("applied", 0),
-            "can_decide": _can("confirm", dl.state),
+            "approval_closed": _approval_closed(day),
+            "can_decide": _can("confirm", dl.state)
+                          and (_role() == "admin" or not _approval_closed(day)),
         })
     total_waiting = sum(o["waiting"] for o in out)
     return jsonify(date=day, lists=out, waiting=total_waiting,
@@ -3971,6 +3973,17 @@ FLOW_WINDOWS = {
 }
 
 
+def _approval_closed(day, today=None):
+    """Whether the manager may no longer approve this run day's trucks
+    (22/10/2026). Approval belongs to the day before the run day; once the run
+    day itself has begun, the approval day has passed and a late approval is
+    refused - "please denied approval if it's already pass the date". The
+    admin is not held to it (see act_list), so a mistake can still be put
+    right."""
+    today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    return bool(day) and day <= today
+
+
 def _stage_window(day, key):
     w = FLOW_WINDOWS.get(key)
     if not w:
@@ -4120,6 +4133,9 @@ def _flow_entry(day, dl, subs, sub_id=None, today=None):
         # the sheet was sent, and that is where a day with no coal load ends.
         # A manager who already decided keeps that on the record (below).
         man = {"state": "none", "note": "nothing to approve - no coal load"}
+    elif st["applied"] and _approval_closed(day, today):
+        man = {"state": "missed",
+               "note": "approval closed - %d truck(s) never approved" % st["applied"]}
     elif st["applied"]:
         man = {"state": "waiting",
                "note": "%d truck(s) awaiting approval" % st["applied"]}
@@ -4224,6 +4240,11 @@ def _flow_entry(day, dl, subs, sub_id=None, today=None):
             s["window"] = "run day · " + _dmy(day)
 
     now = next((s for s in stages if s["state"] in ("waiting", "doing")), None)
+    closed = next((s for s in stages if s["key"] == "approve" and s["state"] == "missed"), None)
+    if closed is not None and (now is None or now["key"] != "submit"):
+        # Nothing further can happen to this day: it was never approved, so it
+        # is not monitored. Said in red at the top, not as "complete".
+        now = dict(closed, state="missed", closed=True, overdue=True)
     if missed:
         return {"company": subs.get(sub_id) if sub_id else None,
                 "sheet_state": "", "no_load": False, "no_load_note": "",
@@ -4257,6 +4278,7 @@ def _flow_entry(day, dl, subs, sub_id=None, today=None):
             "stages": stages,
             "now": ({"who": now["who"], "note": now["note"],
                      "overdue": bool(now.get("overdue")),
+                     "closed": bool(now.get("closed")),
                      "window": now.get("window", "")} if now
                     else {"who": "",
                           "note": "no trucks available today" if all_down
@@ -4332,6 +4354,11 @@ def act_list(action):
                              % (_role(), action, state)), 403
     if not dl:
         return jsonify(error="no list for %s" % _dmy(day)), 404
+    if action == "confirm" and _role() != "admin" and _approval_closed(day):
+        prev = (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        return jsonify(error="Approval for %s is closed: it had to be approved on %s, "
+                             "and that day has passed." % (_dmy(day), _dmy(prev)),
+                       code="approval_closed"), 403
     if action == "submit":
         rows = DailyListRow.query.filter_by(list_id=dl.id).all()
 
@@ -4761,8 +4788,12 @@ def _today_by_company(day, now):
                 key=lambda x: (-len(x["plates"]), x["status"])),
             "sheet_state": planning.state if planning is not None else "",
             "waiting": applied,
+            "approval_closed": bool(planning is not None
+                                    and _approval_closed(planning.list_date)),
             "can_decide": bool(planning is not None
-                               and _can("confirm", planning.state)),
+                               and _can("confirm", planning.state)
+                               and (_role() == "admin"
+                                    or not _approval_closed(planning.list_date))),
             "reasons": sorted(({"reason": k, "count": len(v), "plates": v}
                                for k, v in reasons.items()),
                               key=lambda x: (-x["count"], x["reason"])),

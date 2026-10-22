@@ -237,8 +237,10 @@ function draw(){
         + (canDecide ? 'Approve from the summary at the top of the page.'
             : (l.state === 'confirmed'
             ? 'Already approved.'
+            : ((c.applied || 0) && l.approval_closed
+            ? 'Approval closed: the approval day has passed, so these trucks can no longer be approved.'
             : ((c.applied || 0) ? 'Your role may not decide this.'
-                                : 'Nothing has been sent for approval yet.')))
+                                : 'Nothing has been sent for approval yet.'))))
       + '</span></div>';
 
     return '<div class="card">' + head
@@ -324,6 +326,10 @@ function approveCell(c){
   if (c.waiting && c.can_decide)
     return '<td><button data-sub="' + c.id + '" data-co="' + esc(c.company)
       + '" data-n="' + c.waiting + '">Approve ' + c.waiting + '</button></td>';
+  // The approval day has passed (22/10/2026): late approvals are refused.
+  if (c.waiting && c.approval_closed)
+    return '<td><span class="why" style="color:var(--bad,#ef4444)">' + c.waiting
+      + ' never approved &middot; approval closed, the day has passed</span></td>';
   if (c.waiting)
     return '<td><span class="why">' + c.waiting + ' waiting &middot; not your role</span></td>';
   return '<td><span class="why">nothing sent yet</span></td>';
