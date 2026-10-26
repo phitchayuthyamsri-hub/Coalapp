@@ -3347,12 +3347,41 @@ def _stamp_hint(dl, day, sub_id):
     the sheet is already saved, and the page falls back to the live hint."""
     if dl is None or dl.hint_at is not None:
         return
+    # Worked out AFTER the declaration has answered (26/10/2026). Replaying four
+    # days of pings takes 6 s on a quiet box; with one CPU shared by the minute
+    # GPS pull and the logistics app it ran past gunicorn's 30 s, the worker was
+    # killed, and Bac Nam's 27/10 upload failed with an HTML error page. The
+    # moment it stands for is still the moment of the declaration.
+    args = (dl.id, day, sub_id, current_user.username or "", datetime.utcnow())
+    if not HINT_IN_BACKGROUND:
+        _stamp_hint_now(*args)
+        return
+    import threading
+    from flask import current_app
+    app = current_app._get_current_object()
+
+    def run():
+        with app.app_context():
+            _stamp_hint_now(*args)
+            db.session.remove()
+    threading.Thread(target=run, daemon=True).start()
+
+
+HINT_IN_BACKGROUND = True      # tests turn it off to see the stamp at once
+
+
+def _stamp_hint_now(list_id, day, sub_id, who, at):
     try:
-        if not DailyListRow.query.filter_by(list_id=dl.id).count():
+        dl = db.session.get(DailyList, list_id)
+        if dl is None or dl.hint_at is not None:
             return
-        dl.hint = _gps_view(day, sub_id)
-        dl.hint_at = datetime.utcnow()
-        dl.hint_by = current_user.username or ""
+        if not DailyListRow.query.filter_by(list_id=list_id).count():
+            return
+        view = _gps_view(day, sub_id)
+        dl = db.session.get(DailyList, list_id)
+        if dl is None or dl.hint_at is not None:
+            return                           # another save stamped it meanwhile
+        dl.hint, dl.hint_at, dl.hint_by = view, at, who
         db.session.commit()
     except Exception:
         db.session.rollback()

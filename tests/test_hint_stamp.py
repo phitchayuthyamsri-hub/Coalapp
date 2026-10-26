@@ -42,6 +42,7 @@ def check(label, got, want):
 NOW = datetime.utcnow() + sr.LOCAL_OFFSET                  # pings are local time
 RUN = (NOW + timedelta(days=1)).strftime("%Y-%m-%d")       # declared for tomorrow
 
+sr.HINT_IN_BACKGROUND = False    # the stamp is made in the background on the live app
 app = create_app()
 with app.app_context():
     sub = Subcontractor.query.filter_by(name="Bac Nam").first() or Subcontractor(name="Bac Nam")
