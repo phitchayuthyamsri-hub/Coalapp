@@ -144,6 +144,56 @@ def _find_header(ws, limit=30):
     return None, {}, []
 
 
+# How many empty rows in a row end the sheet (26/10/2026). Bac Nam's 27/10 file
+# was 5.6 MB for 60 rows: formatting ran to row 1,048,576 on two sheets, opening
+# it took longer than nginx waits, and the upload failed four times.
+EMPTY_RUN_ENDS = 300
+MAX_COLS = 30
+
+
+class _Sheet(object):
+    """The one sheet the reader needs, as plain values - read in streaming
+    mode, only that sheet, and only until a long run of empty rows. Answers
+    the few things parse() asks of an openpyxl sheet."""
+
+    def __init__(self, title, rows):
+        self.title = title
+        self._rows = rows
+        self.max_row = len(rows)
+        self.max_column = max((len(r) for r in rows), default=0)
+
+    def cell(self, row, column):
+        class _C(object):
+            __slots__ = ("value",)
+        c = _C()
+        r = self._rows[row - 1] if 0 < row <= len(self._rows) else ()
+        c.value = r[column - 1] if 0 < column <= len(r) else None
+        return c
+
+
+def _read_sheet(path):
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        name = next((n for n in ("Readiness", "Sheet1") if n in wb.sheetnames),
+                    wb.sheetnames[0])
+        rows, empty, seen = [], 0, False
+        for r in wb[name].iter_rows(max_col=MAX_COLS, values_only=True):
+            blank = all(v is None or (isinstance(v, str) and not v.strip()) for v in r)
+            if blank and seen:
+                empty += 1
+                if empty >= EMPTY_RUN_ENDS:
+                    break
+            else:
+                empty = 0
+            seen = seen or not blank
+            rows.append(tuple(r))
+        while rows and all(v is None or (isinstance(v, str) and not v.strip()) for v in rows[-1]):
+            rows.pop()
+        return _Sheet(name, rows)
+    finally:
+        wb.close()
+
+
 def parse(path, strict=False):
     """-> {'rows': [...], 'header_row': n, 'columns': [...], 'warnings': [...],
            'error': message when the sheet is refused}
@@ -152,13 +202,7 @@ def parse(path, strict=False):
     Back-in-service rules. The upload passes strict=True; the default is off so
     that reading a sheet to LOOK at it never refuses one. Parsing itself is the
     same either way - strict adds a verdict, it does not change what is read."""
-    wb = load_workbook(path, data_only=True)
-    ws = None
-    for name in ("Readiness", "Sheet1"):
-        if name in wb.sheetnames:
-            ws = wb[name]
-            break
-    ws = ws or wb.worksheets[0]
+    ws = _read_sheet(path)
 
     hrow, cols, old = _find_header(ws)
     if not hrow:
