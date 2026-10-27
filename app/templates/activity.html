@@ -44,6 +44,29 @@
   .wa-sum th{color:var(--mut);font-weight:500;text-align:left;padding:3px 10px 5px 0;border-bottom:1px solid var(--line)}
   .wa-sum td{padding:4px 10px 4px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
   .wa-tag{color:var(--blue);font-size:13px}
+  /* Pick who to look at, and compare them side by side (27/10/2026). */
+  .slicer{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+  .sl-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .sl-head h3{margin:0}
+  .sl-head input[type=search]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 9px;font-size:13px;width:200px}
+  .sl-btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .sl-btn:hover{border-color:var(--mut)}
+  .sl-n{color:var(--mut);font-size:12px;margin-left:auto}
+  .sl-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 14px;max-height:220px;overflow:auto}
+  .sl-item{display:flex;align-items:center;gap:7px;font-size:13px;padding:3px 2px;cursor:pointer;border-radius:5px}
+  .sl-item:hover{background:var(--panel2)}
+  .sl-item input{accent-color:var(--blue);margin:0}
+  .sl-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sl-item .t{color:var(--mut);font-size:12px;font-variant-numeric:tabular-nums}
+  .cmp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px;overflow-x:auto}
+  .cmp table{border-collapse:collapse;font-size:13px;min-width:100%}
+  .cmp th,.cmp td{padding:5px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .cmp th:first-child,.cmp td:first-child{text-align:left;position:sticky;left:0;background:var(--panel)}
+  .cmp thead th{color:var(--ink);font-weight:600;font-size:12px;vertical-align:bottom}
+  .cmp tr.sum td{font-weight:600;border-bottom:2px solid var(--line)}
+  .cmp td.top{color:var(--grn);font-weight:600}
+  .cmp td.zero{color:#4a4d55}
+  .cmp .mini{display:block;height:4px;background:var(--blue);border-radius:2px;margin-top:3px;margin-left:auto}
 </style>
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
@@ -58,6 +81,8 @@
 </header>
 <div class="wrap">
   <p class="note">Per-user usage: which areas they spend the most time in, total time, and where they log in from (approximate, by IP). Time is aggregated from the tool; country is recorded at login. Login times shown in UTC+7 (Indochina).</p>
+  <div id="slicer"></div>
+  <div id="cmp"></div>
   <div id="waSum"></div>
   <div id="list">Loading…</div>
 </div>
@@ -106,12 +131,105 @@ function userBlock(name, u){
     + '<div class="feed"><h3>Recent actions (newest first)</h3><div class="evlist">'+ev+'</div></div></div>';
 }
 
+// The selection, remembered in this browser only.
+const SEL_KEY = 'activity.selected';
+function loadSel(){ try { const v = JSON.parse(localStorage.getItem(SEL_KEY) || 'null'); return Array.isArray(v) ? v : null; } catch (e) { return null; } }
+function saveSel(a){ try { localStorage.setItem(SEL_KEY, JSON.stringify(a)); } catch (e) {} }
+let DATA = {}, NAMES = [], SEL = new Set(), FIND = '';
+
+function drawSlicer(){
+  const shown = NAMES.filter(n => !FIND || n.toLowerCase().indexOf(FIND) >= 0);
+  document.getElementById('slicer').innerHTML = '<div class="slicer"><div class="sl-head"><h3>Users</h3>'
+    + '<input type="search" id="slFind" placeholder="find a user..." value="' + esc(FIND) + '">'
+    + '<button class="sl-btn" data-sl="all">All</button><button class="sl-btn" data-sl="none">None</button>'
+    + (FIND ? '<button class="sl-btn" data-sl="only">Only these ' + shown.length + '</button>' : '')
+    + '<span class="sl-n">' + SEL.size + ' of ' + NAMES.length + ' selected</span></div>'
+    + '<div class="sl-list">' + (shown.map(n => '<label class="sl-item"><input type="checkbox" data-u="' + esc(n) + '"'
+        + (SEL.has(n) ? ' checked' : '') + '><span class="nm" title="' + esc(n) + '">' + esc(n) + '</span>'
+        + '<span class="t">' + dur(DATA[n].total_seconds) + '</span></label>').join('')
+      || '<div class="note">No user matches.</div>') + '</div></div>';
+  const f = document.getElementById('slFind');
+  f.addEventListener('input', () => {
+    FIND = f.value.trim().toLowerCase(); drawSlicer();
+    const g = document.getElementById('slFind'); g.focus(); g.setSelectionRange(g.value.length, g.value.length);
+  });
+  document.querySelectorAll('[data-u]').forEach(cb => cb.addEventListener('change', () => {
+    if (cb.checked) SEL.add(cb.dataset.u); else SEL.delete(cb.dataset.u);
+    saveSel([...SEL]); drawAll();
+  }));
+  document.querySelectorAll('[data-sl]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.sl;
+    if (k === 'all') SEL = new Set(NAMES);
+    if (k === 'none') SEL = new Set();
+    if (k === 'only') SEL = new Set(NAMES.filter(n => n.toLowerCase().indexOf(FIND) >= 0));
+    saveSel([...SEL]); drawAll();
+  }));
+}
+
+// Side by side: one column per chosen user, one row per area of the tool.
+function drawCompare(sel){
+  const el = document.getElementById('cmp');
+  if (sel.length < 2) { el.innerHTML = ''; return; }
+  const secs = {}, order = {};
+  sel.forEach(n => (DATA[n].areas || []).forEach(a => {
+    (secs[a.page] = secs[a.page] || {})[n] = a.seconds;
+    order[a.page] = (order[a.page] || 0) + a.seconds;
+  }));
+  const pages = Object.keys(order).sort((a, b) => order[b] - order[a]);
+  const cells = (vals, fmt, bar) => {
+    const top = Math.max(0, ...vals);
+    return vals.map(v => {
+      if (!v) return '<td class="zero">—</td>';
+      return '<td' + (v === top && vals.filter(x => x).length > 1 ? ' class="top"' : '') + '>' + fmt(v)
+        + (bar ? '<span class="mini" style="width:' + Math.max(4, Math.round(v / top * 60)) + 'px"></span>' : '') + '</td>';
+    }).join('');
+  };
+  const row = (label, vals, fmt, bar, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td>' + cells(vals, fmt, bar) + '</tr>';
+  const lastLogin = n => ((DATA[n].logins || [])[0] || {}).ts;
+  el.innerHTML = '<div class="cmp"><h3>Compare ' + sel.length + ' users</h3><table><thead><tr><th>Area</th>'
+    + sel.map(n => '<th title="' + esc(n) + '">' + esc(n.split('@')[0]) + '</th>').join('') + '</tr></thead><tbody>'
+    + row('Total time', sel.map(n => DATA[n].total_seconds || 0), dur, false, 'sum')
+    + row('Logins', sel.map(n => (DATA[n].countries || []).reduce((t, c) => t + (c.count || 0), 0)), String, false)
+    + '<tr><td>Last login</td>' + sel.map(n => '<td>' + fmtTs(lastLogin(n)) + '</td>').join('') + '</tr>'
+    + row('WhatsApp: plans sent', sel.map(n => (DATA[n].whatsapp || {}).sends || 0), String, false)
+    + row('WhatsApp: driver chats', sel.map(n => (DATA[n].whatsapp || {}).chats || 0), String, false, 'sum')
+    + pages.map(p => row(esc(lab(p)), sel.map(n => (secs[p] || {})[n] || 0), dur, true)).join('')
+    + '</tbody></table><div class="note" style="margin:8px 0 0">Green = the most among the users compared. Bars are relative within each row.</div></div>';
+}
+
+function drawWa(sel){
+  const wu = sel.filter(n => { const w = DATA[n].whatsapp || {}; return w.sends || w.chats; })
+    .sort((a, b) => (DATA[b].whatsapp.sends + DATA[b].whatsapp.chats) - (DATA[a].whatsapp.sends + DATA[a].whatsapp.chats));
+  document.getElementById('waSum').innerHTML = '<div class="wa-sum"><h3>WhatsApp to drivers — recorded since 01/10/2026</h3>'
+    + (wu.length
+      ? '<table><thead><tr><th>User</th><th>Plans sent (Send Plan)</th><th>Driver chats (Monitor)</th><th>Last</th></tr></thead><tbody>'
+        + wu.map(n => { const w = DATA[n].whatsapp; return '<tr><td>'+esc(n)+'</td><td>'+w.sends+'</td><td>'+w.chats+'</td><td>'+fmtTs(w.last)+'</td></tr>'; }).join('')
+        + '</tbody></table>'
+      : '<div class="note">None of the selected users has pressed a WhatsApp button since it began to be recorded.</div>')
+    + '<div class="note" style="margin-top:8px">A press opens WhatsApp with the message ready. Whether it was then sent is not something this system can see.</div></div>';
+}
+
+function drawAll(){
+  drawSlicer();
+  const sel = NAMES.filter(n => SEL.has(n));
+  drawCompare(sel);
+  drawWa(sel);
+  document.getElementById('list').innerHTML = sel.length ? sel.map(n => userBlock(n, DATA[n])).join('')
+    : '<p class="note">No user selected - tick one or more above.</p>';
+}
+
 fetch('/api/admin/activity').then(r=>{
   if(r.status===403){ document.getElementById('list').innerHTML='<p class="err">Admins only.</p>'; return null; }
   return r.json();
 }).then(data=>{
   if(!data) return;
   const names = Object.keys(data).sort((a,b)=>data[b].total_seconds-data[a].total_seconds);
+  DATA = data; NAMES = names;
+  const kept = loadSel();
+  SEL = new Set(kept ? kept.filter(n => data[n]) : names);
+  if (!names.length) { document.getElementById('list').innerHTML = '<p class="note">No activity yet.</p>'; return; }
+  drawAll();
+  return;
   // Who uses the WhatsApp buttons - the question the feed below cannot answer,
   // because it stops at each person's last sixty actions. Counted since
   // 01/10/2026, when a press began to be recorded.
