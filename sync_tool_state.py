@@ -113,13 +113,33 @@ def build_timing():
     """Visits and cycles, computed from the pings the providers delivered."""
     anchors = geofence.for_engine()      # versioned: history judged as it was
     roles = geofence.roles()
-    pings = [{"plate": p.plate, "dt": p.dt, "lat": p.lat, "lng": p.lng,
-              "speed": p.speed, "status": p.status}
-             for p in GpsPing.query.order_by(GpsPing.dt).all()]
     deactivated = {engine.norm_plate(t.plate) for t in
                    Truck.query.filter_by(status="deactivated").all()}
 
-    visits = engine.build_visits(pings, anchors, deactivated)
+    # One truck at a time (27/10/2026): loading every ping at once - 635k rows
+    # since the minute pull - took the job to 0.7-1 GB on a 2 GB box, the
+    # kernel killed it most runs (95 times on 26/10) and the whole server went
+    # into swap. build_visits already works plate by plate, so feeding it one
+    # plate's pings per call gives the same visits; only plain columns are
+    # read, never ORM objects.
+    cols = (GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
+            GpsPing.speed, GpsPing.status)
+    visits, last, n_pings = [], {}, 0
+    for (plate,) in db.session.query(GpsPing.plate).distinct().all():
+        pings = [{"plate": r[0], "dt": r[1], "lat": r[2], "lng": r[3],
+                  "speed": r[4], "status": r[5]}
+                 for r in db.session.query(*cols).filter(GpsPing.plate == plate)
+                                              .order_by(GpsPing.dt).all()]
+        n_pings += len(pings)
+        if pings:
+            p = pings[-1]
+            last[plate] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms_local(p["dt"]),
+                           "speed": p["speed"], "status": p["status"]}
+        visits.extend(engine.build_visits(pings, anchors, deactivated))
+        del pings
+    visits.sort(key=lambda v: v["enter"])
+    for i, v in enumerate(visits):
+        v["no"] = i + 1
     sequences = engine.recompute_sequences(visits, roles)
 
     # The engine speaks snake_case, the tool camelCase. Nothing is recomputed
@@ -165,11 +185,6 @@ def build_timing():
             row[CAMEL.get(k, k)] = _ms_local(val) if isinstance(val, datetime) else val
         s_out.append(row)
 
-    last = {}
-    for p in pings:
-        last[p["plate"]] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms_local(p["dt"]),
-                            "speed": p["speed"], "status": p["status"]}
-
     if unmapped:
         print("  ! no tool anchor matched by name: %s (bars use the fallback colour)"
               % ", ".join(sorted(str(u) for u in unmapped)))
@@ -180,7 +195,7 @@ def build_timing():
         "sources": [{"name": "GPS providers (live)", "kind": "api",
                      "visits": len(v_out), "uploads": 0}],
         "lastPings": last,
-    }, len(pings)
+    }, n_pings
 
 
 def main():
