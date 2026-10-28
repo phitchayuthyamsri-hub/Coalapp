@@ -47,10 +47,12 @@
   .s-done .dot{background:#12301f;border-color:var(--ok);color:#5fd97e}
   /* Nothing for this desk to do. Not a tick - a tick says a person did their
      work - and not amber, because nothing is stuck. A dash in a dashed ring. */
-  .s-none .dot{background:transparent;border-style:dashed;border-color:#3d4d6b;color:#5a6a85}
-  .s-none .who{color:#5a6a85;font-weight:400;text-decoration:line-through;
-       text-decoration-color:#3d4d6b}
-  .s-none .note{color:#5a6a85}
+  /* Brighter than a step not reached yet (28/10/2026, "more visible") - it
+     is an answer, not a blank. */
+  .s-none .dot{background:rgba(159,176,204,.10);border-style:dashed;border-color:#9fb0cc;color:#dbe3f0}
+  .s-none .who{color:#c3cede;font-weight:600;text-decoration:line-through;
+       text-decoration-color:#7d8ca6}
+  .s-none .note{color:#b4c0d4}
   /* Missed (05/10/2026): the run day came and no sheet ever did. Red, the
      one colour on this page that means a desk failed its part. */
   .s-missed .dot{background:#3a1414;border-color:var(--bad);color:#fca5a5}
