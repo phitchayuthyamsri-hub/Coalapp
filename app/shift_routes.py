@@ -4086,9 +4086,11 @@ def _flow_entry(day, dl, subs, sub_id=None, today=None):
     missed = dl is None and day <= today
     gaps = _fleet_gaps(dl, sub_id) if dl is not None else []
     snap = _issued_for(day, sub_id)
-    if missed and snap is not None and snap.day != day:
-        # The week's plan covers the day on paper, but no truck was declared
-        # for it, so it is not a plan anybody made for this day.
+    if missed:
+        # No sheet, no truck of theirs in any plan. The week's plan covers the
+        # day on paper, and the day's plan went out for the companies that did
+        # declare (28/10/2026: Hoanh Son missed 27/10 yet read "plan issued"
+        # and "live on Monitor" off Bac Nam's plan) - neither is theirs.
         snap = None
 
     stages = []

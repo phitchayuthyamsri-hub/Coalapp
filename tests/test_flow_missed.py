@@ -65,6 +65,10 @@ with app.app_context():
         db.session.add(PlanSnapshot(week_start=sr._week_start(day).strftime("%Y-%m-%d"),
                                     day=day, subcontractor_id=None, issued_by="plan@nt",
                                     issued_at=datetime.utcnow(), rows=[], figures=[]))
+    # The day's plan went out for everyone else who declared yesterday.
+    db.session.add(PlanSnapshot(week_start=sr._week_start(YDAY).strftime("%Y-%m-%d"),
+                                day=YDAY, subcontractor_id=None, issued_by="plan@nt",
+                                issued_at=datetime.utcnow(), rows=[], figures=[]))
     # A week-wide plan that covers yesterday on paper.
     db.session.add(PlanSnapshot(week_start=sr._week_start(YDAY).strftime("%Y-%m-%d"),
                                 day=None, subcontractor_id=None, issued_by="plan@nt",
@@ -90,6 +94,8 @@ check("the subcontractor's step is missed", st.get("declare", {}).get("state"), 
 check("...the rest were never reached",
       [st[k]["state"] for k in ("submit", "approve", "plan", "watch")], ["idle"] * 4)
 check("the week's plan does not count as a plan for it", st.get("plan", {}).get("state"), "idle")
+check("...nor the day's plan issued for the others", st.get("plan", {}).get("at"), None)
+check("...so it is not live on Monitor", st.get("watch", {}).get("state"), "idle")
 check("the banner says what it cost", "no plan was issued" in e.get("now", {}).get("note", ""), True)
 check("...and it is in the tally", j.get("missed"), [{"date": YDAY, "company": bn_name}])
 
