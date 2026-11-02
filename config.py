@@ -128,5 +128,9 @@ def gps_providers_config():
             "password": os.environ.get("GPS_ADSUN_PASSWORD", ""),
             "auth_mode": os.environ.get("GPS_ADSUN_AUTH_MODE", "basic").strip().lower(),  # basic | query
             "plates": _plates(os.environ.get("GPS_ADSUN_PLATES")),   # blank = all authorised vehicles
+            # The vehicle groups the account reads (02/11/2026: PTS's ShareAPI
+            # link carries pageIds=1019|1305|6196|7103). "|" or "," separated;
+            # blank = not sent.
+            "page_ids": [x.strip() for x in os.environ.get("GPS_ADSUN_PAGE_IDS", "").replace(",", "|").split("|") if x.strip()],
         },
     }

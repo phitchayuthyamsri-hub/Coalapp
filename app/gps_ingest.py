@@ -185,13 +185,15 @@ def _adsun_request(cfg):
     user = cfg.get("username", "")
     pw = cfg.get("password", "")
     headers = {}
+    q = []
+    if cfg.get("page_ids"):
+        q.append("pageIds=" + urllib.parse.quote("|".join(cfg["page_ids"]), safe=""))
     if cfg.get("auth_mode", "basic") == "query":
-        url = base + "?username=" + urllib.parse.quote(user) + "&pwd=" + urllib.parse.quote(pw)
+        q += ["username=" + urllib.parse.quote(user), "pwd=" + urllib.parse.quote(pw)]
     else:  # basic (recommended) — credentials in the Authorization header
-        url = base
         tok = base64.b64encode((user + ":" + pw).encode("utf-8")).decode("ascii")
         headers["Authorization"] = "Basic " + tok
-    return url, headers
+    return base + ("?" + "&".join(q) if q else ""), headers
 
 
 def _fetch_adsun(cfg):
@@ -774,6 +776,9 @@ def _trail_adsun(pcfg, plate, begin, end):
         q = ("?licensePlate=" + urllib.parse.quote(plate)
              + "&beginTime=" + urllib.parse.quote(cur.strftime("%Y-%m-%d %H:%M:%S"))
              + "&endTime=" + urllib.parse.quote(ce.strftime("%Y-%m-%d %H:%M:%S")))
+        if pcfg.get("auth_mode", "basic") == "query":   # the account signs in on the URL
+            q += ("&username=" + urllib.parse.quote(pcfg.get("username", ""))
+                  + "&pwd=" + urllib.parse.quote(pcfg.get("password", "")))
         data = _http_get_json(pcfg["base_url"] + "/Vehicle/GpsHistoryV3" + q, headers,
                               timeout=_TRAIL_CALL_TIMEOUT)
         rows = data.get("Data") if isinstance(data, dict) and isinstance(data.get("Data"), list) else []
