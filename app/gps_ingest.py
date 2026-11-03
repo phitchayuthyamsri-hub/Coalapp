@@ -329,7 +329,9 @@ def _tct_vehicles(data):
 # the fleet (the camera-package trucks) on a separate CustomerCode in Sep
 # 2026, and one login cannot see both lists.
 _CONNECTORS = {"tct": _fetch_tct, "tct2": _fetch_tct,
-               "viettel": _fetch_viettel, "adsun": _fetch_adsun}
+               "viettel": _fetch_viettel, "adsun": _fetch_adsun,
+               # Hoanh Son's own Adsun login (03/11/2026), as tct2 is for TCT.
+               "adsun2": _fetch_adsun}
 
 
 # ── runner / storage ─────────────────────────────────────────────────────────
@@ -339,7 +341,7 @@ def provider_ready(cfg, key):
         return False
     if key in ("tct", "tct2"):
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
-    if key == "adsun":
+    if key in ("adsun", "adsun2"):
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key == "viettel":
         return bool(cfg.get("base_url") and cfg.get("api_key"))
@@ -639,7 +641,7 @@ def debug_provider(app, key):
         if key in ("tct", "tct2"):
             url, body, headers = _tct_request(pcfg)
             data = _http_post_json(url, body, headers)
-        elif key == "adsun":
+        elif key in ("adsun", "adsun2"):
             url, headers = _adsun_request(pcfg)
             data = _http_get_json(url, headers)
         else:
@@ -654,7 +656,7 @@ def debug_provider(app, key):
         info["top_keys"] = list(data.keys())
         info["message_result"] = data.get("MessageResult") or data.get("Description")
         info["return_code"] = data.get("ReturnCode") if data.get("ReturnCode") is not None else data.get("Status")
-        if key == "adsun":
+        if key in ("adsun", "adsun2"):
             veh = data.get("Data") if isinstance(data.get("Data"), list) else None
         else:
             veh = _tct_vehicles(data)
@@ -700,7 +702,7 @@ def _basic_headers(user, pw):
 # Per-provider range caps. TCT pages 24h windows back-to-back without complaint.
 # Adsun caps a history query at ~3 days AND rate-limits successive calls (the
 # guide says 10s; measured ~30s), so an Adsun trail is a single call per click.
-TRAIL_MAX_DAYS = {"tct": 14, "tct2": 14, "viettel": 7, "adsun": 3}
+TRAIL_MAX_DAYS = {"tct": 14, "tct2": 14, "viettel": 7, "adsun": 3, "adsun2": 3}
 _TRAIL_DEADLINE_S = 25     # stop paging after this many seconds, return partial
 _TRAIL_CALL_TIMEOUT = 12   # per provider call
 
@@ -890,7 +892,8 @@ def fetch_trail(app, source, plate, begin, end):
     """
     cfg = (app.config.get("_GPS_CFG") or {})
     src = source or ""
-    key = ("adsun" if "adsun" in src else
+    key = ("adsun2" if "adsun2" in src else
+           "adsun" if "adsun" in src else
            "viettel" if "viettel" in src else
            "tct2" if "tct2" in src else
            "tct" if "tct" in src else None)
@@ -918,7 +921,8 @@ def fetch_trail(app, source, plate, begin, end):
                 "error": "range too long for %s — choose %d days or fewer per trail" % (key.upper(), max_days)}
     try:
         fn = {"tct": _trail_tct, "tct2": _trail_tct,
-              "adsun": _trail_adsun, "viettel": _trail_viettel}[key]
+              "adsun": _trail_adsun, "adsun2": _trail_adsun,
+              "viettel": _trail_viettel}[key]
         pts, errors, truncated = fn(pcfg, plate, begin, end)
         bad = sum(1 for p in pts if not _sane_point(p.get("lat"), p.get("lng")))
         if bad:

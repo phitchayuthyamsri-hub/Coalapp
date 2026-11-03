@@ -133,4 +133,15 @@ def gps_providers_config():
             # blank = not sent.
             "page_ids": [x.strip() for x in os.environ.get("GPS_ADSUN_PAGE_IDS", "").replace(",", "|").split("|") if x.strip()],
         },
+        # A SECOND Adsun account (03/11/2026): Hoanh Son's trucks are on their
+        # own ShareAPI login, which PTS's cannot see - pulled alongside it.
+        "adsun2": {
+            "enabled": _truthy(os.environ.get("GPS_ADSUN2_ENABLED")),
+            "base_url": os.environ.get("GPS_ADSUN2_BASE_URL", "https://shareapi.adsun.vn").rstrip("/"),
+            "username": os.environ.get("GPS_ADSUN2_USERNAME", ""),
+            "password": os.environ.get("GPS_ADSUN2_PASSWORD", ""),
+            "auth_mode": os.environ.get("GPS_ADSUN2_AUTH_MODE", "basic").strip().lower(),
+            "plates": _plates(os.environ.get("GPS_ADSUN2_PLATES")),
+            "page_ids": [x.strip() for x in os.environ.get("GPS_ADSUN2_PAGE_IDS", "").replace(",", "|").split("|") if x.strip()],
+        },
     }
