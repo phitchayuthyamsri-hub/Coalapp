@@ -83,6 +83,23 @@ def _plates(v):
     return [p.strip().upper() for p in str(v or "").replace(";", ",").split(",") if p.strip()]
 
 
+def _binhanh(n):
+    """One Binh Anh account (03/11/2026). Binh Anh's API is the platform TCT
+    runs on - same /apiwba/gps/tracking and /gps/route, CustomerCode + Key as
+    HTTP Basic - so it is read by the TCT connector at Binh Anh's address.
+    Each subcontractor has its own CustomerCode, hence up to three."""
+    p = "GPS_BINHANH%s_" % n
+    return {
+        "enabled": _truthy(os.environ.get(p + "ENABLED")),
+        "base_url": os.environ.get(p + "BASE_URL", "https://apigps.binhanh.vn/apiwba").rstrip("/"),
+        "username": os.environ.get(p + "CUSTOMER_CODE", ""),
+        "password": os.environ.get(p + "KEY", ""),
+        "auth_mode": "basic",
+        "timestamp_field": "LocalTime",
+        "plates": _plates(os.environ.get(p + "PLATES")),
+    }
+
+
 def gps_providers_config():
     """GPS ingestion config, read from env / .env. A provider only becomes active
     when *_ENABLED is truthy AND its credentials are present. Everything is OFF by
@@ -133,6 +150,9 @@ def gps_providers_config():
             # blank = not sent.
             "page_ids": [x.strip() for x in os.environ.get("GPS_ADSUN_PAGE_IDS", "").replace(",", "|").split("|") if x.strip()],
         },
+        "binhanh": _binhanh(""),
+        "binhanh2": _binhanh("2"),
+        "binhanh3": _binhanh("3"),
         # A SECOND Adsun account (03/11/2026): Hoanh Son's trucks are on their
         # own ShareAPI login, which PTS's cannot see - pulled alongside it.
         "adsun2": {

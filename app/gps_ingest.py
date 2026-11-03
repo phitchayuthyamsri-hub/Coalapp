@@ -21,6 +21,7 @@ import json
 import ssl
 import time
 import base64
+import unicodedata
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -331,7 +332,13 @@ def _tct_vehicles(data):
 _CONNECTORS = {"tct": _fetch_tct, "tct2": _fetch_tct,
                "viettel": _fetch_viettel, "adsun": _fetch_adsun,
                # Hoanh Son's own Adsun login (03/11/2026), as tct2 is for TCT.
-               "adsun2": _fetch_adsun}
+               "adsun2": _fetch_adsun,
+               # Binh Anh (03/11/2026) is the platform TCT runs on: the same
+               # API at Binh Anh's address, one account per subcontractor.
+               "binhanh": _fetch_tct, "binhanh2": _fetch_tct, "binhanh3": _fetch_tct}
+
+BINHANH_KEYS = ("binhanh", "binhanh2", "binhanh3")
+TCT_LIKE = ("tct", "tct2") + BINHANH_KEYS
 
 
 # ── runner / storage ─────────────────────────────────────────────────────────
@@ -339,7 +346,7 @@ _CONNECTORS = {"tct": _fetch_tct, "tct2": _fetch_tct,
 def provider_ready(cfg, key):
     if not cfg.get("enabled"):
         return False
-    if key in ("tct", "tct2"):
+    if key in TCT_LIKE:
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
     if key in ("adsun", "adsun2"):
         return bool(cfg.get("base_url") and cfg.get("username") and cfg.get("password"))
@@ -354,8 +361,12 @@ class _NothingDue(Exception):
 
 def _provider_key(name):
     """A provider's name, however written ("api:tct2", "Viettel"), as a rank
-    key. The second TCT account is TCT."""
+    key. The second TCT account is TCT; "Bình Anh", "Binh Anh" and
+    "api:binhanh2" are all Binh Anh."""
     n = str(name or "").strip().lower()
+    flat = unicodedata.normalize("NFKD", n).encode("ascii", "ignore").decode().replace(" ", "")
+    if "binhanh" in flat:
+        return "binhanh"
     for k in ("adsun", "viettel", "tct"):
         if k in n:
             return k
@@ -374,7 +385,7 @@ def _provider_key(name):
 # ("always priority on TCT first, Viettel has low reliability"). There, TCT's
 # word stands wherever TCT has spoken recently, and Viettel fills in for a
 # plate TCT has gone quiet on, so a dead TCT box does not silence a truck.
-PROVIDER_PRIORITY = ("tct", "adsun", "viettel")
+PROVIDER_PRIORITY = ("tct", "adsun", "binhanh", "viettel")
 PRIORITY_FRESH_H = 24
 
 
@@ -638,7 +649,7 @@ def debug_provider(app, key):
     if not provider_ready(pcfg, key):
         return {"ok": False, "error": "provider not enabled / missing credentials"}
     try:
-        if key in ("tct", "tct2"):
+        if key in TCT_LIKE:
             url, body, headers = _tct_request(pcfg)
             data = _http_post_json(url, body, headers)
         elif key in ("adsun", "adsun2"):
@@ -702,7 +713,8 @@ def _basic_headers(user, pw):
 # Per-provider range caps. TCT pages 24h windows back-to-back without complaint.
 # Adsun caps a history query at ~3 days AND rate-limits successive calls (the
 # guide says 10s; measured ~30s), so an Adsun trail is a single call per click.
-TRAIL_MAX_DAYS = {"tct": 14, "tct2": 14, "viettel": 7, "adsun": 3, "adsun2": 3}
+TRAIL_MAX_DAYS = {"tct": 14, "tct2": 14, "viettel": 7, "adsun": 3, "adsun2": 3,
+                  "binhanh": 14, "binhanh2": 14, "binhanh3": 14}
 _TRAIL_DEADLINE_S = 25     # stop paging after this many seconds, return partial
 _TRAIL_CALL_TIMEOUT = 12   # per provider call
 
@@ -892,11 +904,12 @@ def fetch_trail(app, source, plate, begin, end):
     """
     cfg = (app.config.get("_GPS_CFG") or {})
     src = source or ""
-    key = ("adsun2" if "adsun2" in src else
+    key = (next((k for k in reversed(BINHANH_KEYS) if k in src), None) or
+           ("adsun2" if "adsun2" in src else
            "adsun" if "adsun" in src else
            "viettel" if "viettel" in src else
            "tct2" if "tct2" in src else
-           "tct" if "tct" in src else None)
+           "tct" if "tct" in src else None))
 
     def stored(reason):
         pts = _stored_trail(plate, begin, end)
@@ -922,6 +935,7 @@ def fetch_trail(app, source, plate, begin, end):
     try:
         fn = {"tct": _trail_tct, "tct2": _trail_tct,
               "adsun": _trail_adsun, "adsun2": _trail_adsun,
+              "binhanh": _trail_tct, "binhanh2": _trail_tct, "binhanh3": _trail_tct,
               "viettel": _trail_viettel}[key]
         pts, errors, truncated = fn(pcfg, plate, begin, end)
         bad = sum(1 for p in pts if not _sane_point(p.get("lat"), p.get("lng")))

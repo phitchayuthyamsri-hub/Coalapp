@@ -92,6 +92,7 @@
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff3b30;margin:0 4px 0 12px;vertical-align:middle"></span>TCT
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin:0 4px 0 12px;vertical-align:middle"></span>Viettel
       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;margin:0 4px 0 12px;vertical-align:middle"></span>Adsun
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin:0 4px 0 12px;vertical-align:middle"></span>Bình Anh
       <label style="margin-left:16px;cursor:pointer;user-select:none">
         <input type="checkbox" id="fenceToggle" checked style="vertical-align:middle;margin-right:4px">
         <span style="display:inline-block;width:10px;height:10px;border:2px solid #2dd4bf;background:rgba(45,212,191,.18);margin:0 4px 0 0;vertical-align:middle"></span>Geofences
@@ -107,7 +108,7 @@
     <button id="trailClear" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:12.5px;cursor:pointer">Clear</button>
     <button id="gpsXls" title="Download the STORED positions for this truck and window as an Excel file. Pick All trucks to export everything you may see." style="background:#1f7a4d;color:#fff;border:0;border-radius:7px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer">&#8681; Excel</button>
     <span id="trailMsg"></span>
-    <span style="color:var(--muted)">max range: TCT 14 days · Viettel 7 days · Adsun 3 days (provider limits)</span>
+    <span style="color:var(--muted)">max range: TCT / Bình Anh 14 days · Viettel 7 days · Adsun 3 days (provider limits)</span>
   </div>
   <div id="gpsMap" style="height:440px;border:1px solid var(--line);border-radius:12px;margin-bottom:24px;background:var(--panel2)"></div>
 
@@ -116,7 +117,8 @@
 </div>
 
 <script>
-const PROV_LABEL = { tct: "TCT", viettel: "Viettel", adsun: "Adsun" };
+const PROV_LABEL = { tct: "TCT", tct2: "TCT 2", viettel: "Viettel", adsun: "Adsun", adsun2: "Adsun 2",
+                     binhanh: "Bình Anh", binhanh2: "Bình Anh 2", binhanh3: "Bình Anh 3" };
 
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e; }
 
@@ -178,7 +180,7 @@ function truckTable(trucks){
 }
 
 // Colours match the legend and the provider cards.
-const PROV_COLOUR = { tct:'#ff3b30', viettel:'#22c55e', adsun:'#a855f7', '':'#8a8f98' };
+const PROV_COLOUR = { tct:'#ff3b30', viettel:'#22c55e', adsun:'#a855f7', binhanh:'#f59e0b', '':'#8a8f98' };
 let _map=null, _info=null, _markers=[], _trail=[], _fitted=false, _trailWired=false;
 
 function _mapsReady(){ return window.__gmapsReady && window.google && window.google.maps; }
@@ -252,7 +254,7 @@ function loadMap(){
     (pts||[]).forEach(p=>{
       if(p.lat==null || p.lng==null) return;
       const _s = p.source||'';
-      const prov = _s.indexOf('adsun')>=0 ? 'adsun' : (_s.indexOf('viettel')>=0 ? 'viettel' : (_s.indexOf('tct')>=0 ? 'tct' : ''));
+      const prov = _s.indexOf('binhanh')>=0 ? 'binhanh' : _s.indexOf('adsun')>=0 ? 'adsun' : (_s.indexOf('viettel')>=0 ? 'viettel' : (_s.indexOf('tct')>=0 ? 'tct' : ''));
       const pos = {lat:+p.lat, lng:+p.lng};
       const m = new google.maps.Marker({position:pos, map:_map,
                                         icon:_dot(PROV_COLOUR[prov]), title:p.plate});
@@ -271,7 +273,7 @@ function populateTrailTrucks(trucks){
   const sel=document.getElementById('trailTruck'); if(!sel) return;
   const cur=sel.value;
   sel.innerHTML='<option value="">All trucks (Excel export)</option>'
-    +(trucks||[]).slice().sort(function(x,y){ return String(x.plate).localeCompare(String(y.plate), undefined, {numeric:true, sensitivity:'base'}); }).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
+    +(trucks||[]).slice().sort(function(x,y){ return String(x.plate).localeCompare(String(y.plate), undefined, {numeric:true, sensitivity:'base'}); }).map(function(t){ const v=t.plate+'|'+t.source; const _s=t.source||''; const prov=_s.indexOf('binhanh')>=0?'Bình Anh':_s.indexOf('adsun')>=0?'Adsun':(_s.indexOf('viettel')>=0?'Viettel':'TCT'); return '<option value="'+v+'">'+t.plate+' ('+prov+')</option>'; }).join('');
   if(cur) sel.value=cur;
   _autoTrail();
 }

@@ -27,7 +27,8 @@ from app import engine                         # noqa: E402
 from app.models import db, GpsPing, Truck      # noqa: E402
 
 # How the provider keys are written on the fleet page.
-LABEL = {"tct": "TCT", "tct2": "TCT", "viettel": "Viettel", "adsun": "Adsun", "adsun2": "Adsun"}
+LABEL = {"tct": "TCT", "tct2": "TCT", "viettel": "Viettel", "adsun": "Adsun", "adsun2": "Adsun",
+         "binhanh": "Binh Anh", "binhanh2": "Binh Anh", "binhanh3": "Binh Anh"}
 
 
 def provider_of(source):
