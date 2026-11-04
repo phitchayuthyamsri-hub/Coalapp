@@ -2884,10 +2884,10 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
 <!-- ============ PAGE: SEND PLAN ============ -->
 <div class="page" data-page-panel="send">
   <div class="page-pad">
-    <div class="panel">
+    <div class="panel flex">
       <h2>Send Plan to Drivers</h2>
       <div class="help-text" style="margin-bottom:10px">Pick a plan date, then send each driver their plan over WhatsApp. Phone numbers come from the <b>Fleet</b> page. <b>Send all</b> steps through every planned driver — WhatsApp requires you to press Send for each message.</div>
-      <div id="sendBody"></div>
+      <div id="sendBody" class="send-body"></div>
     </div>
   </div>
 </div>
@@ -8201,8 +8201,14 @@ function _sendInjectCss(){
   s.textContent = [
     '.send-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}',
     '.send-date{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:var(--panel2);color:var(--ink)}',
-    '.send-tbl{border-collapse:collapse;width:100%;font-size:13px}',
-    '.send-tbl th,.send-tbl td{border:1px solid var(--line);padding:6px 9px;text-align:left;color:var(--ink)}',
+    // The table scrolls inside the panel, both ways, under a frozen header -
+    // 28 trucks ran off the bottom of the window with nothing to scroll
+    // (04/11/2026), and on a narrow window the Send column fell off the side.
+    '.send-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}',
+    '.send-wrap{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:6px}',
+    '.send-tbl{border-collapse:separate;border-spacing:0;width:100%;min-width:760px;font-size:13px}',
+    '.send-tbl thead th{position:sticky;top:0;z-index:1}',
+    '.send-tbl th,.send-tbl td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:6px 9px;text-align:left;color:var(--ink)}',
     '.send-tbl th{background:var(--panel2);color:var(--ink);font-weight:600}',
     '.send-tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}',
     '.send-tbl td.wa-sum{color:var(--ink)}',
@@ -8269,7 +8275,7 @@ function renderSend(){
       +(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')
       +(notFleet?(' · '+notFleet+' planned truck(s) no longer in the fleet (hidden)'):'')+'</span>'
     + '</div>'
-    + '<div style="overflow:auto"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Border → Port (plan)</th><th></th></tr></thead><tbody>'
+    + '<div class="send-wrap"><table class="send-tbl"><thead><tr><th>Truck</th><th>Phone</th><th>Load → Border → Port (plan)</th><th></th></tr></thead><tbody>'
     + (rows || '<tr><td colspan="4">No trucks planned this date.</td></tr>')
     + '</tbody></table></div>';
   const sel=document.getElementById('sendDateSel');
