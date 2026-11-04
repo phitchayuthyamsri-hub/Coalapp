@@ -461,12 +461,17 @@ def _store(pings, source):
         pings = [p for p in pings if (p["plate"], p["dt"]) not in drop]
         if not pings:
             return 0
-    dts = [p["dt"] for p in pings]
-    lo, hi = min(dts), max(dts)
+    # Look up exactly the (plate, time) pairs in this batch - never the span
+    # between its oldest and newest time. A tracker that went quiet keeps
+    # reporting its last fix (43H12895: 28/07), and since the 04/11 fleet
+    # grew that span reached back to July: every minute pull loaded every
+    # Viettel ping since then as objects, 800-900 MB, and the kernel killed
+    # it and pushed the shared box into swap.
+    dts = list({p["dt"] for p in pings})
     plates = list({p["plate"] for p in pings})
     existing, blank = set(), {}
     for r in GpsPing.query.filter(GpsPing.source == source,
-                                  GpsPing.dt >= lo, GpsPing.dt <= hi,
+                                  GpsPing.dt.in_(dts),
                                   GpsPing.plate.in_(plates)).all():
         existing.add((r.plate, r.dt))
         if not (getattr(r, "address", "") or ""):
