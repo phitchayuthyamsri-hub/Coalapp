@@ -3974,15 +3974,22 @@ def _not_launched():
 def _fleet_gaps(dl, sub_id):
     """Fleet trucks with no update on this list - no row at all, or a row with
     a blank status. Judged against the committed roster when one is registered,
-    else against the whole active truck table - less the trucks whose route has
-    not launched."""
+    else against the company's own active trucks - less the trucks whose route
+    has not launched.
+
+    The company's own (05/11/2026): with one company the whole truck table was
+    its fleet, and when PTS, Hoanh Son and BBC joined, Bac Nam's sheet could not
+    be submitted until it declared their 71 trucks too. A truck with no company
+    on it still counts for every company, as it always did."""
     roster = _roster(sub_id) if sub_id else {}
     if roster:
         fleet = {k: c.plate for k, c in roster.items()}
     else:
         fleet = {engine.norm_plate(t.plate): t.plate
                  for t in Truck.query.all()
-                 if (t.status or "") != "deactivated"}
+                 if (t.status or "") != "deactivated"
+                 and not (sub_id and t.subcontractor_id
+                          and t.subcontractor_id != sub_id)}
     for k in _not_launched():
         fleet.pop(k, None)
     have = {(r.key or engine.norm_plate(r.plate)): (r.note or "").strip()
