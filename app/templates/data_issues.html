@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data issues</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111a2b;--panel2:#16233a;--line:#233149;--txt:#e7ecf5;--mut:#8b9ab4;
+        --acc:#2dd4bf;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#0e1728;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+  body.embed > header{display:none}
+  h1{font-size:17px;margin:0}
+  .sub{color:var(--mut);font-size:12px}
+  a{color:var(--acc);text-decoration:none;font-size:13px}
+  main{padding:16px;max-width:1400px;margin:0 auto}
+  body.embed main{padding:4px 2px}
+  .intro{color:var(--mut);font-size:12.5px;margin:0 0 12px;max-width:900px}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .bar select,.bar input{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+       border-radius:7px;padding:6px 9px;font-size:13px}
+  .bar input[type=search]{width:220px}
+  .count{font-size:13px;color:var(--mut)}
+  .count b{color:var(--txt)}
+  .count .o{color:#fca5a5}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:7px;
+       padding:6px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--mut)}
+  .btn.pri{background:#0f766e;border-color:#14b8a6;color:#fff;font-weight:600}
+  .btn.sm{padding:3px 9px;font-size:12px}
+  .spacer{margin-left:auto}
+  .wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  table{border-collapse:separate;border-spacing:0;width:100%;min-width:1050px;font-size:13px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{position:sticky;top:0;background:var(--panel2);font-size:11.5px;text-transform:uppercase;
+     letter-spacing:.4px;color:var(--mut);z-index:1}
+  tr.fixed td{opacity:.55}
+  .when{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .when .s{color:var(--mut);font-size:11.5px}
+  .plate{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+  .plate.many{white-space:normal;max-width:220px}
+  .kind{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+        padding:2px 8px;border-radius:999px;background:#3a1414;border:1px solid #7f1d1d;color:#fca5a5}
+  .kind.gps{background:#3a2a10;border-color:#92400e;color:#fcd34d}
+  .kind.list{background:#16233a;border-color:var(--line);color:var(--acc)}
+  .sent{font-family:ui-monospace,Menlo,Consolas,monospace;color:#fca5a5;white-space:pre-wrap;max-width:220px}
+  .detail{white-space:pre-wrap;max-width:420px}
+  .src{color:var(--mut);font-size:12px;max-width:200px}
+  .st{font-size:12px;white-space:nowrap}
+  .st.open{color:#fca5a5;font-weight:700}
+  .st.fixed{color:var(--ok)}
+  .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .empty{padding:30px;text-align:center;color:var(--mut)}
+  .form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px;display:none}
+  .form.on{display:block}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 14px}
+  .grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}
+  .grid input,.grid select,.grid textarea{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+       border-radius:7px;padding:6px 9px;font-size:13px;font-family:inherit}
+  .grid textarea{min-height:60px;resize:vertical}
+  .grid .wide{grid-column:1/-1}
+  .msg{font-size:12.5px;margin-left:8px}
+  .msg.err{color:#fca5a5}
+  .msg.ok{color:var(--ok)}
+  @media (max-width:640px){ main{padding:10px} .bar input[type=search]{width:100%} }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Data issues</h1><div class="sub">what the subcontractors sent wrong or left out, on record</div></div>
+  <a href="/tool#dataissues" style="margin-left:auto">Back to the tool</a>
+</header>
+<main>
+  <p class="intro">Truck and driver lists are entered exactly as the companies send them. A blank stays blank and a broken number stays broken, so the gap costs the company that left it. This is the record: when the missing detail is needed, the date it was first reported and the file it came in are already here.</p>
+  <div class="bar">
+    <span class="count" id="count"></span>
+    <select id="fCo"><option value="">All companies</option></select>
+    <select id="fKind"><option value="">All kinds</option></select>
+    <select id="fSt"><option value="open">Open</option><option value="fixed">Fixed</option><option value="">All</option></select>
+    <input type="search" id="fQ" placeholder="find a truck, driver, number…">
+    <span class="spacer"></span>
+    <button class="btn" id="copyOpen" title="A ready-to-send list of the open issues for the company picked (or all)">Copy open issues</button>
+    {% if may_edit %}<button class="btn pri" id="addBtn">＋ Log an issue</button>{% endif %}
+  </div>
+
+  {% if may_edit %}
+  <div class="form" id="form">
+    <div class="grid">
+      <label>Company<select id="iCo"><option value="">Not one company</option></select></label>
+      <label>Truck(s)<input id="iPlate" placeholder="29E33234, or several"></label>
+      <label>Kind<select id="iKind"></select></label>
+      <label>First reported<input id="iFirst" type="date"></label>
+      <label>Last seen in a list<input id="iLast" type="date"></label>
+      <label>Source<input id="iSrc" placeholder="BBC TRUCK TMS - V5.xlsx"></label>
+      <label class="wide">What they sent (exactly)<input id="iSent" placeholder="+847 288 075"></label>
+      <label class="wide">What is wrong, and what it breaks<textarea id="iDetail" placeholder="9 digits - cannot be dialled; the WhatsApp plan link will not open"></textarea></label>
+    </div>
+    <div style="margin-top:10px"><button class="btn pri" id="saveBtn">Save</button> <button class="btn" id="cancelBtn">Cancel</button><span class="msg" id="formMsg"></span></div>
+  </div>
+  {% endif %}
+
+  <div class="wrap"><table>
+    <thead><tr><th>Since</th><th>Company</th><th>Truck</th><th>Kind</th><th>What they sent</th><th>What is wrong</th><th>Source</th><th>Status</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+</main>
+<script>
+if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed');
+let ALL = [], MAY_EDIT = false;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dmy = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : '';
+const KIND_LABEL = {phone:'Phone', driver:'Driver', trailer:'Trailer', plate:'Plate', gps:'GPS', list:'List', other:'Other'};
+
+function load(){
+  fetch('/api/data-issues').then(r => r.json()).then(j => {
+    ALL = j.issues || []; MAY_EDIT = !!j.may_edit;
+    const co = j.companies || [];
+    ['fCo', 'iCo'].forEach(id => { const s = $(id); if (!s || s.dataset.filled) return;
+      co.forEach(c => { const o = document.createElement('option'); o.value = id === 'fCo' ? c.name : c.id; o.textContent = c.name; s.appendChild(o); });
+      s.dataset.filled = 1; });
+    ['fKind', 'iKind'].forEach(id => { const s = $(id); if (!s || s.dataset.filled) return;
+      (j.kinds || []).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = KIND_LABEL[k] || k; s.appendChild(o); });
+      s.dataset.filled = 1; });
+    draw();
+  }).catch(() => { $('rows').innerHTML = '<tr><td colspan="9" class="empty">Could not load the list.</td></tr>'; });
+}
+
+function shown(){
+  const co = $('fCo').value, k = $('fKind').value, st = $('fSt').value, q = $('fQ').value.trim().toLowerCase();
+  return ALL.filter(i => (!co || i.company === co) && (!k || i.kind === k) && (!st || i.status === st)
+    && (!q || [i.plate, i.sent, i.detail, i.source, i.company].join(' ').toLowerCase().indexOf(q) >= 0));
+}
+
+function draw(){
+  const open = ALL.filter(i => i.status === 'open').length;
+  $('count').innerHTML = '<b class="o">' + open + '</b> open · <b>' + (ALL.length - open) + '</b> fixed';
+  const rows = shown();
+  $('rows').innerHTML = rows.length ? rows.map(i => {
+    const since = '<div>' + esc(dmy(i.first_seen)) + '</div>'
+      + (i.last_seen && i.last_seen !== i.first_seen ? '<div class="s">still in ' + esc(dmy(i.last_seen)) + '</div>' : '');
+    const many = (i.plate || '').indexOf(',') >= 0;
+    const st = i.status === 'fixed'
+      ? '<span class="st fixed">Fixed ' + esc((i.fixed_at || '').slice(0, 10).split('-').reverse().join('/')) + '</span>'
+        + (i.fixed_note ? '<div class="src">' + esc(i.fixed_note) + '</div>' : '')
+      : '<span class="st open">Open</span>';
+    const acts = '<button class="btn sm" data-copy="' + i.id + '">Copy</button>'
+      + (MAY_EDIT ? (i.status === 'open'
+          ? '<button class="btn sm" data-seen="' + i.id + '" title="It came again in today\'s list">Seen again</button><button class="btn sm" data-fix="' + i.id + '">Mark fixed</button>'
+          : '<button class="btn sm" data-reopen="' + i.id + '">Reopen</button>') : '');
+    return '<tr class="' + (i.status === 'fixed' ? 'fixed' : '') + '">'
+      + '<td class="when">' + since + '</td>'
+      + '<td>' + esc(i.company || '—') + '</td>'
+      + '<td class="plate' + (many ? ' many' : '') + '">' + esc(i.plate || '—') + '</td>'
+      + '<td><span class="kind ' + esc(i.kind) + '">' + esc(KIND_LABEL[i.kind] || i.kind) + '</span></td>'
+      + '<td class="sent">' + (i.sent ? esc(i.sent) : '<span style="color:var(--mut)">(nothing)</span>') + '</td>'
+      + '<td class="detail">' + esc(i.detail) + '</td>'
+      + '<td class="src">' + esc(i.source) + '</td>'
+      + '<td>' + st + '</td><td><div class="acts">' + acts + '</div></td></tr>';
+  }).join('') : '<tr><td colspan="9" class="empty">Nothing here.</td></tr>';
+}
+
+// One line per issue, ready to paste into a chat or an email.
+function line(i){
+  return '- ' + (i.company ? i.company + ' ' : '') + (i.plate || '') + ' (' + (KIND_LABEL[i.kind] || i.kind) + '): '
+    + (i.sent ? 'sent "' + i.sent + '". ' : '') + i.detail
+    + ' [first reported ' + dmy(i.first_seen) + (i.last_seen && i.last_seen !== i.first_seen ? ', still in the list of ' + dmy(i.last_seen) : '') + ']';
+}
+function copyText(t, btn){
+  const done = () => { const o = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = o, 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => prompt('Copy this:', t));
+  else prompt('Copy this:', t);
+}
+
+function post(url, body){
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+    .then(r => r.json().then(j => { if (!r.ok) throw new Error(j.error || 'Save failed'); return j; }));
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const find = id => ALL.find(i => String(i.id) === String(id));
+  if (b.dataset.copy) copyText(line(find(b.dataset.copy)), b);
+  if (b.dataset.fix) {
+    const note = prompt('What fixed it? (optional - e.g. "V6 list has the right number")', '');
+    if (note === null) return;
+    post('/api/data-issues/' + b.dataset.fix, {status:'fixed', fixed_note: note}).then(load).catch(err => alert(err.message));
+  }
+  if (b.dataset.reopen) post('/api/data-issues/' + b.dataset.reopen, {status:'open'}).then(load).catch(err => alert(err.message));
+  if (b.dataset.seen) {
+    const d = new Date(); const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    post('/api/data-issues/' + b.dataset.seen, {last_seen: today}).then(load).catch(err => alert(err.message));
+  }
+});
+
+$('copyOpen').addEventListener('click', e => {
+  const co = $('fCo').value;
+  const open = ALL.filter(i => i.status === 'open' && (!co || i.company === co));
+  if (!open.length) { alert('No open issues' + (co ? ' for ' + co : '') + '.'); return; }
+  copyText('Open data issues' + (co ? ' - ' + co : '') + ':\n' + open.map(line).join('\n'), e.target);
+});
+['fCo', 'fKind', 'fSt'].forEach(id => $(id).addEventListener('change', draw));
+$('fQ').addEventListener('input', draw);
+
+if ($('addBtn')) {
+  const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  $('addBtn').addEventListener('click', () => { $('form').classList.add('on'); $('iFirst').value = $('iLast').value = today(); $('iPlate').focus(); });
+  $('cancelBtn').addEventListener('click', () => { $('form').classList.remove('on'); $('formMsg').textContent = ''; });
+  $('saveBtn').addEventListener('click', () => {
+    const body = {subcontractor_id: $('iCo').value || null, plate: $('iPlate').value, kind: $('iKind').value,
+                  first_seen: $('iFirst').value, last_seen: $('iLast').value, source: $('iSrc').value,
+                  sent: $('iSent').value, detail: $('iDetail').value};
+    post('/api/data-issues', body).then(() => {
+      ['iPlate', 'iSrc', 'iSent', 'iDetail'].forEach(id => $(id).value = '');
+      $('formMsg').className = 'msg ok'; $('formMsg').textContent = 'Saved.'; load();
+    }).catch(err => { $('formMsg').className = 'msg err'; $('formMsg').textContent = err.message; });
+  });
+}
+load();
+</script>
+</body>
+</html>

@@ -276,6 +276,32 @@ class RouteLeg(db.Model):
     via = db.Column(db.String(40), default="")
 
 
+class DataIssue(db.Model):
+    """Something wrong or missing in what a subcontractor sent - a phone that
+    cannot be dialled, a driver nobody named, one number on two trucks.
+
+    The control tower enters their lists as given and does not repair them
+    (05/11/2026): the gap should cost the company that left it. This is the
+    record that makes that stick - when the missing number is needed at 2am,
+    the date it was first reported and the file it came in are already here.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    subcontractor_id = db.Column(db.Integer, index=True)   # None = not one company
+    plate = db.Column(db.String(400), default="")           # one, or several, or blank
+    kind = db.Column(db.String(20), default="other")        # phone|driver|trailer|plate|gps|list|other
+    sent = db.Column(db.String(300), default="")            # exactly what they sent
+    detail = db.Column(db.Text, default="")                 # what is wrong, and what it breaks
+    source = db.Column(db.String(200), default="")          # the file / message it came in
+    first_seen = db.Column(db.String(10), default="")       # YYYY-MM-DD it was first sent so
+    last_seen = db.Column(db.String(10), default="")        # YYYY-MM-DD it was last sent so
+    status = db.Column(db.String(10), default="open", index=True)   # open|fixed
+    fixed_at = db.Column(db.DateTime)
+    fixed_by = db.Column(db.String(80), default="")
+    fixed_note = db.Column(db.String(300), default="")
+    created_by = db.Column(db.String(80), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class Notice(db.Model):
     """Something the operation has been told, and who it was told to.
 

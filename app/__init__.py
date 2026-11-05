@@ -119,6 +119,13 @@ def create_app(config_class=Config):
     except Exception as e:  # pragma: no cover
         app.logger.warning("Shift routes not loaded: %s", e)
 
+    # Data issues (05/11/2026) - what the subcontractors sent wrong, on record.
+    try:
+        from .data_issues import bp as data_issues_bp
+        app.register_blueprint(data_issues_bp)
+    except Exception as e:  # pragma: no cover
+        app.logger.warning("Data issues routes not loaded: %s", e)
+
     @app.before_request
     def _make_session_permanent():
         from flask import session

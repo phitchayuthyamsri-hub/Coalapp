@@ -2378,6 +2378,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <button data-page="truckstatus">Truck Status</button>
       <button data-page="subfleet">Subcontractor fleet status</button>
       <button data-page="fleet">Fleet</button>
+      <button data-page="dataissues" data-admin="1">Data issues</button>
     </div>
   </div>
 
@@ -2863,6 +2864,16 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <h2>GPS Capture <span style="font-weight:400;text-transform:none;color:var(--muted);font-size:12px">live pull from provider APIs · admin only</span></h2>
       <div class="help-text" style="margin-bottom:10px">Provider status, captured positions on the map, per-truck trail, and manual Pull now. Scheduled pulls run on the server whether or not this page is open.</div>
       <iframe id="gpscapFrame" data-src="/gps-capture" title="GPS Capture" style="width:100%;height:calc(100vh - 230px);min-height:560px;border:1px solid var(--line);border-radius:10px;background:#0e1418"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- Data issues (05/11/2026): what the subcontractors sent wrong or left out,
+     dated, so it is on hand the moment the missing detail is needed. -->
+<div class="page" data-page-panel="dataissues">
+  <div class="page-pad">
+    <div class="panel">
+      <iframe id="dataissuesFrame" data-src="/data-issues?embed=1" title="Data issues" style="width:100%;height:calc(100vh - 200px);min-height:520px;border:0;background:transparent"></iframe>
     </div>
   </div>
 </div>
@@ -8333,7 +8344,7 @@ function _sendAllDone(){ const s=document.getElementById('waStep'); if(s) s.clas
 // reached at all (user 19/09/2026). Measure the top instead and end the frame
 // where the window ends, so the bar is always the bottom line on screen.
 function sizeEmbeddedFrames(){
-  ['opsFrame', 'gpscapFrame'].forEach(function (id) {
+  ['opsFrame', 'gpscapFrame', 'dataissuesFrame'].forEach(function (id) {
     var f = document.getElementById(id);
     if (!f || f.offsetParent === null) return;      // its page is not showing
     var top = f.getBoundingClientRect().top;
@@ -8378,6 +8389,8 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'send') { renderSend(); }
     if (t === 'vlist') { _vlLoadSaved(); }
     if (t === 'gpscap') { const _gf = document.getElementById('gpscapFrame'); if (_gf && !_gf.getAttribute('src')) _gf.setAttribute('src', _gf.dataset.src); }
+    // Reloaded on every visit: an issue logged a minute ago must be on it.
+    if (t === 'dataissues') { const _df = document.getElementById('dataissuesFrame'); if (_df) _df.setAttribute('src', _df.dataset.src + '&t=' + Date.now()); }
     if (t === 'ops') { const _of = document.getElementById('opsFrame'); if (_of && !_of.getAttribute('src')) _of.setAttribute('src', _of.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
