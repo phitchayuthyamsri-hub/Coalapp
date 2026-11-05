@@ -10,6 +10,8 @@ in are already written down, and nobody loses time digging for them.
     GET  /api/data-issues            the list, newest first
     POST /api/data-issues            log one          (admin)
     POST /api/data-issues/<id>       change / fix one (admin)
+
+Admin only, reading and writing.
 """
 from datetime import datetime
 
@@ -21,8 +23,9 @@ from .models import db, DataIssue, Subcontractor
 bp = Blueprint("data_issues", __name__)
 
 KINDS = ("phone", "driver", "trailer", "plate", "gps", "list", "other")
-# The control tower's own record. The companies it is about do not read it.
-VIEWERS = ("admin", "planner", "monitor")
+# Admin eyes only (user 05/11/2026) - not the planners, not the monitors,
+# and never the companies it is about.
+VIEWERS = ("admin",)
 
 
 def _role():

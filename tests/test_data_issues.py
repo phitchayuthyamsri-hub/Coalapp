@@ -5,8 +5,8 @@ Run: python tests/test_data_issues.py   (PYTHONIOENCODING=utf-8 on Windows)
 
 Lists are entered as the companies send them and not repaired, so that the gap
 costs whoever left it. The record has to say when it was first reported and
-in which file, stay until it is fixed, and be the control tower's own: an admin
-writes it, the companies it is about do not read it.
+in which file, stay until it is fixed, and be for admin eyes only (user
+05/11/2026) - not the planner, never the companies it is about.
 """
 import os
 import sys
@@ -78,10 +78,12 @@ r = admin.post("/api/data-issues", json={"plate": "43H22582"})
 check("an issue saying nothing is refused", r.status_code, 400)
 
 print("\nwho sees it")
-lst = planner.get("/api/data-issues").get_json()
-check("the planner reads the list", [i["plate"] for i in lst["issues"]], ["29E33234"])
+lst = admin.get("/api/data-issues").get_json()
+check("the admin reads the list", [i["plate"] for i in lst["issues"]], ["29E33234"])
 check("...named by company", lst["issues"][0]["company"], "BBC")
-check("...but may not write to it", planner.post("/api/data-issues", json={"detail": "x"}).status_code, 403)
+check("the planner cannot read it", planner.get("/api/data-issues").status_code, 403)
+check("...nor open the page", planner.get("/data-issues").status_code, 403)
+check("...nor write to it", planner.post("/api/data-issues", json={"detail": "x"}).status_code, 403)
 check("the company it is about cannot read it", sub.get("/api/data-issues").status_code, 403)
 check("...nor open the page", sub.get("/data-issues").status_code, 403)
 check("the page opens for the admin", admin.get("/data-issues?embed=1").status_code, 200)
@@ -94,7 +96,7 @@ r = admin.post("/api/data-issues/%d" % iid, json={"status": "fixed", "fixed_note
 i = r.get_json()["issue"]
 check("fixed", i["status"], "fixed")
 check("...by whom, with the note", (i["fixed_by"], i["fixed_note"]), ("boss", "V6 has 0357 288 075"))
-check("it stays on record", len(planner.get("/api/data-issues").get_json()["issues"]), 1)
+check("it stays on record", len(admin.get("/api/data-issues").get_json()["issues"]), 1)
 r = admin.post("/api/data-issues/%d" % iid, json={"status": "open"})
 check("reopened, the fix is cleared", (r.get_json()["issue"]["status"], r.get_json()["issue"]["fixed_by"]), ("open", ""))
 
