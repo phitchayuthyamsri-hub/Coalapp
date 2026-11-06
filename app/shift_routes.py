@@ -1035,6 +1035,125 @@ def _roster(sub_id):
         subcontractor_id=sub_id, released_on="").all()}
 
 
+# The readiness template, made from the system itself (06/11/2026): one file
+# per company, its own active trucks and drivers already on it, and the
+# drop-downs holding exactly what the upload accepts - so a company never has
+# to ask for "the template", and never sends one that has drifted.
+TEMPLATE_HEADERS = ("No", "Plate", "Driver", "Route", "Status", "Loaded / Empty",
+                    "Location", "Date arrive Mine", "Time arrive Mine",
+                    "Back in service", "Remark")
+TEMPLATE_PLACES = ("XPPL Mine", "Lalay border", "A Ngo Warehouse", "QL49",
+                   "Chan May port", "On the road", "Workshop", "Garage")
+
+
+def readiness_template(sub_id, day=""):
+    """-> (bytes, filename) for an .xlsx the upload reads as it is."""
+    import io as _io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from .readiness_import import STATUS_CHOICES
+
+    sub = db.session.get(Subcontractor, sub_id) if sub_id else None
+    name = (sub.short or sub.name) if sub else "Company"
+    trucks = (Truck.query.filter(Truck.subcontractor_id == sub_id,
+                                 db.func.coalesce(Truck.status, "") != "deactivated")
+              .order_by(Truck.plate).all() if sub_id else [])
+    routes = [r.name for r in _Route.query.order_by(_Route.name).all()]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Readiness"
+    lines = [
+        "%s - DAILY TRUCK READINESS / KHAI B\u00c1O XE H\u00c0NG NG\u00c0Y%s"
+        % (name.upper(), (" - " + _dmy(day)) if day else ""),
+        "One row per truck. Status = FH, BH, or the reason it is not running. "
+        "Loaded / Empty is its own column.",
+        "A BH truck needs Date arrive Mine + Time arrive Mine (dd/mm/yyyy, HH:MM 24h). "
+        "Upload the sheet for TOMORROW only.",
+        "Every listed truck needs a Status - delete the rows of trucks you are not "
+        "declaring; a blank row makes the whole file refused. Do not rename or reorder "
+        "the header row (row 6); keep the sheet named Readiness.",
+        "Route = the route this truck runs on THAT day - pick from the list; it can "
+        "change every day.",
+    ]
+    for i, t in enumerate(lines, 1):
+        ws.cell(row=i, column=1, value=t)
+        ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=len(TEMPLATE_HEADERS))
+        ws.cell(row=i, column=1).alignment = Alignment(wrap_text=True, vertical="top")
+    ws.cell(row=1, column=1).font = Font(bold=True, size=13)
+    for i in range(2, 6):
+        ws.row_dimensions[i].height = 30
+    head = PatternFill("solid", fgColor="1F4E78")
+    for c, h in enumerate(TEMPLATE_HEADERS, 1):
+        cell = ws.cell(row=6, column=c, value=h)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = head
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for n, t in enumerate(trucks, 1):
+        ws.cell(row=6 + n, column=1, value=n)
+        ws.cell(row=6 + n, column=2, value=t.plate)
+        ws.cell(row=6 + n, column=3, value=t.driver or "")
+    last = 6 + max(len(trucks), 1) + 40          # room for trucks added on the day
+    for r in range(7, last + 1):
+        ws.cell(row=r, column=8).number_format = "dd/mm/yyyy"
+        ws.cell(row=r, column=9).number_format = "hh:mm"
+        ws.cell(row=r, column=10).number_format = "dd/mm/yyyy"
+
+    # The lists live on their own sheet: an inline list is capped at 255
+    # characters, and the route names alone can pass that.
+    ls = wb.create_sheet("Lists")
+    cols = (("Route", routes), ("Status", list(STATUS_CHOICES)),
+            ("Loaded / Empty", ["Loaded", "Empty"]), ("Location", list(TEMPLATE_PLACES)))
+    for c, (title, vals) in enumerate(cols, 1):
+        ls.cell(row=1, column=c, value=title)
+        for i, v in enumerate(vals, 2):
+            ls.cell(row=i, column=c, value=v)
+    ls.sheet_state = "hidden"
+
+    def dv(col_letter, list_col, n, strict):
+        v = DataValidation(type="list",
+                           formula1="=Lists!$%s$2:$%s$%d" % (list_col, list_col, n + 1),
+                           allow_blank=True, showErrorMessage=strict)
+        if strict:
+            v.errorTitle = "Pick from the list"
+            v.error = "Choose one of the values in the drop-down."
+        ws.add_data_validation(v)
+        v.add("%s7:%s%d" % (col_letter, col_letter, last))
+    dv("D", "A", max(len(routes), 1), True)
+    dv("E", "B", len(STATUS_CHOICES), True)
+    dv("F", "C", 2, True)
+    dv("G", "D", len(TEMPLATE_PLACES), False)     # a place not on the list is still a place
+
+    for c, w in enumerate((5, 13, 24, 24, 15, 14, 18, 15, 14, 15, 30), 1):
+        ws.column_dimensions[chr(64 + c)].width = w
+    ws.freeze_panes = "C7"
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    fname = "%s - Daily readiness template%s.xlsx" % (
+        name, (" " + datetime.strptime(day, "%Y-%m-%d").strftime("%d%m")) if day else "")
+    return buf.getvalue(), fname
+
+
+@bp.get("/template")
+@login_required
+def template_download():
+    from flask import send_file
+    import io as _io
+    sub_id = _req_sub_id()
+    if not sub_id:
+        return jsonify(error="Pick a company first."), 400
+    day = (request.args.get("date") or "").strip()[:10]
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        day = ""
+    data, fname = readiness_template(sub_id, day)
+    return send_file(_io.BytesIO(data), as_attachment=True, download_name=fname,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @bp.post("/upload")
 @login_required
 def upload():

@@ -248,6 +248,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <input type="file" id="file" accept=".xlsx,.xlsm" style="display:none">
         <div class="why" style="margin-top:10px">.xlsx from the daily readiness template</div>
       </div>
+      <!-- 06/11/2026: the template comes from here, already holding the company's
+           own trucks and the drop-downs the upload accepts. -->
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="ghost" id="tplBtn" type="button">&#11015; Download the template</button>
+        <span class="why" id="tplNote">your trucks and drivers already filled in &mdash; add Status and the rest</span>
+      </div>
       <div id="upMsg" class="msg" style="display:block;margin:12px 0 0"></div>
       <div id="upDetail"></div>
     </div>
@@ -872,6 +878,12 @@ async function send(f){
 
 $('#reload').onclick = load;
 $('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); paintDelivery(); };
+$('#tplBtn').onclick = () => {
+  if (!SUBID) { $('#tplNote').textContent = 'Pick the company first.'; return; }
+  const d = $('#delivery') ? $('#delivery').value : '';
+  location.href = '/api/shift/template?subcontractor_id=' + encodeURIComponent(SUBID)
+    + (d ? '&date=' + encodeURIComponent(d) : '');
+};
 
 // A position above this one may read the declaration and may not touch it.
 // The server refuses the write either way; this stops the page offering it.
