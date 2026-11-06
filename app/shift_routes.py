@@ -17,7 +17,7 @@ from .models import (db, Anchor, GpsPing, Truck, Shift, ShiftCheck, User,
                      MonitorRemark, ActivityEvent,
                      DailyList, DailyListRow, Subcontractor, FleetCommitment,
                      PlanSetting, RouteLeg, PlanSnapshot, Notice,
-                     MineArrival, GpsSnapshot)
+                     MineArrival, GpsSnapshot, KVStore)
 from . import readiness_import
 from . import geofence
 from . import actuals
@@ -4330,6 +4330,42 @@ def _flow_entry(day, dl, subs, sub_id=None, today=None):
                                   else "the whole chain has run"})}
 
 
+GO_LIVE_KEY = "flowGoLive_v1"
+
+
+def _go_live(tomorrow):
+    """When each company with trucks in the fleet is first expected to declare.
+
+    06/11/2026: the Process page expected only companies that had already
+    declared a sheet, so PTS and BBC - 60 trucks in the fleet since 04/11 -
+    were not on it at all. A company with active trucks is expected from the
+    first run day it is seen with them, and that date is written down the
+    first time, so it does not slide forward every day and a day it then
+    misses shows as missed. {subcontractor_id: 'YYYY-MM-DD'}."""
+    row = db.session.get(KVStore, GO_LIVE_KEY)
+    try:
+        known = {int(k): v for k, v in _json.loads(row.value).items()} if row and row.value else {}
+    except (ValueError, TypeError):
+        known = {}
+    with_trucks = {sid for (sid,) in db.session.query(Truck.subcontractor_id)
+                   .filter(Truck.subcontractor_id.isnot(None),
+                           db.func.coalesce(Truck.status, "") != "deactivated")
+                   .distinct().all()}
+    new = {sid: tomorrow for sid in with_trucks if sid not in known}
+    if new:
+        known.update(new)
+        payload = _json.dumps({str(k): v for k, v in known.items()})
+        try:
+            if row is None:
+                db.session.add(KVStore(key=GO_LIVE_KEY, value=payload))
+            else:
+                row.value = payload
+            db.session.commit()
+        except Exception:                   # a lost race just writes it next time
+            db.session.rollback()
+    return {sid: d for sid, d in known.items() if sid in with_trucks}
+
+
 @bp.get("/flow")
 @login_required
 def flow():
@@ -4350,6 +4386,9 @@ def flow():
                                   db.func.min(DailyList.list_date))
                  .filter(DailyList.subcontractor_id.isnot(None))
                  .group_by(DailyList.subcontractor_id).all())
+    # ...and every company with trucks in the fleet, from its go-live day.
+    for sid, first in _go_live(tomorrow).items():
+        since[sid] = min(since.get(sid, first), first)
     # A subcontractor login sees its own company's days only (21/10/2026) -
     # another company's card names that company's trucks.
     mine = (getattr(current_user, "subcontractor_id", None)
