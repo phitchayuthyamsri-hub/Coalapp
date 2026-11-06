@@ -1141,6 +1141,11 @@ def readiness_template(sub_id, day=""):
 def template_download():
     from flask import send_file
     import io as _io
+    # Whoever may open the Subcontractor page - the company, and the chain
+    # above it that reads it (a supervisor sends it on to a company that has
+    # lost theirs). It lists a company's trucks and drivers, so not wider.
+    if "subcontractor" not in _views():
+        return jsonify(error="Not your view"), 403
     sub_id = _req_sub_id()
     if not sub_id:
         return jsonify(error="Pick a company first."), 400

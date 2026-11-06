@@ -53,7 +53,8 @@ with app.app_context():
         Truck(plate="43H12895", status="deactivated", driver="NGUYEN DUY HAI", subcontractor_id=bbc.id),
         Truck(plate="74H01966", status="online", driver="Le Quang Tuan", subcontractor_id=pts.id)])
     users = {}
-    for name, role, sid in (("boss", "admin", None), ("bbcuser", "subcontractor", bbc.id)):
+    for name, role, sid in (("boss", "admin", None), ("bbcuser", "subcontractor", bbc.id),
+                            ("sup", "supervisor", None), ("mon", "monitor", None)):
         u = User(username=name, role=role)
         u.set_password("x" * 12)
         u.subcontractor_id = sid
@@ -73,6 +74,7 @@ def client(who):
 
 
 admin, sub = client("boss"), client("bbcuser")
+sup, mon = client("sup"), client("mon")
 
 print("the download")
 r = admin.get("/api/shift/template?subcontractor_id=%d&date=2026-11-07" % BBC)
@@ -117,6 +119,14 @@ r = sub.get("/api/shift/template?subcontractor_id=%d" % PTS)
 wb2 = load_workbook(io.BytesIO(r.data))
 check("asking for another company still gets its own trucks",
       [c.value for c in wb2["Readiness"]["B"][6:8]], ["29E33234", "43H22582"])
+
+print("\nthe chain above the company")
+r = sup.get("/api/shift/template?subcontractor_id=%d" % BBC)
+check("a supervisor downloads a company's template", r.status_code, 200)
+check("...with that company's trucks",
+      [c.value for c in load_workbook(io.BytesIO(r.data))["Readiness"]["B"][6:8]], ["29E33234", "43H22582"])
+check("a monitor, who does not see the Subcontractor page, does not",
+      mon.get("/api/shift/template?subcontractor_id=%d" % BBC).status_code, 403)
 
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))
 sys.exit(1 if FAIL else 0)
