@@ -120,6 +120,12 @@ wb2 = load_workbook(io.BytesIO(r.data))
 check("asking for another company still gets its own trucks",
       [c.value for c in wb2["Readiness"]["B"][6:8]], ["29E33234", "43H22582"])
 
+check("a company login asking for no company gets its own",
+      [c.value for c in load_workbook(io.BytesIO(sub.get("/api/shift/template").data))["Readiness"]["B"][6:8]],
+      ["29E33234", "43H22582"])
+check("/api/me tells the page which company the login is",
+      sub.get("/api/me").get_json().get("subcontractor_id"), BBC)
+
 print("\nthe chain above the company")
 r = sup.get("/api/shift/template?subcontractor_id=%d" % BBC)
 check("a supervisor downloads a company's template", r.status_code, 200)

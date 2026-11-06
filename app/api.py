@@ -1064,6 +1064,10 @@ def me():
                    lang=(current_user.lang or "en"),
                    default_page=(current_user.default_page or None),
                    can_edit=bool(current_user.can_edit),
+                   # The company a subcontractor login is pinned to - the
+                   # Subcontractor page reads it (06/11/2026: without it the
+                   # page thought no company was picked).
+                   subcontractor_id=getattr(current_user, "subcontractor_id", None),
                    apps=_apps_of(current_user))
 
 

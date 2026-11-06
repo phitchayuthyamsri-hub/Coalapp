@@ -879,10 +879,15 @@ async function send(f){
 $('#reload').onclick = load;
 $('#sub').onchange = () => { SUBID = $('#sub').value || null; load(); paintDelivery(); };
 $('#tplBtn').onclick = () => {
-  if (!SUBID) { alert('Pick the company first.'); return; }
+  // A company login is pinned server-side to its own company, so it never
+  // needs one picked here; everyone above picks first.
+  const pinned = ME && ME.role === 'subcontractor';
+  if (!SUBID && !pinned) { alert('Pick the company first.'); return; }
   const d = $('#delivery') ? $('#delivery').value : '';
-  location.href = '/api/shift/template?subcontractor_id=' + encodeURIComponent(SUBID)
-    + (d ? '&date=' + encodeURIComponent(d) : '');
+  const q = [];
+  if (SUBID) q.push('subcontractor_id=' + encodeURIComponent(SUBID));
+  if (d) q.push('date=' + encodeURIComponent(d));
+  location.href = '/api/shift/template' + (q.length ? '?' + q.join('&') : '');
 };
 
 // A position above this one may read the declaration and may not touch it.
