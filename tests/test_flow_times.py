@@ -55,7 +55,7 @@ with app.app_context():
     db.session.add(Truck(plate="20H01381", status="active"))
     dl = DailyList(list_date=DAY, subcontractor_id=sub.id, state="confirmed",
                    submitted_by="anh@nt", submitted_at=U(6, 40),          # 13:40 local
-                   confirmed_by="tuan@nt", confirmed_at=U(8, 55))         # 15:55 local
+                   confirmed_by="tuan@nt", confirmed_at=U(9, 25))         # 16:25 local
     db.session.add(dl)
     db.session.flush()
     db.session.add(DailyListRow(list_id=dl.id, plate="20H01381", key="20H01381", note="BH",
@@ -87,8 +87,8 @@ with app.app_context():
     check("...inside the 12:00-14:00 window", st["submit"].get("late_min"), 0)
 
     print("\nthe manager")
-    check("approved 15:55", (st["approve"].get("at"), st["approve"].get("by")), ("2026-10-02 15:55", "tuan@nt"))
-    check("...25 minutes after the 15:30 window closed (15:00 until 06/11)", st["approve"].get("late_min"), 25)
+    check("approved 16:25", (st["approve"].get("at"), st["approve"].get("by")), ("2026-10-02 16:25", "tuan@nt"))
+    check("...25 minutes after the 16:00 window closed (15:00 until 06/11)", st["approve"].get("late_min"), 25)
 
     print("\nthe planner")
     check("issued 16:05", (st["plan"].get("at"), st["plan"].get("by")), ("2026-10-02 16:05", "plan@nt"))

@@ -4003,14 +4003,14 @@ def _fleet_gaps(dl, sub_id):
 # is the run day itself. One constant, so changing the rhythm is one edit.
 # From the WI "The day in one page": readiness declared by 12:00; the
 # supervisor validates 12:00-13:30 and gaps are re-sent by 14:00 (that whole
-# stretch is the supervisor's desk here); the manager approves by 15:30 (15:00
-# until 06/11/2026, extended at the user's request); the
+# stretch is the supervisor's desk here); the manager approves by 16:00 (15:00
+# until 06/11/2026, then 15:30, then 16:00 the same day at the user's request); the
 # plan is issued by 16:30 (standing to the control tower from 15:30) and is
 # visible to all at 17:00. All the day before; the monitor holds the run day.
 FLOW_WINDOWS = {
     "declare": (-1, "08:00", "12:00"),
     "submit":  (-1, "12:00", "14:00"),
-    "approve": (-1, "14:00", "15:30"),
+    "approve": (-1, "14:00", "16:00"),
     "plan":    (-1, "15:30", "16:30"),
 }
 
