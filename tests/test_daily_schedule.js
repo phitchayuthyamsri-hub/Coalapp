@@ -34,15 +34,16 @@ const harness = new Function('STATE', 'ACS', `
   function normPlateStrict(p){ return String(p||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
   function _dinPad(n){ return String(n).padStart(2,'0'); }
   ${region}
-  return { computePerf, setRange: (f,t)=>{ perfRange={from:f,to:t}; } };
+  return { computePerf, setRange: (f,t)=>{ perfRange={from:f,to:t}; }, setCompany: c=>{ dailyCompany=c; } };
 `);
 
 // Wall-clock helpers: the page reads naive plan times as local (UTC+7 here).
 const L = s => s;                                  // naive local ISO, as the plan carries
 const T = s => new Date(s).toISOString();          // an actual: absolute, as the GPS gives
 
-function run(plans, actuals, gpsHours) {
-  const ACS = { fleet: ['A1', 'B2', 'C3', 'D4', 'E5', 'F6'], fleetMeta: {}, plan: {}, actual: {},
+function run(plans, actuals, gpsHours, opt) {
+  opt = opt || {};
+  const ACS = { fleet: ['A1', 'B2', 'C3', 'D4', 'E5', 'F6'], fleetMeta: opt.meta || {}, plan: {}, actual: {},
                 merges: {}, weigh: {}, manual: {}, wb: {}, issues: [], recos: [] };
   for (const p of plans)
     ACS.plan[p.plate + '|' + p.day] = { plate: p.plate, locs: { MINE: { in: L(p.at), out: null },
@@ -50,8 +51,10 @@ function run(plans, actuals, gpsHours) {
   for (const x of actuals)
     ACS.actual[x.plate + '|' + x.day] = { plate: x.plate, cyc: x.day,
       locs: { MINE: { in: T(x.at), out: null }, BORDER: { in: null, out: null }, PORT: { in: null, out: null } } };
-  const STATE = { gpsHours: gpsHours || null, loadActual: [] };
-  return harness(STATE, ACS).computePerf();
+  const STATE = { gpsHours: gpsHours || null, loadActual: [], nowMs: Date.parse(opt.now || '2026-12-01T00:00:00+07:00') };
+  const h = harness(STATE, ACS);
+  if (opt.company != null) h.setCompany(opt.company);
+  return h.computePerf();
 }
 
 // every hour of 01-10/11 for everyone except the ones a case leaves dark
@@ -123,9 +126,49 @@ gh.plates.A1 = { '2026-11-06': 1 << 21 };            // 13 h after: outside
 p = run([{ plate: 'A1', day: '2026-11-06', at: '2026-11-06T08:00' }], [], gh);
 check('positions only outside it: No GPS', p.grid.A1.byDate['2026-11-06'].sym, 'nogps');
 
+console.log('\nwaiting: the window is still open');
+// it is 09/11 10:00; plans at 08:00 and 20:00 today, 23:00 yesterday, 08:00 yesterday
+const W = [{ plate: 'A1', day: '2026-11-09', at: '2026-11-09T08:00' },
+           { plate: 'B2', day: '2026-11-09', at: '2026-11-09T20:00' },
+           { plate: 'C3', day: '2026-11-08', at: '2026-11-08T23:00' },
+           { plate: 'D4', day: '2026-11-08', at: '2026-11-08T08:00' },
+           { plate: 'E5', day: '2026-11-09', at: '2026-11-09T08:00' }];
+const WA = [{ plate: 'E5', day: '2026-11-09', at: '2026-11-09T09:30:00+07:00' }];
+p = run(W, WA, allHours(), { now: '2026-11-09T10:00:00+07:00' });
+check('08:00 today, not there yet: waiting, not did not come', p.grid.A1.byDate['2026-11-09'].sym, 'wait');
+check('20:00 tonight: waiting', p.grid.B2.byDate['2026-11-09'].sym, 'wait');
+check('23:00 yesterday (window to 11:00 today): waiting', p.grid.C3.byDate['2026-11-08'].sym, 'wait');
+check('08:00 yesterday (window closed 20:00): did not come', p.grid.D4.byDate['2026-11-08'].sym, 'cross');
+check('one that already came is scored at once', p.grid.E5.byDate['2026-11-09'].sym, 'half');
+check('the Waiting row counts', [p.sbd['2026-11-09'].waiting, p.sbd['2026-11-08'].waiting], [2, 1]);
+check('waiting is not in did not come / No GPS', [p.noShow, p.noGps, p.waiting], [1, 0, 3]);
+check('% of plan leaves the waiting out (0 of 2 judged)', p.pct, 0);
+check('the tip says when it will be judged', p.grid.C3.byDate['2026-11-08'].tip, 'plan 23:00 · not at the mine yet · judged after 09/11 11:00');
+p = run(W, WA, allHours(['B2']), { now: '2026-11-10T09:00:00+07:00' });
+check('once the 12 hours pass: did not come ...', [p.grid.A1.byDate['2026-11-09'].sym, p.grid.C3.byDate['2026-11-08'].sym], ['cross', 'cross']);
+check('... or No GPS', p.grid.B2.byDate['2026-11-09'].sym, 'nogps');
+check('nothing waits any more', p.waiting, 0);
+p = run([{ plate: 'A1', day: '2026-11-09', at: '' }], [], allHours(), { now: '2026-11-09T22:00:00+07:00' });
+check('a plan with no time waits until its day is over', p.grid.A1.byDate['2026-11-09'].sym, 'wait');
+
+console.log('\nthe subcontractor filter');
+const meta = { A1: { company: 'BBC' }, B2: { company: 'BBC' }, C3: { company: 'PTS' }, D4: {}, E5: { company: 'PTS' }, F6: {} };
+const S = [{ plate: 'A1', day: '2026-11-02', at: '2026-11-02T07:00' }, { plate: 'B2', day: '2026-11-02', at: '2026-11-02T07:00' },
+           { plate: 'C3', day: '2026-11-02', at: '2026-11-02T07:00' }, { plate: 'D4', day: '2026-11-02', at: '2026-11-02T07:00' }];
+const SA = [{ plate: 'A1', day: '2026-11-02', at: '2026-11-02T07:10:00+07:00' }, { plate: 'F6', day: '2026-11-02', at: '2026-11-02T10:00:00+07:00' }];
+p = run(S, SA, allHours(), { meta, company: '' });
+check('All: every company', [p.sbd['2026-11-02'].planned, Object.keys(p.grid).length], [4, 6]);
+p = run(S, SA, allHours(), { meta, company: 'BBC' });
+check('BBC: its 2 plans, 1 came as planned, 1 did not come', [p.sbd['2026-11-02'].planned, p.sbd['2026-11-02'].asPlanned, p.sbd['2026-11-02'].noShow], [2, 1, 1]);
+check('BBC: only its trucks in the grid', Object.keys(p.grid).sort(), ['A1', 'B2']);
+p = run(S, SA, allHours(), { meta, company: '-' });
+check('(no company): D4 planned, F6 came not in plan', [p.sbd['2026-11-02'].planned, p.sbd['2026-11-02'].unplan, Object.keys(p.grid).sort()], [1, 1, ['D4', 'F6']]);
+
 console.log('\nthe page');
 check('Daily rows include Not as planned and No GPS',
       /label:'Not as planned'[\s\S]{0,200}label:'No GPS'/.test(html), true);
+check('Daily rows include Waiting', /label:'Waiting'/.test(html), true);
+check('the Daily page has the subcontractor dropdown', /id="dailyCompanySel"/.test(html), true);
 check('the timing blob keeps the GPS hours',
       /gpsHours: STATE\.gpsHours/.test(html) && /STATE\.gpsHours = \(p\.gpsHours/.test(html), true);
 
