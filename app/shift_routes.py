@@ -6,6 +6,7 @@ their checks are rows in the database, so NT can retime or drop a shift without
 a code change.
 """
 import json as _json
+import os
 import re
 from datetime import datetime, timedelta
 
@@ -2658,10 +2659,6 @@ def revision_export():
     """One revised day as a workbook - the revision as it stands RIGHT NOW,
     issued or not. The title says which, because a working revision and a
     commitment support different conversations."""
-    import io
-    import openpyxl
-    from openpyxl.styles import Font, Alignment
-
     only = _req_sub_id()
     day = request.args.get("date") or (
         datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
@@ -2669,10 +2666,30 @@ def revision_export():
         _day_bounds(day)
     except ValueError:
         return jsonify(error="Bad date: %s" % day), 400
-    d = _revision_data(day, only)
-    if not d["rows"]:
+    data = _revision_workbook(day, only, current_user.username)
+    if data is None:
         return jsonify(error="There is no revised plan for %s to export."
                              % _dmy(day)), 404
+    return Response(data,
+                    mimetype="application/vnd.openxmlformats-officedocument."
+                             "spreadsheetml.sheet",
+                    headers={"Content-Disposition":
+                             'attachment; filename="revision_%s.xlsx"' % day})
+
+
+def _revision_workbook(day, only, by):
+    """The Revision workbook as bytes, or None when the day has no revised plan.
+
+    One builder for the download button and for the draft email sent on Issue
+    (09/11/2026), so the file mailed is the file the page gives.
+    """
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, Alignment
+
+    d = _revision_data(day, only)
+    if not d["rows"]:
+        return None
     who = "All companies"
     if only:
         s = db.session.get(Subcontractor, only)
@@ -2694,7 +2711,7 @@ def revision_export():
     ws["A1"].font = Font(bold=True, size=13)
     ws.append([issued_line + " · exported %s by %s"
                % ((datetime.utcnow() + LOCAL_OFFSET).strftime("%d/%m/%Y %H:%M"),
-                  current_user.username)])
+                  by)])
     ws["A2"].font = Font(italic=True, size=9)
     ws.append([c[0] for c in WEEK_COLS])
     for c in ws[3]:
@@ -2741,12 +2758,7 @@ def revision_export():
 
     buf = io.BytesIO()
     wb.save(buf)
-    buf.seek(0)
-    return Response(buf.read(),
-                    mimetype="application/vnd.openxmlformats-officedocument."
-                             "spreadsheetml.sheet",
-                    headers={"Content-Disposition":
-                             'attachment; filename="revision_%s.xlsx"' % day})
+    return buf.getvalue()
 
 
 @bp.get("/week.xlsx")
@@ -3256,6 +3268,16 @@ def revision_issue():
     if not data["rows"]:
         return jsonify(error="There is no revised plan for this day to issue."), 400
 
+    # Issuing the same day twice is abnormal (user 09/11/2026: "Gimme a warning
+    # first"). Nothing is written until the planner confirms, and the page
+    # sends reissue=true only after showing who issued it and when.
+    before = PlanSnapshot.query.filter_by(day=day, subcontractor_id=only).order_by(
+        PlanSnapshot.issued_at.desc()).all()
+    if before and not d.get("reissue"):
+        return jsonify(error="This day has already been issued.", reissue_needed=True,
+                       times=len(before), last_at=_fmt(before[0].issued_at),
+                       last_by=before[0].issued_by or ""), 409
+
     # Freeze it. Without this the monitor has nothing to compare against, and
     # the figures are stored with the rows for the same reason the week does it:
     # a difference can only be attributed if the assumptions are known.
@@ -3286,11 +3308,66 @@ def revision_issue():
     db.session.add(n)
     db.session.commit()
 
+    # The draft email: the issued file, to the planner only, to review before
+    # forwarding it to the team. Sent after the commit - the issue stands
+    # whether or not the mail goes.
+    mail = _mail_issue_draft(day, only, None if only is None else who,
+                             current_user.username, reissue=bool(before))
+    n.detail = dict(n.detail or {}, mail=mail)
+    db.session.commit()
+
     aud = [a.strip() for a in audience.split(",") if a.strip()]
     told = [u.username for u in User.query.filter(User.role.in_(aud)).all()]
     return jsonify(ok=True, id=n.id, snapshot_id=snap.id, day=day,
                    audience=audience, notified=told, notified_count=len(told),
-                   detail=n.detail)
+                   detail=n.detail, mail=mail)
+
+
+# Who gets the draft of the coal loading plan email when a revision is issued
+# (user 09/11/2026: "Send to me", "Me only" - he reviews the Excel file and
+# forwards it to the team himself). COAL_PLAN_DRAFT_TO in .env overrides it.
+DRAFT_TO_DEFAULT = "phitchayuth.ya@logisticsasia.co.th"
+DRAFT_SIGNATURE = ("Phitchayuth Yamsri", "Process Analyst and Development",
+                   "Logistics Asia ( LA )")
+
+
+def _draft_mail_parts(day, company=None):
+    """Subject, file name, text and html of the draft - the team's own email,
+    word for word: 'Coal loading Plan ... as of 10 Nov 2026' with the Revision
+    file renamed 'Plan Load_2026-11-10.xlsx'."""
+    dd = datetime.strptime(day, "%Y-%m-%d")
+    tag = (" - %s" % company) if company else ""
+    subject = ("Coal loading Plan Mine-ChanMay / Mine-A Ngo / A Ngo-ChanMay as of %s%s"
+               % (dd.strftime("%d %b %Y"), tag))
+    fname = "Plan Load_%s%s.xlsx" % (day, ("_" + company.replace(" ", "")) if company else "")
+    line = "Please see coal plan loading as of %s, thank you." % dd.strftime("%d %B %Y")
+    text = "Dear all,\n\n    %s\n\nBest Regards,\n%s\n" % (line, "\n".join(DRAFT_SIGNATURE))
+    html = ('<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">'
+            '<p>Dear all,</p><p style="margin-left:48px">%s</p>'
+            '<p>Best Regards,</p><p>%s</p></div>'
+            % (line, "<br>".join(DRAFT_SIGNATURE)))
+    return subject, fname, text, html
+
+
+def _mail_issue_draft(day, only, company, by, reissue=False):
+    """Send the draft; returns what happened, for the page and the notice."""
+    from . import mailer
+    to = (os.environ.get("COAL_PLAN_DRAFT_TO") or DRAFT_TO_DEFAULT).strip()
+    if not mailer.configured():
+        return {"sent": False, "to": to, "why": "mail relay not configured"}
+    subject, fname, text, html = _draft_mail_parts(day, company)
+    if (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging":
+        subject = "[STAGING] " + subject
+    data = _revision_workbook(day, only, by)
+    if data is None:
+        return {"sent": False, "to": to, "why": "no revised plan to attach"}
+    ok, msg = mailer.send_mail(to, subject, html=html, text=text, files=[(
+        fname, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
+    out = {"sent": bool(ok), "to": to, "subject": subject, "file": fname,
+           "reissue": bool(reissue)}
+    if not ok:
+        out["why"] = msg
+    return out
 
 
 @bp.get("/alerts")

@@ -1397,21 +1397,37 @@ async function doIssue(){
   const day = $('#day').value;
   if (!confirm('Issue the revised plan for ' + day + '?\n\n'
       + 'The monitoring team and the mine team will be told, and the figures as '
-      + 'they stand now are recorded with it.')) return;
+      + 'they stand now are recorded with it.\n\n'
+      + 'A draft email with the Excel file (Plan Load_' + day + '.xlsx) is sent to you to review.')) return;
   b.disabled = true;
   m.textContent = 'Issuing...'; m.className = 'msg';
+  const send = (reissue) => fetch('/api/shift/revision/issue', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: day, subcontractor_id: SUBID || null, reissue: !!reissue})});
   let j = {};
   try {
-    const r = await fetch('/api/shift/revision/issue', {method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({date: day, subcontractor_id: SUBID || null})});
+    let r = await send(false);
     j = await r.json();
+    // Already issued: abnormal, so say so and let the planner decide (09/11/2026)
+    if (r.status === 409 && j.reissue_needed) {
+      if (!confirm('⚠ WARNING: the plan for ' + day + ' was already issued'
+          + (j.times > 1 ? ' ' + j.times + ' times' : '')
+          + ' (last ' + (j.last_at || '?') + (j.last_by ? ' by ' + j.last_by : '') + ').\n\n'
+          + 'Issuing the same day again is not normal. Issue it again anyway?')) {
+        m.textContent = 'Not issued again.'; m.className = 'msg'; b.disabled = false; return;
+      }
+      r = await send(true);
+      j = await r.json();
+    }
     if (!r.ok) throw new Error(j.error || 'Could not issue');
   } catch (e) {
     m.textContent = e.message || 'Could not issue';
     m.className = 'msg err'; b.disabled = false; return;
   }
-  m.innerHTML = 'Issued &middot; ' + j.notified_count + ' notified';
+  const ml = j.mail || {};
+  m.innerHTML = 'Issued &middot; ' + j.notified_count + ' notified &middot; '
+    + (ml.sent ? 'draft email sent to ' + esc(ml.to)
+               : '<span style="color:#c0392b">draft email NOT sent' + (ml.why ? ': ' + esc(ml.why) : '') + '</span>');
   m.className = 'msg ok';
   b.disabled = false;
 }
