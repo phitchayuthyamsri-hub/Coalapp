@@ -12289,8 +12289,12 @@ function computePerf(){
   const dManualAll     =manualAll.filter(k=>_sc(k.split('|')[0]));
   const dWbAll         =wbAll.filter(k=>_sc(k.split('|')[0]));
 
-  // dates union (plan dates + unmatched actual dates + manual dates), within perf range
-  const dates=[...new Set([...dPlanUniq.map(p=>p.d), ...dUnplanned.map(a=>a.d), ...dManualAll.map(k=>k.split('|')[1])])].sort();
+  // dates union (plan dates + unmatched actual dates + manual dates), within perf range.
+  // Taken before the subcontractor filter, so picking a company keeps the same
+  // date columns as All (09/11/2026: Hoanh Son started at its first truck day).
+  const _fs=pl=>fleetScopeAllows(pl);
+  const dates=[...new Set([...planUniq.filter(p=>_fs(p.plate)).map(p=>p.d), ...unplanned.filter(a=>_fs(a.plate)).map(a=>a.d),
+    ...manualUnplanned.filter(a=>_fs(a.plate)).map(a=>a.d), ...manualAll.filter(k=>_fs(k.split('|')[0])).map(k=>k.split('|')[1])])].sort();
 
   // status x date counts (manual folded into came)
   const sbd={}; const z=()=>({planned:0,asPlanned:0,offPlan:0,waiting:0,noShow:0,noGps:0,unplan:0});

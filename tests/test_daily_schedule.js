@@ -161,6 +161,11 @@ check('All: every company', [p.sbd['2026-11-02'].planned, Object.keys(p.grid).le
 p = run(S, SA, allHours(), { meta, company: 'BBC' });
 check('BBC: its 2 plans, 1 came as planned, 1 did not come', [p.sbd['2026-11-02'].planned, p.sbd['2026-11-02'].asPlanned, p.sbd['2026-11-02'].noShow], [2, 1, 1]);
 check('BBC: only its trucks in the grid', Object.keys(p.grid).sort(), ['A1', 'B2']);
+const S2 = S.concat([{ plate: 'C3', day: '2026-11-01', at: '2026-11-01T07:00' }]);
+const allDates = run(S2, SA, allHours(), { meta, company: '' }).dates;
+p = run(S2, SA, allHours(), { meta, company: 'BBC' });
+check('BBC keeps the date columns of All (01/11 has only PTS)', [p.dates, allDates], [['2026-11-01', '2026-11-02'], ['2026-11-01', '2026-11-02']]);
+check('...with that day empty for BBC', [p.sbd['2026-11-01'].planned, p.sbd['2026-11-01'].noShow], [0, 0]);
 p = run(S, SA, allHours(), { meta, company: '-' });
 check('(no company): D4 planned, F6 came not in plan', [p.sbd['2026-11-02'].planned, p.sbd['2026-11-02'].unplan, Object.keys(p.grid).sort()], [1, 1, ['D4', 'F6']]);
 
