@@ -979,6 +979,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.circle{color:#bfe6cc}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.cross{color:#f3b4af}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.square{color:#eddcb0}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.half{color:#6d4fc2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.nogps{color:#6b7280;font-size:10px;font-weight:700;white-space:nowrap}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.half{color:#d5c8f5}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.nogps{color:#d1d5db;font-size:10px;white-space:nowrap}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.off td.stname{border-left:3px solid #6d4fc2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.off .cnt{color:#6d4fc2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.nogps td.stname{border-left:3px solid #9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.nogps .cnt{color:#6b7280}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .dleg .off{color:#6d4fc2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .dleg .nogps{color:#6b7280}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.offplan{border-top:3px solid #6d4fc2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.offplan .v{color:#6d4fc2}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .mbadge{position:absolute;top:1px;right:1px;background:#8a5a12;color:#fff;font-size:8.5px;font-weight:700;
           padding:0 3px;border-radius:4px;line-height:1.5;pointer-events:none}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) td.cell{position:relative}
@@ -1049,6 +1061,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.circle{color:var(--plan-line)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.cross{color:#7a3a3a}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.square{color:var(--act-line)}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.half{color:#a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.nogps{color:#9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.half{color:#a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .sumhdr.nogps{color:#9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.off td.stname{border-left:3px solid #a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.off .cnt{color:#a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.nogps td.stname{border-left:3px solid #9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .statrow.nogps .cnt{color:#9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .dleg .off{color:#a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .dleg .nogps{color:#9aa4b2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.offplan{border-top:3px solid #a78bfa}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .card.offplan .v{color:#a78bfa}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .mbadge{background:var(--act)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .ctxmenu{background:var(--panel)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .ctxmenu .it:hover{background:#16242f}
@@ -3037,7 +3061,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <div id="perfDetail"></div>
       <div class="symwrap" id="symGrid"></div>
       <div class="note" id="perfNote">
-        Counted per truck-cycle, fleet trucks only. Symbols — <b style="color:var(--ok)">&#9679;</b> came as planned &middot; <b style="color:var(--miss)">&#10005;</b> did not come &middot; <b style="color:var(--extra)">&#9632;</b> came, not in plan &middot; <b style="color:var(--act)">&#9670;</b> manual entry (not scored). A note like <span class="symnote">-1</span> means the truck arrived that many days before its matched plan.
+        Counted per truck-cycle, fleet trucks only. The plan is a schedule agreed with the mine, judged by when the GPS puts the truck at the mine against the plan time &mdash; <b style="color:var(--ok)">&#9679;</b> came as planned: within 1 hour &middot; <b style="color:#a78bfa">&#9680;</b> not as planned: 1 to 12 hours early or late &middot; <b style="color:var(--miss)">&#10005;</b> did not come: not at the mine within 12 hours &middot; <b style="color:#9aa4b2">No GPS</b>: the truck sent no position at all from 12 hours before to 12 hours after its plan time, so it is not known &middot; <b style="color:var(--extra)">&#9632;</b> came, not in plan &middot; <b style="color:var(--act)">&#9670;</b> manual entry (not scored). A note like <span class="symnote">+3h</span> is how late (or early, with &minus;) the truck reached the mine; hover a symbol for the times.
       </div>
     </div>
   </div>
@@ -7662,7 +7686,8 @@ function persistTiming() {
       visits: STATE.visits.map(serializeVisit),
       sequences: (STATE.sequences || []).map(serializeSeq),
       sources: STATE.gpsSources || [],
-      lastPings: STATE.lastPings || {}
+      lastPings: STATE.lastPings || {},
+      gpsHours: STATE.gpsHours || null
     };
     localStorage.setItem(GPS_TIMING_LS_KEY, JSON.stringify(payload));
   } catch (e) { console.warn('Timing persist failed (likely quota):', e); }
@@ -7682,6 +7707,7 @@ function loadTiming() {
     STATE.sequences = (p.sequences || []).map(deserializeSeq);
     STATE.gpsSources = Array.isArray(p.sources) ? p.sources : [];
     STATE.lastPings = (p.lastPings && typeof p.lastPings === 'object') ? p.lastPings : {};
+    STATE.gpsHours = (p.gpsHours && p.gpsHours.plates) ? p.gpsHours : null;
     return true;
   } catch (e) { console.warn('Timing load failed:', e); return false; }
 }
@@ -11950,6 +11976,7 @@ function renderPerf(p){
     <div class="card asplan"><div class="k">Came as planned</div><div class="v">${p.asPlanned}</div>
       <div class="pct" style="color:${pctColor}">${p.pct}% of plan</div>
       <div class="bar2"><i style="width:${p.pct}%;background:${pctColor}"></i></div></div>
+    <div class="card offplan"><div class="k">Not as planned</div><div class="v">${p.offPlan||0}</div><div class="pct" style="color:var(--muted)">at the mine 1&ndash;12 h off the plan time</div></div>
     <div class="card unplan"><div class="k">Came &mdash; not in plan</div><div class="v">${p.unplanned}</div><div class="pct" style="color:var(--muted)">unplanned cycles</div></div>
     <div class="card came"><div class="k">Did come (total)</div><div class="v">${p.came}</div><div class="pct" style="color:var(--muted)">as planned + unplanned</div></div>
     <div class="card gpserr"><div class="k">GPS error</div><div class="v">${p.gpsError}</div><div class="pct" style="color:var(--muted)">manual + weighbridge</div></div>
@@ -11970,7 +11997,9 @@ function renderPerf(p){
   const rows=[
     {label:'Planned truck',      cls:'',      f:'planned'},
     {label:'Came as planned',    cls:'ok',    f:'asPlanned'},
+    {label:'Not as planned',     cls:'off',   f:'offPlan'},
     {label:'Did not come',       cls:'miss',  f:'noShow'},
+    {label:'No GPS',             cls:'nogps', f:'noGps'},
     {label:'Come — not in plan', cls:'extra', f:'unplan'},
   ];
   let head=`<thead><tr><th class="stcorner">Status \\ Date</th><th class="tot">Total</th>`;
@@ -11984,15 +12013,17 @@ function renderPerf(p){
     body+=`</tr>`;
   }
   body+='</tbody>';
-  detail.innerHTML=`<div class="dcap">Daily status counts <span class="dleg"><b class="ok">● came as planned</b> · <b class="miss">✕ did not come</b> · <b class="extra">■ came, not in plan</b></span></div>
+  detail.innerHTML=`<div class="dcap">Daily status counts <span class="dleg"><b class="ok">● came as planned (&plusmn;1 h)</b> · <b class="off">◐ not as planned (1&ndash;12 h off)</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b></span></div>
     <div class="scroller" style="max-height:none"><table class="ptable">${head}${body}</table></div>`;
 
   // ---- truck × date symbol grid ----
-  const SYM={circle:'●',cross:'✕',square:'■',manual:'◆'};
+  const SYM={circle:'●',half:'◐',cross:'✕',nogps:'No GPS',square:'■',manual:'◆'};
   const arrow=col=>dailySort.col===col?(dailySort.dir>0?' ▲':' ▼'):'';
   let sh=`<thead><tr><th class="splate sortable" data-col="__plate">Truck \\ Date${arrow('__plate')}</th>
       <th class="sum sumhdr circle" title="Came as planned">●</th>
+      <th class="sum sumhdr half" title="Not as planned">◐</th>
       <th class="sum sumhdr cross" title="Did not come">✕</th>
+      <th class="sum sumhdr nogps" title="No GPS">No GPS</th>
       <th class="sum sumhdr square" title="Come — not in plan">■</th>`;
   for(const d of p.dates) sh+=`<th class="sortable" data-col="${d}">${dHdr(d)}${arrow(d)}</th>`;
   sh+=`</tr></thead>`;
@@ -12005,16 +12036,18 @@ function renderPerf(p){
     fleetRows.sort((a,b)=>{ const d=act(b)-act(a); return d!==0?d*dailySort.dir:(a<b?-1:a>b?1:0); }); }
   let sb='<tbody>';
   for(const pl of fleetRows){
-    const g=p.grid[pl]||{totals:{circle:0,cross:0,square:0},byDate:{}};
+    const g=p.grid[pl]||{totals:{circle:0,half:0,cross:0,nogps:0,square:0},byDate:{}};
     const _wbd=(p.wbByTruck&&p.wbByTruck[pl])||null;
     const _wbBadge=(_wbd&&_wbd.length)?`<span class="wbflag" title="GPS error \u2014 Mine from weighbridge: ${_wbd.slice().sort().join(', ')}">&#9888; WB</span>`:'';
     sb+=`<tr${(_wbd&&_wbd.length)?' class="wbrow"':''}><td class="splate">${pl}${_wbBadge}</td>
         <td class="sum sym circle">${g.totals.circle||''}</td>
+        <td class="sum sym half">${g.totals.half||''}</td>
         <td class="sum sym cross">${g.totals.cross||''}</td>
+        <td class="sum sym nogps">${g.totals.nogps||''}</td>
         <td class="sum sym square">${g.totals.square||''}</td>`;
     for(const d of p.dates){ const c=g.byDate[d];
       if(!c){ sb+=`<td></td>`; continue; }
-      const symHTML=c.sym?`<span class="sym ${c.sym}">${SYM[c.sym]}</span>`:'';
+      const symHTML=c.sym?`<span class="sym ${c.sym}"${c.tip?' title="'+escAttr(c.tip)+'"':''}>${SYM[c.sym]}</span>`:'';
       const manHTML=c.man?`<span class="sym manual" title="manual loading time — not scored">◆</span>`:'';
       const wbHTML=c.wb?`<span class="sym wbm" title="Mine time from weighbridge \u2014 GPS error">&#9888;</span>`:'';
       const noteHTML=c.note?`<span class="symnote">${c.note}</span>`:'';
@@ -12022,7 +12055,7 @@ function renderPerf(p){
     sb+=`</tr>`;
   }
   sb+='</tbody>';
-  symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="miss">✕ did not come</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
+  symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="off">◐ not as planned</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
     <div class="scroller" style="max-height:none"><table class="symtable">${sh}${sb}</table></div>`;
 }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -12142,29 +12175,63 @@ function computePerf(){
     if(!keep) continue;                                  // suppressed: blank, anchor unchanged
     _anchorMi=r.mi; _prevEnt=r.ent;
     const key=cycKey(r.plate,r.d); if(actSeen.has(key))continue; actSeen.add(key);
-    actUniq.push({plate:r.plate,d:r.d,key,arrival:actualArrival(r.ent),ent:r.ent}); }
+    actUniq.push({plate:r.plate,d:r.d,key,arrival:actualArrival(r.ent),ent:r.ent,
+                  mi:(r.ent&&r.ent.locs&&r.ent.locs.MINE&&r.ent.locs.MINE.in)?Date.parse(r.ent.locs.MINE.in):null}); }
   const planByKey=Object.fromEntries(planUniq.map(p=>[p.key,p]));
   const actByKey =Object.fromEntries(actUniq.map(a=>[a.key,a]));
 
-  const matchedPlan=new Set(), matchedAct=new Set(), matchInfo={};  // planKey -> {actKey, offset}
-  // 1) manual merges first (priority)
+  // ---- the plan is a SCHEDULE (user 09/11/2026): the slot is agreed with the mine.
+  //   at the mine within 1 hour of the plan time          -> came as planned
+  //   at the mine 1 to 12 hours off the plan time         -> not as planned
+  //   no mine arrival within 12 hours of the plan time    -> did not come
+  //     ...unless the truck sent no GPS at all in those 24 hours -> no GPS
+  // Each arrival serves one plan, closest pair first. Before this the match was
+  // the calendar day, so a truck queueing at 21:00 for a 07:00 slot read as
+  // "did not come" on the plan day and "came, not in plan" the day before.
+  const SLOT_MS=60*60*1000, WINDOW_MS=12*3600*1000;
+  const planTime=p=>{ const s=p&&p.ent&&p.ent.locs&&p.ent.locs.MINE&&p.ent.locs.MINE.in; const t=s?Date.parse(s):NaN; return isNaN(t)?null:t; };
+  const matchedPlan=new Set(), matchedAct=new Set(), matchInfo={};  // planKey -> {actKey, offset (days), deltaMin, onTime}
+  const pairUp=(pKey,aKey,manual)=>{ const p=planByKey[pKey], a=actByKey[aKey], pt=planTime(p);
+    const dm=(pt!=null&&a.mi!=null)?Math.round((a.mi-pt)/6e4):null;
+    matchedPlan.add(pKey); matchedAct.add(aKey);
+    matchInfo[pKey]={actKey:aKey, manual:!!manual, deltaMin:dm,
+      offset:Math.round((Date.parse(a.d+'T00:00:00')-Date.parse(p.d+'T00:00:00'))/864e5),
+      onTime: dm==null ? true : Math.abs(dm)<=SLOT_MS/6e4}; };
+  // 1) manual merges first (priority) - somebody matched these by hand, so the
+  //    truck came; the clock still decides whether it came as planned
   for(const aKey in ACS.merges){ const pKey=ACS.merges[aKey];
-    if(actByKey[aKey] && planByKey[pKey] && !matchedPlan.has(pKey)){
-      matchedPlan.add(pKey); matchedAct.add(aKey);
-      const off=Math.round((Date.parse(actByKey[aKey].d+'T00:00:00')-Date.parse(planByKey[pKey].d+'T00:00:00'))/864e5);
-      matchInfo[pKey]={actKey:aKey,offset:off};
-    } }
-  // 2) auto-match by same cycle date
-  for(const p of planUniq){ if(matchedPlan.has(p.key)) continue;
-    if(actByKey[p.key] && !matchedAct.has(p.key)){ matchedPlan.add(p.key); matchedAct.add(p.key); matchInfo[p.key]={actKey:p.key,offset:0}; } }
+    if(actByKey[aKey] && planByKey[pKey] && !matchedPlan.has(pKey) && !matchedAct.has(aKey)) pairUp(pKey,aKey,true); }
+  // 2) every plan / arrival pair of the same truck within 12 hours, closest first
+  const actsOf={}; for(const a of actUniq) (actsOf[a.plate]=actsOf[a.plate]||[]).push(a);
+  const cand=[];
+  for(const p of planUniq){ if(matchedPlan.has(p.key)) continue; const pt=planTime(p);
+    if(pt==null){ if(actByKey[p.key]) cand.push({p:p.key,a:p.key,gap:0}); continue; }   // no plan time: same day, as before
+    for(const a of (actsOf[p.plate]||[])){ if(a.mi==null) continue; const gap=Math.abs(a.mi-pt); if(gap<=WINDOW_MS) cand.push({p:p.key,a:a.key,gap}); } }
+  cand.sort((x,y)=>x.gap-y.gap);
+  for(const c of cand){ if(!matchedPlan.has(c.p) && !matchedAct.has(c.a)) pairUp(c.p,c.a,false); }
 
-  const asPlanned=planUniq.filter(p=>matchedPlan.has(p.key)).map(p=>({...p,offset:matchInfo[p.key].offset}));
-  const noShow   =planUniq.filter(p=>!matchedPlan.has(p.key));
+  const _withMatch=p=>({...p,offset:matchInfo[p.key].offset,deltaMin:matchInfo[p.key].deltaMin});
+  const asPlanned=planUniq.filter(p=>matchedPlan.has(p.key)&&matchInfo[p.key].onTime).map(_withMatch);
+  const offPlan  =planUniq.filter(p=>matchedPlan.has(p.key)&&!matchInfo[p.key].onTime).map(_withMatch);
+  const matchedAll=asPlanned.concat(offPlan);
+  // No GPS: not one position from the truck from 12 hours before its plan time
+  // to 12 hours after. Unknown (older than the hours the server keeps, or no
+  // plan time) stays "did not come", as before.
+  const GH=STATE.gpsHours;
+  const sentGps=(plate,pt)=>{ if(!GH||!GH.plates||pt==null) return null; const m=GH.plates[plate]||{};
+    for(let t=pt-WINDOW_MS; t<=pt+WINDOW_MS; t+=3600*1000){ const d=new Date(t), day=dKey(d);
+      if(GH.from && day<GH.from) return null;
+      if(((m[day]||0)>>d.getHours())&1) return true; }
+    return false; };
+  const missed   =planUniq.filter(p=>!matchedPlan.has(p.key));
+  const noGps    =missed.filter(p=>sentGps(p.plate,planTime(p))===false);
+  const noGpsSet =new Set(noGps.map(p=>p.key));
+  const noShow   =missed.filter(p=>!noGpsSet.has(p.key));
   const unplanned=actUniq.filter(a=>!matchedAct.has(a.key));
 
   // ---- manual loading entries = GPS-missed arrivals: counted as "came" (cards + daily), excluded from timing ----
   const actualKeys=new Set(actUniq.map(a=>a.key));
-  const noShowKeySet=new Set(noShow.map(p=>p.key));
+  const noShowKeySet=new Set(missed.map(p=>p.key));
   const manualAll=Object.keys(ACS.manual).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
   const wbAll=Object.keys(ACS.wb||{}).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
   const wbError=wbAll.length;                             // cycles whose Mine time came from the weighbridge (GPS error)
@@ -12178,6 +12245,7 @@ function computePerf(){
     else if(!planByKey[k]) manualUnplanned.push({plate:pl,d,key:k}); }
   const manualPlannedSet=new Set(manualPlanned.map(x=>x.key));
   const noShowFinal=noShow.filter(p=>!manualPlannedSet.has(p.key));
+  const noGpsFinal =noGps.filter(p=>!manualPlannedSet.has(p.key));
 
   // ---- Daily-tab fleet-scope filter: applies to the daily status counts + per-truck
   // grid only. The KPI Summary / on-time / timing above stay full-fleet so those numbers
@@ -12187,6 +12255,8 @@ function computePerf(){
   const dAsPlanned     =asPlanned.filter(p=>_sc(p.plate));
   const dManualPlanned =manualPlanned.filter(p=>_sc(p.plate));
   const dNoShowFinal   =noShowFinal.filter(p=>_sc(p.plate));
+  const dOffPlan       =offPlan.filter(p=>_sc(p.plate));
+  const dNoGpsFinal    =noGpsFinal.filter(p=>_sc(p.plate));
   const dUnplanned     =unplanned.filter(a=>_sc(a.plate));
   const dManualUnplanned=manualUnplanned.filter(a=>_sc(a.plate));
   const dManualAll     =manualAll.filter(k=>_sc(k.split('|')[0]));
@@ -12196,12 +12266,14 @@ function computePerf(){
   const dates=[...new Set([...dPlanUniq.map(p=>p.d), ...dUnplanned.map(a=>a.d), ...dManualAll.map(k=>k.split('|')[1])])].sort();
 
   // status x date counts (manual folded into came)
-  const sbd={}; const z=()=>({planned:0,asPlanned:0,noShow:0,unplan:0});
+  const sbd={}; const z=()=>({planned:0,asPlanned:0,offPlan:0,noShow:0,noGps:0,unplan:0});
   for(const d of dates) sbd[d]=z();
   for(const p of dPlanUniq){ sbd[p.d].planned++; }
   for(const p of dAsPlanned){ sbd[p.d].asPlanned++; }
   for(const p of dManualPlanned){ sbd[p.d].asPlanned++; }
+  for(const p of dOffPlan){ sbd[p.d].offPlan++; }
   for(const p of dNoShowFinal){ sbd[p.d].noShow++; }
+  for(const p of dNoGpsFinal){ sbd[p.d].noGps++; }
   for(const a of dUnplanned){ sbd[a.d].unplan++; }
   for(const a of dManualUnplanned){ sbd[a.d].unplan++; }
 
@@ -12210,12 +12282,18 @@ function computePerf(){
   for(const pl of ACS.fleet){ if(!_sc(pl)) continue; const _m=(ACS.fleetMeta||{})[pl]||{};
     if(_m.effFrom && perfRange.to && _m.effFrom>perfRange.to) continue;   // not yet active in this period
     if(_m.effTo && perfRange.from && _m.effTo<perfRange.from) continue;    // deactivated before this period
-    grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}};
+    grid[pl]={totals:{circle:0,half:0,cross:0,nogps:0,square:0},byDate:{}};
   }
-  const ensure=pl=>grid[pl]||(grid[pl]={totals:{circle:0,cross:0,square:0},byDate:{}});
-  for(const p of dAsPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:p.offset?String(p.offset):''}; g.totals.circle++; }
+  const ensure=pl=>grid[pl]||(grid[pl]={totals:{circle:0,half:0,cross:0,nogps:0,square:0},byDate:{}});
+  // the note is how far off the plan time the truck reached the mine (+3h = late)
+  const hNote=m=>{ if(m==null) return ''; const h=Math.round(m/60); return (h>0?'+':'')+h+'h'; };
+  const hTip=(p,m)=>{ const pt=planTime(p); const at=pt!=null?hm(new Date(pt)):'';
+    return m==null?'':('plan '+at+' \u00b7 at the mine '+(m>0?fmtDur(m)+' late':fmtDur(-m)+' early')); };
+  for(const p of dAsPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:'',tip:hTip(p,p.deltaMin)}; g.totals.circle++; }
+  for(const p of dOffPlan){ const g=ensure(p.plate); g.byDate[p.d]={sym:'half',note:hNote(p.deltaMin),tip:hTip(p,p.deltaMin)}; g.totals.half++; }
   for(const p of dManualPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:''}; g.totals.circle++; }   // manual came-as-planned
   for(const p of dNoShowFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'cross',note:''}; g.totals.cross++;} }
+  for(const p of dNoGpsFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'nogps',note:'',tip:'no GPS position from 12 hours before to 12 hours after the plan time'}; g.totals.nogps++;} }
   for(const a of dUnplanned){  const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
   for(const a of dManualUnplanned){ const g=ensure(a.plate); if(!g.byDate[a.d]){g.byDate[a.d]={sym:'square',note:''}; g.totals.square++;} }
   // flag manual marker on every manual cell (visual ◆)
@@ -12226,7 +12304,7 @@ function computePerf(){
 
   // chart badge: mark the merged actual's arrival cell with its day offset
   const arrivalBadge={};
-  for(const p of asPlanned){ if(p.offset){ const a=actByKey[matchInfo[p.key].actKey]; if(a&&a.arrival) arrivalBadge[cycKey(p.plate,a.arrival)]=(p.offset>0?'+':'')+p.offset+'d'; } }
+  for(const p of matchedAll){ if(p.offset){ const a=actByKey[matchInfo[p.key].actKey]; if(a&&a.arrival) arrivalBadge[cycKey(p.plate,a.arrival)]=(p.offset>0?'+':'')+p.offset+'d'; } }
 
   const asPlannedCount=asPlanned.length+manualPlanned.length;
   const unplannedCount=unplanned.length+manualUnplanned.length;
@@ -12235,7 +12313,7 @@ function computePerf(){
 
   // ---- timing averages (actual GPS times only — manual excluded) ----
   let plannedActs=[], timing={};
-  try{ plannedActs=asPlanned.map(p=>{const mi=matchInfo[p.key]; return mi&&actByKey[mi.actKey];}).filter(Boolean);
+  try{ plannedActs=matchedAll.map(p=>{const mi=matchInfo[p.key]; return mi&&actByKey[mi.actKey];}).filter(Boolean);
        timing=computeTiming(plannedActs, unplanned); }catch(e){ console.error('timing',e); }
 
   // ---- on-time performance (fronthaul, matched GPS cycles: actual arrival vs plan) ----
@@ -12252,7 +12330,7 @@ function computePerf(){
     ontime[k]={label:found?found.label:k,early:0,ontime:0,late:0,n:0};
   });
   const otRows=[]; // detail rows for Ontime review tab
-  try{ for(const pp of asPlanned){ const mi=matchInfo[pp.key];
+  try{ for(const pp of matchedAll){ const mi=matchInfo[pp.key];
       const planE=planByKey[pp.key], actE=mi&&actByKey[mi.actKey];
       const pLocs=planE&&planE.ent&&planE.ent.locs, aLocs=actE&&actE.ent&&actE.ent.locs;
       if(!pLocs||!aLocs) continue;
@@ -12358,12 +12436,13 @@ function computePerf(){
   kpi.weigh=weigh;
 
   return {
-    planTotal:planUniq.length, asPlanned:asPlannedCount, unplanned:unplannedCount, came:cameCount, gpsError, wbError, wbByTruck, kpi, ontime, otRows,
+    planTotal:planUniq.length, asPlanned:asPlannedCount, offPlan:offPlan.length, noGps:noGpsFinal.length, noShow:noShowFinal.length,
+    unplanned:unplannedCount, came:cameCount, gpsError, wbError, wbByTruck, kpi, ontime, otRows,
     pct: planUniq.length? Math.round(asPlannedCount/planUniq.length*100):0,
     dates, sbd, grid, arrivalBadge, timing,
     counts:{planned:plannedActs.length, unplan:unplanned.length},
     actsInRange: actUniq,
-    list:{asPlanned, noShow:noShowFinal, unplanned}
+    list:{asPlanned, offPlan, noShow:noShowFinal, noGps:noGpsFinal, unplanned}
   };
 }
 function setPerfRange(from,to){ perfRange={from:from||null,to:to||null};
@@ -12872,6 +12951,7 @@ const I18N_VI = {
   "Daily performance":"Hiệu suất hằng ngày","Period":"Kỳ","From":"Từ","To":"Đến","All dates":"Tất cả các ngày",
   "Daily status counts":"Đếm trạng thái hằng ngày","Per-truck daily symbols":"Ký hiệu hằng ngày theo xe",
   "Planned truck":"Xe theo kế hoạch","Did not come":"Không đến","Come — not in plan":"Đến — ngoài kế hoạch","Total":"Tổng",
+  "Not as planned":"Không đúng kế hoạch","No GPS":"Không có GPS",
   "Parameter":"Tham số","GPS Data":"Dữ liệu GPS","Dispatch Plan":"Kế hoạch điều xe",
   "Truck Status":"Trạng thái xe","Weighbridge":"Trạm cân","Plan vs Actual":"Kế hoạch & Thực tế",
   "Fleet":"Đội xe","📖 Guide":"📖 Hướng dẫn",

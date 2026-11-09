@@ -22,6 +22,7 @@ Run it after each GPS pull:
 Idempotent: it rewrites both blobs from current data every time.
 """
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 from app import create_app
@@ -31,6 +32,7 @@ from app.models import db, Truck, GpsPing, Anchor, KVStore, Route
 
 FLEET_KEY = "actualGpsFleet_v2"
 TIMING_KEY = "actualGpsTiming_v1"
+GPS_HOURS_DAYS = 92          # how far back the Daily report can tell "no GPS"
 
 
 def _ms(dt):
@@ -125,12 +127,25 @@ def build_timing():
     cols = (GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
             GpsPing.speed, GpsPing.status)
     visits, last, n_pings = [], {}, 0
+    # Which hours each truck sent any position in (09/11/2026): the Daily
+    # report tells "did not come" from "no GPS" by it - a truck that sent
+    # nothing around its plan time cannot be said to have stayed away.
+    # {plate: {day: 24-bit mask}}, wall clock, the last GPS_HOURS_DAYS days.
+    gh_from = (datetime.now(_PING_TZ).replace(tzinfo=None)
+               - timedelta(days=GPS_HOURS_DAYS)).replace(hour=0, minute=0, second=0, microsecond=0)
+    gps_hours = {}
     for (plate,) in db.session.query(GpsPing.plate).distinct().all():
         pings = [{"plate": r[0], "dt": r[1], "lat": r[2], "lng": r[3],
                   "speed": r[4], "status": r[5]}
                  for r in db.session.query(*cols).filter(GpsPing.plate == plate)
                                               .order_by(GpsPing.dt).all()]
         n_pings += len(pings)
+        key = re.sub(r"[^A-Z0-9]", "", str(plate or "").upper())
+        for p in pings:
+            if p["dt"] is not None and p["dt"] >= gh_from:
+                d = gps_hours.setdefault(key, {})
+                day = p["dt"].strftime("%Y-%m-%d")
+                d[day] = d.get(day, 0) | (1 << p["dt"].hour)
         if pings:
             p = pings[-1]
             last[plate] = {"lat": p["lat"], "lng": p["lng"], "dt": _ms_local(p["dt"]),
@@ -195,6 +210,7 @@ def build_timing():
         "sources": [{"name": "GPS providers (live)", "kind": "api",
                      "visits": len(v_out), "uploads": 0}],
         "lastPings": last,
+        "gpsHours": {"from": gh_from.strftime("%Y-%m-%d"), "plates": gps_hours},
     }, n_pings
 
 
