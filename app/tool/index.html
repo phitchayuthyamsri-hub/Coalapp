@@ -3059,7 +3059,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
        of the window's height, so without this the bottom was out of reach. */
     [data-page-panel="score"] .scwrap{flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 22px 60px;color:var(--ink);font-size:13px}
     [data-page-panel="score"] .scwrap>*{max-width:1240px;margin-left:auto;margin-right:auto}
-    [data-page-panel="score"] .scctrl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+    [data-page-panel="score"] .scctrl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px;
+      position:sticky;top:-18px;z-index:20;box-shadow:0 6px 14px rgba(0,0,0,.35);outline:18px solid var(--bg);clip-path:inset(-18px -18px -24px -18px)}
+    [data-page-panel="score"] .scctrl .scroutebar{display:flex;align-items:center;gap:8px;flex-basis:100%;flex-wrap:wrap}
+    [data-page-panel="score"] .scctrl .scroutebar .scchips{margin:0}
+    [data-page-panel="score"] .scctrl .scroutebar>span{color:var(--muted);font-size:12px}
     [data-page-panel="score"] .scctrl label{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:12px}
     [data-page-panel="score"] .scctrl input,[data-page-panel="score"] .scctrl select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12.5px}
     [data-page-panel="score"] #scQuick{display:inline-flex;gap:4px}
@@ -3228,6 +3232,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
       <span id="scQuick"><button data-q="month">This month</button><button data-q="last">Last month</button><button data-q="7">Last 7 days</button><button data-q="30">Last 30 days</button></span>
       <label id="scCompanyWrap">Subcontractor <select id="scCompany"></select></label>
       <span class="scnote" id="scPrevNote"></span>
+      <div class="scroutebar"><span>Route</span><div id="scRoutes"></div></div>
     </div>
     <div id="scBody"></div>
   </div>
@@ -12779,7 +12784,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
   // computePerf run over the chosen period - so the two pages never disagree.
   // Steps 3-4 are worked out here from the same plans and GPS cycles, plus the
   // trucks the companies declared BH with no time (/api/shift/bh-untimed).
-  var scSel={from:null,to:null,company:'',route:''}, scUntimed={}, scBusy=false, scLast=null;
+  var scSel={from:null,to:null,company:'',route:''}, scUntimed={}, scBusy=false, scLast=null, scChipsHtml='';
   var SC_C={ok:'#34d399',off:'#a78bfa',miss:'#f87171',nogps:'#9aa4b2',wait:'#7aa7ff',extra:'#e0a93f',
             blue:'#60a5fa',orange:'#fb923c'};
   // Along the road, in the order a truck meets them. A window is the gate's own
@@ -13067,7 +13072,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         return '<b>'+o.n+'</b> truck'+(o.n>1?'s':'')+' planned <b>'+escAttr(r)+'</b> went to '
           +Object.keys(o.where).map(function(w){ return SC_WHERE[w]; }).join(' and ')+' instead'; }).join(' · ')
       +' - not counted above, as the plan did not send them there.</div>':'';
-    var chips='<div class="scchips"><button data-route=""'+(scSel.route?'':' class="on"')+'>All routes <span>'+nTr(null)+'</span></button>'
+    scChipsHtml='<div class="scchips"><button data-route=""'+(scSel.route?'':' class="on"')+'>All routes <span>'+nTr(null)+'</span></button>'
       +rts.map(function(r){ var n=nTr(r); return '<button data-route="'+escAttr(r)+'" class="'+(scSel.route===r?'on':'')+(n?'':' none')+'">'+escAttr(r)+' <span>'+n+'</span></button>'; }).join('')+'</div>';
     var node=function(c){ var v=CPU[c.id], late=v.n-v.ok, nod=Math.max(0,TOT-v.n), pc=scPct(v.ok,TOT), b=scBand(pc);
       return '<div class="scnode'+(worst3&&worst3.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' on time, '+late+' late, '+nod+' no data - of '+TOT+' planned trucks that came'
@@ -13094,7 +13099,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       return '<div class="schaul"><div class="schaulh">'+title+'</div><div class="scroute" style="grid-template-columns:repeat('+cols+',minmax(0,1fr))">'+pre+cs.map(node).join('')+'</div></div>'; };
     h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
       +'<div class="scsub">Every point out of the same total: the '+TOT+' planned trucks that came. Ring = on time (colour) · late (red) · no data (grey). ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
-      +chips+row('fh','Front haul <span>out, loaded</span>')+row('bh','Back haul <span>home, empty</span>')+offNote+'</section>';
+      +row('fh','Front haul <span>out, loaded</span>')+row('bh','Back haul <span>home, empty</span>')+offNote+'</section>';
     // ---- 3.2 + 3.3 side by side
     // ---- 3.2: the location diagram, for the route picked in 3.1
     var lay=SC_LAYOUT[scSel.route]||SC_LAYOUT[''], T=(m.tim&&m.tim[scSel.route||''])||{};
@@ -13169,6 +13174,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       var m=scMetrics(scSel.from,scSel.to,un,IX), pv=scMetrics(pf,pt,un,IX);
       scLast={m:m,pv:(pv.tot.planned||pv.lrows.length)?pv:null};
       body.innerHTML=scDraw(scLast.m,scLast.pv);
+      var rb=document.getElementById('scRoutes'); if(rb) rb.innerHTML=scChipsHtml;
       var note=document.getElementById('scPrevNote'); if(note) note.textContent='Arrows compare with '+scDM(pf)+' - '+scDM(pt)+', the same number of days before.';
     } catch(e){ console.error('scorecard',e); body.innerHTML='<div class="scempty">Could not work out the scorecard: '+escAttr(e.message||e)+'</div>'; }
     finally { scBusy=false; }
@@ -13179,9 +13185,11 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var fi=document.getElementById('scFrom'), ti=document.getElementById('scTo'), cs=document.getElementById('scCompany');
     if(fi) fi.addEventListener('change',go); if(ti) ti.addEventListener('change',go);
     if(cs) cs.addEventListener('change',function(e){ scSel.company=e.target.value; renderScorecard(); });
-    var sb=document.getElementById('scBody');
-    if(sb) sb.addEventListener('click',function(e){ var b=e.target.closest('[data-route]'); if(!b||!scLast) return;
-      scSel.route=b.getAttribute('data-route'); var y=sb.parentNode.scrollTop; sb.innerHTML=scDraw(scLast.m,scLast.pv); sb.parentNode.scrollTop=y; });
+    // route buttons live in the frozen bar (10/11/2026); a pick redraws from the last figures
+    var sb=document.getElementById('scBody'), rbar=document.getElementById('scRoutes');
+    if(sb&&rbar) rbar.addEventListener('click',function(e){ var b=e.target.closest('[data-route]'); if(!b||!scLast) return;
+      scSel.route=b.getAttribute('data-route'); var y=sb.parentNode.scrollTop; sb.innerHTML=scDraw(scLast.m,scLast.pv);
+      rbar.innerHTML=scChipsHtml; sb.parentNode.scrollTop=y; });
     document.querySelectorAll('#scQuick button').forEach(function(b){ b.addEventListener('click',function(){
       var y=scShift(dKey(new Date()),-1), q=b.dataset.q;
       if(q==='month'){ scSel.from=y.slice(0,8)+'01'; scSel.to=y; }

@@ -50,7 +50,7 @@ function build(plans, seqs, untimed, company) {
     ${html.slice(a, b)}
     ${html.slice(s0, s1)}
     return { run: (f,t,c) => { scSel.company=c||''; return scMetrics(f,t,${JSON.stringify(untimed)},scSeqIndex()); }, scSummary, scDraw,
-             setRoute: r => { scSel.route = r; } };`);
+             setRoute: r => { scSel.route = r; }, chips: () => scChipsHtml };`);
   return f(STATE, ACS);
 }
 
@@ -164,7 +164,8 @@ check('every date on the axis, dd/mm', out.includes('>01/11</text>') && out.incl
 check('grey line between days', (out.match(/class="scsep"/g) || []).length >= 4, true);
 check('route slicer: A1 counted under its route', m0r.cpsR['Mine : Chan May'].mine, { ok: 1, n: 1 });
 check('a plan with no route counts as Mine : Chan May', m0r.cpsR['Mine : Chan May'] && !m0r.cpsR['(no route)'], true);
-check('...with a chip per route and All routes', out.includes('data-route="Mine : Chan May"') && out.includes('All routes'), true);
+check('...route buttons (All + each route) go to the top bar, not into 3.1', api.chips().includes('data-route="Mine : Chan May"') && api.chips().includes('All routes') && !out.includes('data-route='), true);
+check('the top bar is frozen and holds the route row', /scctrl{[^}]*position:sticky;top:-18px/.test(html) && html.includes('<div class="scroutebar"><span>Route</span><div id="scRoutes"></div></div>'), true);
 check('Off-plan is a segment of the daily bar (no diamonds)', out.includes('Off-plan') && !/<path d="M/.test(out), true);
 check('square bar ends (no rounded corners)', !/rx="2"/.test(out), true);
 check('the menu has it', /data-page="score">Scorecard</.test(html), true);
