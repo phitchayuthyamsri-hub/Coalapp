@@ -154,7 +154,9 @@ apiA.setRoute('Mine : A Ngo');
 const o32 = apiA.scDraw(mA, null).split('Average travel')[1] || '';
 apiA.setRoute('');
 check('Mine : A Ngo picked: Mine, Border, A Ngo - no port', o32.includes('<span class="tnt">A Ngo</span>') && !o32.includes('<span class="tnt">Port</span>'), true);
-check('...border to A Ngo 1h 30m, actual only (no target yet)', /travel ↓<\/div><div class="tconnect"><\/div><div class="tchiprow"><span class="tchip unplan"[^>]*>1h 30m</.test(o32), true);
+check('...border to A Ngo 1h 30m, actual only (no target yet)', /travel ↓<\/div><div class="tconnect"><\/div><div class="tchiprow"><span class="tslot"><\/span><span class="tchip unplan"[^>]*>1h 30m<\/span><span class="tslot"><\/span>/.test(o32), true);
+check('every chip row has the same three slots (plan · actual · %)',
+      (o32.match(/<div class="tchiprow">/g) || []).length === (o32.match(/<div class="tchiprow">(<span class="tchip plan">[^<]*<\/span>|<span class="tslot"><\/span>)<span class="tchip unplan[^"]*"[^>]*>[^<]*<\/span>(<span class="tdiff[^"]*">[^<]*<\/span>|<span class="tslot"><\/span>)<\/div>/g) || []).length, true);
 check('...the way home held to the border-to-mine target (5h 00m)', o32.includes('<span class="tchip plan">5h 00m</span>'), true);
 check('...the truck that went to the port is not in the averages', !o32.includes('Port'), true);
 check('Off-plan, not "Came, not in plan"', out.includes('Off-plan') && !out.includes('Came, not in plan'), true);

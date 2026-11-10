@@ -3161,6 +3161,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .sctime .tmetric:first-child{border-left:none}
     [data-page-panel="score"] .sctime .tmlbl{font-size:10.5px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px}
     [data-page-panel="score"] .sctime .tnode.ango{border-left-color:#e0a93f}
+    [data-page-panel="score"] .sctime .tchiprow{display:grid;grid-template-columns:76px 76px 44px;gap:6px;justify-content:center;align-items:center}
+    [data-page-panel="score"] .sctime .tchiprow .tchip{justify-content:center}
+    [data-page-panel="score"] .sctime .tchiprow .tdiff{justify-self:start}
     [data-page-panel="score"] .sctime .scroutenote{color:var(--muted);font-size:11.5px;margin:-4px 0 10px;text-align:center}
     [data-page-panel="score"] .scchips button.none{opacity:.45}
     [data-page-panel="score"] .scway{background:var(--panel);outline:1px dashed #3a4651;display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:6px 8px;z-index:1}
@@ -13099,10 +13102,11 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var tcell=function(k){ var xs=T[k]||[], act=xs.length?xs.reduce(function(a,v){return a+v;},0)/xs.length:null,
         pm=PLAN_MIN[SC_TARGET_OF[k]||k], tip=xs.length+' trip'+(xs.length===1?'':'s');
       var chipA=act!=null?'<span class="tchip unplan" data-tip="'+escAttr('Actual, average of '+tip)+'">'+tfmt(act)+'</span>':'<span class="tchip unplan na">\u2014</span>';
-      if(pm==null) return '<div class="tchiprow">'+chipA+'</div>';
+      // always three slots - plan · actual · % - so every actual (yellow) box sits in the
+      // same column whether or not the row has a target (user 10/11/2026)
       var dd=(act!=null&&pm)?Math.round((act-pm)/pm*100):null;
-      return '<div class="tchiprow"><span class="tchip plan">'+tfmt(pm)+'</span>'+chipA
-        +(dd!=null?'<span class="tdiff '+(dd>0?'down':dd<0?'up':'')+'">'+(dd>0?'+':'')+dd+'%</span>':'')+'</div>'; };
+      return '<div class="tchiprow">'+(pm!=null?'<span class="tchip plan">'+tfmt(pm)+'</span>':'<span class="tslot"></span>')+chipA
+        +(dd!=null?'<span class="tdiff '+(dd>0?'down':dd<0?'up':'')+'">'+(dd>0?'+':'')+dd+'%</span>':'<span class="tslot"></span>')+'</div>'; };
     var flow='';
     lay.nodes.forEach(function(nd,i){ var N=SC_N[nd[0]];
       flow+='<div class="tnode '+N.cls+'"><div class="tnhd"><span class="tnt">'+N.t+'</span><span class="tns">'+N.s+'</span></div><div class="tmrow">'
