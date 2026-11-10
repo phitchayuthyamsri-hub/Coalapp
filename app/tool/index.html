@@ -3163,9 +3163,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .sctime .tnode.ango{border-left-color:#e0a93f}
     [data-page-panel="score"] .sctime .scroutenote{color:var(--muted);font-size:11.5px;margin:-4px 0 10px;text-align:center}
     [data-page-panel="score"] .scchips button.none{opacity:.45}
-    [data-page-panel="score"] .scway{background:var(--panel);outline:1px dashed #3a4651;display:flex;flex-direction:column;gap:6px;padding:6px 8px;z-index:1}
-    [data-page-panel="score"] .scwayitem{display:flex;align-items:center;gap:10px;text-align:left}
-    [data-page-panel="score"] .scwayitem .scring{width:58px;height:58px;flex:0 0 auto}
+    [data-page-panel="score"] .scway{background:var(--panel);outline:1px dashed #3a4651;display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:6px 8px;z-index:1}
+    [data-page-panel="score"] .scwayitem{display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 0}
+    [data-page-panel="score"] .scwayitem+.scwayitem{border-top:1px dashed #3a4651;padding-top:10px}
+    [data-page-panel="score"] .scnod{color:var(--muted);font-size:11px;margin-top:1px}
+    [data-page-panel="score"] .sclate{color:#f87171;font-weight:600}
     [data-page-panel="score"] .scoff{margin-top:10px;background:rgba(224,169,63,.10);border-left:3px solid #e0a93f;border-radius:6px;padding:7px 12px;font-size:12.5px;color:var(--ink)}
     [data-page-panel="score"] .scchips button.on{background:var(--accent);border-color:var(--accent);color:#04201c;font-weight:700}
     [data-page-panel="score"] .schaul{margin-top:10px}
@@ -12851,6 +12853,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var addTim=function(rt,L){ [rt,''].forEach(function(r){ var T=tim[r]=tim[r]||{};
       for(var k in SC_TF){ var v=SC_TF[k](L||{}); if(v!=null) (T[k]=T[k]||[]).push(v); } }); };
     var cpOf=function(rt){ if(!cpsR[rt]){ cpsR[rt]={}; SC_CP.forEach(function(c){ cpsR[rt][c.id]={ok:0,n:0}; }); } return cpsR[rt]; };
+    // the total every circle of 3.1 is out of (user 10/11/2026: "total should be the same,
+    // based from plan, add no data"): the planned trucks that came, per route
+    var came=0, cameR={};
     var cyc=[];
     for(var k in (p.matchInfo||{})){
       var mi=p.matchInfo[k], pl=p.planByKey&&p.planByKey[k], ac=p.actByKey&&p.actByKey[mi.actKey];
@@ -12863,6 +12868,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       // a plan with no route on it is Mine : Chan May (user 10/11/2026: the
       // early plans were issued before the route was written on them)
       var rt=pe.route||'Mine : Chan May', pts=SC_RT[rt]||SC_CP.map(function(c){return c.id;}), away=[];
+      came++; cameR[rt]=(cameR[rt]||0)+1; cpOf(rt);
       SC_CP.forEach(function(c){ var t=scT(A[c.id]); if(t==null) return; var ok;
         if(pts.indexOf(c.id)<0){ if(SC_WHERE[c.id]) away.push(c.id); return; }
         if(c.id==='mine') ok=!!mi.onTime;
@@ -12907,7 +12913,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         (IX.byPlate[pk]||[]).some(function(c){ var t=scT(c.xpplIn); if(t!=null&&t>=d0&&t<d0+36*36e5){ came=true; return true; } return false; });
         g=came?'came':'lost'; }
       lost[r.day][g]++; lrows.push({plate:pk,d:r.day,g:g,remark:r.remark,company:r.company}); });
-    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cpsR:cpsR,offR:offR,tim:tim,way:way,wayR:wayR,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
+    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cpsR:cpsR,came:came,cameR:cameR,offR:offR,tim:tim,way:way,wayR:wayR,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
   }
 
   // ---------------------------------------------------------------- drawing
@@ -12950,6 +12956,15 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
   function scRing(pc,color){ var r=27, c=2*Math.PI*r, f=pc==null?0:pc/100;
     return '<svg viewBox="0 0 70 70" class="scring"><circle cx="35" cy="35" r="'+r+'" class="scringbg"/>'
       +'<circle cx="35" cy="35" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(c*f).toFixed(1)+' '+c.toFixed(1)+'" transform="rotate(-90 35 35)"/>'
+      +'<text x="35" y="40" text-anchor="middle" class="scringtxt">'+(pc==null?'-':pc+'%')+'</text></svg>'; }
+  // on time (colour) + late (red) + no data (grey), out of the same total for every point
+  function scRing3(ok,late,nod,total,color){ var r=27, c=2*Math.PI*r, at=0, s='';
+    var arc=function(v,col){ if(!v||!total) return; var len=c*v/total;
+      s+='<circle cx="35" cy="35" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="7" stroke-dasharray="'+len.toFixed(1)+' '+(c-len).toFixed(1)+'" stroke-dashoffset="'+(-at).toFixed(1)+'" transform="rotate(-90 35 35)"/>';
+      at+=len; };
+    arc(ok,color); arc(late,'#f87171'); arc(nod,'#5b6673');
+    var pc=total?Math.round(100*ok/total):null;
+    return '<svg viewBox="0 0 70 70" class="scring"><circle cx="35" cy="35" r="'+r+'" class="scringbg"/>'+s
       +'<text x="35" y="40" text-anchor="middle" class="scringtxt">'+(pc==null?'-':pc+'%')+'</text></svg>'; }
   function scBand(pc){ return pc==null?{c:'#4b5563',i:'·',t:'no data'}: pc>=80?{c:SC_C.ok,i:'✓',t:'good'}: pc>=50?{c:SC_C.extra,i:'!',t:'watch'}:{c:SC_C.miss,i:'✕',t:'poor'}; }
   // A headline number with its change against the period before.
@@ -13017,32 +13032,42 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var zero={}; SC_CP.forEach(function(c){ zero[c.id]={ok:0,n:0}; });
     var cpR=function(r){ return (m.cpsR&&m.cpsR[r])||zero; };
     if(scSel.route&&rts.indexOf(scSel.route)<0) scSel.route='';
-    var CPU=scSel.route?cpR(scSel.route):m.cps, nTr=function(c){ var mx=0; SC_CP.forEach(function(k){ mx=Math.max(mx,c[k.id].n); }); return mx; };
-    var worst3=null; SC_CP.forEach(function(c){ var v=CPU[c.id]; if(v.n>=3){ var pc=scPct(v.ok,v.n); if(!worst3||pc<worst3.pc) worst3={c:c,pc:pc}; } });
+    var CPU=scSel.route?cpR(scSel.route):m.cps;
+    var TOT=scSel.route?((m.cameR&&m.cameR[scSel.route])||0):(m.came||0);
+    var nTr=function(r){ return r==null?(m.came||0):((m.cameR&&m.cameR[r])||0); };
+    var ids0=scSel.route&&SC_RT[scSel.route]?SC_RT[scSel.route]:SC_CP.map(function(c){return c.id;});
+    var worst3=null; SC_CP.forEach(function(c){ if(ids0.indexOf(c.id)<0) return; var v=CPU[c.id];
+      if(TOT>=3&&v.n){ var pc=scPct(v.ok,TOT); if(!worst3||pc<worst3.pc) worst3={c:c,pc:pc}; } });
     var offList=(scSel.route?[scSel.route]:Object.keys(m.offR||{})).filter(function(r){ return m.offR&&m.offR[r]; });
     var offNote=offList.length?'<div class="scoff">⚠ '+offList.map(function(r){ var o=m.offR[r];
         return '<b>'+o.n+'</b> truck'+(o.n>1?'s':'')+' planned <b>'+escAttr(r)+'</b> went to '
           +Object.keys(o.where).map(function(w){ return SC_WHERE[w]; }).join(' and ')+' instead'; }).join(' · ')
       +' - not counted above, as the plan did not send them there.</div>':'';
-    var chips='<div class="scchips"><button data-route=""'+(scSel.route?'':' class="on"')+'>All routes <span>'+nTr(m.cps)+'</span></button>'
-      +rts.map(function(r){ var n=nTr(cpR(r)); return '<button data-route="'+escAttr(r)+'" class="'+(scSel.route===r?'on':'')+(n?'':' none')+'">'+escAttr(r)+' <span>'+n+'</span></button>'; }).join('')+'</div>';
-    var node=function(c){ var v=CPU[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
-      return '<div class="scnode'+(worst3&&worst3.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' of '+v.n+' trucks on time')+'">'
-        +scRing(pc,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
-        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst3&&worst3.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
+    var chips='<div class="scchips"><button data-route=""'+(scSel.route?'':' class="on"')+'>All routes <span>'+nTr(null)+'</span></button>'
+      +rts.map(function(r){ var n=nTr(r); return '<button data-route="'+escAttr(r)+'" class="'+(scSel.route===r?'on':'')+(n?'':' none')+'">'+escAttr(r)+' <span>'+n+'</span></button>'; }).join('')+'</div>';
+    var node=function(c){ var v=CPU[c.id], late=v.n-v.ok, nod=Math.max(0,TOT-v.n), pc=scPct(v.ok,TOT), b=scBand(pc);
+      return '<div class="scnode'+(worst3&&worst3.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' on time, '+late+' late, '+nod+' no data - of '+TOT+' planned trucks that came'
+          +(nod?'\nno data = no GPS time there, the truck has not got there yet'+(c.id==='leave'||c.id==='back'||c.id==='ango'?', or the plan has no time for it':''):''))+'">'
+        +scRing3(v.ok,late,nod,TOT,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
+        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+' on time <span class="sclate">· '+late+' late</span></div>'
+        +'<div class="scnod">no data '+nod+' ('+(TOT?Math.round(100*nod/TOT):0)+'%)</div>'
+        +(worst3&&worst3.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
     var ids=scSel.route&&SC_RT[scSel.route]?SC_RT[scSel.route]:SC_CP.map(function(c){return c.id;}).concat(['way']);
     var WY=scSel.route?((m.wayR&&m.wayR[scSel.route])||{n:0,ql49:0,dak:0,none:0}):(m.way||{n:0,ql49:0,dak:0,none:0});
-    var wayNode=function(label,cnt,color){ var pc=WY.n?Math.round(100*cnt/WY.n):null;
-      return '<div class="scwayitem" data-tip="'+escAttr(label+'\n'+cnt+' of '+WY.n+' trucks that left the port went home this way only'+(WY.none?'\n'+WY.none+' not seen on either road':''))+'">'
-        +scRing(pc,color)+'<div><div class="scnl">'+label+'</div><div class="scnb" style="color:var(--ink)">'+cnt+' of '+WY.n+'</div></div></div>'; };
+    var wayNod=Math.max(0,TOT-WY.ql49-WY.dak);
+    var wayNode=function(label,cnt,color){
+      return '<div class="scwayitem" data-tip="'+escAttr(label+'\n'+cnt+' of '+TOT+' planned trucks that came went home this way only\n'
+          +wayNod+' no data: did not reach the port, or not seen on either road')+'">'
+        +scRing3(cnt,0,TOT-cnt,TOT,color)+'<div class="scnl">'+label+'</div><div class="scnb" style="color:var(--ink)">'+cnt+' of '+TOT+'</div></div>'; };
     var row=function(haul,title){ var cs=SC_CP.filter(function(c){return c.haul===haul&&ids.indexOf(c.id)>=0;});
       // the two roads home stacked in one column, QL49 above Dakrong (user 10/11/2026)
-      var pre=(haul==='bh'&&ids.indexOf('way')>=0)?'<div class="scnode scway"><div class="scnr" style="margin-bottom:4px">way home</div>'
-        +wayNode('QL49',WY.ql49,SC_C.blue)+wayNode('Dakrong (QL9)',WY.dak,'#2dd4bf')+'</div>':'';
+      var pre=(haul==='bh'&&ids.indexOf('way')>=0)?'<div class="scnode scway"><div class="scnr">way home</div>'
+        +wayNode('QL49',WY.ql49,SC_C.blue)+wayNode('Dakrong (QL9)',WY.dak,'#2dd4bf')
+        +'<div class="scnod">no data '+wayNod+' ('+(TOT?Math.round(100*wayNod/TOT):0)+'%)</div></div>':'';
       var cols=cs.length+(pre?1:0); if(!cols) return '';
       return '<div class="schaul"><div class="schaulh">'+title+'</div><div class="scroute" style="grid-template-columns:repeat('+cols+',minmax(0,1fr))">'+pre+cs.map(node).join('')+'</div></div>'; };
     h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
-      +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
+      +'<div class="scsub">Every point out of the same total: the '+TOT+' planned trucks that came. Ring = on time (colour) · late (red) · no data (grey). ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
       +chips+row('fh','Front haul <span>out, loaded</span>')+row('bh','Back haul <span>home, empty</span>')+offNote+'</section>';
     // ---- 3.2 + 3.3 side by side
     // ---- 3.2: the location diagram, for the route picked in 3.1

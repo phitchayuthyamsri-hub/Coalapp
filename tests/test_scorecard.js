@@ -122,6 +122,13 @@ check('border home after A Ngo counts as border, empty (02:00: outside 07-19)', 
 check('a Mine : A Ngo truck is not judged at the port or QL49', [RA.port, RA.ql49], [{ ok: 0, n: 0 }, { ok: 0, n: 0 }]);
 check('...the one that went to the port is off route', [mA.offR['Mine : A Ngo'].n, mA.offR['Mine : A Ngo'].where], [1, { port: 1 }]);
 check('the page says so', /went to the port instead/.test(apiA.scDraw(mA, null)), true);
+check('one total per route: the planned trucks that came (A1, C3)', mA.cameR['Mine : A Ngo'], 2);
+apiA.setRoute('Mine : A Ngo');
+const oSame = apiA.scDraw(mA, null).split('Where the schedule slips')[1].split('Average travel')[0];
+apiA.setRoute('');
+check('every circle out of the same 2: A Ngo 1 on time, 0 late, no data 1 (50%)',
+      /A Ngo<\/div>.*?1 on time <span class="sclate">· 0 late<\/span><\/div><div class="scnod">no data 1 \(50%\)/.test(oSame), true);
+check('...arrive mine: 2 on time, nothing missing', /Arrive mine<\/div>.*?2 on time <span class="sclate">· 0 late<\/span><\/div><div class="scnod">no data 0 \(0%\)/.test(oSame), true);
 
 console.log('\nthe page');
 const S = api.scSummary(api.run('2026-11-01', '2026-11-05'));
