@@ -48,7 +48,8 @@ function build(plans, seqs, untimed, company) {
     function acpBuild(){}
     ${html.slice(a, b)}
     ${html.slice(s0, s1)}
-    return { run: (f,t,c) => { scSel.company=c||''; return scMetrics(f,t,${JSON.stringify(untimed)},scSeqIndex()); }, scSummary, scDraw };`);
+    return { run: (f,t,c) => { scSel.company=c||''; return scMetrics(f,t,${JSON.stringify(untimed)},scSeqIndex()); }, scSummary, scDraw,
+             setRoute: r => { scSel.route = r; } };`);
   return f(STATE, ACS);
 }
 
@@ -119,9 +120,20 @@ const S = api.scSummary(api.run('2026-11-01', '2026-11-05'));
 check('headline figures', [S.cameP, S.onP, S.lost, S.quickP, S.recMed, S.bhPlan], [50, 50, 1, 100, 2, 2.5]);
 const m0r = api.run('2026-11-01', '2026-11-05');
 const out = api.scDraw(m0r, null);
-check('draws the four steps', ['Did the plan happen?', 'Where the schedule slips', 'How long a cycle takes',
+check('draws the four steps', ['Did the plan happen?', 'Where the schedule slips', 'Average travel / time spending by location',
       'Unloaded, back to the mine', 'Opportunity lost'].every(t => out.includes(t)), true);
-check('front haul and back haul rows', (out.match(/Front haul/g) || []).length >= 2 && (out.match(/Back haul/g) || []).length >= 2, true);
+check('front haul and back haul rows in 3.1', out.includes('Front haul') && out.includes('Back haul'), true);
+console.log('\n3.2 the location diagram (as on Performance)');
+check('Mine, Border, Port with the Performance plan targets', out.includes('<span class="tnt">Mine</span>') &&
+      out.includes('<span class="tnt">Port</span>') && out.includes('<span class="tchip plan">16h 00m</span>'), true);
+check('...the actual is the average per trip (A1: mine in/out 1h 10m)', /tchip unplan[^>]*>1h 10m</.test(out), true);
+apiA.setRoute('Mine : A Ngo');
+const o32 = apiA.scDraw(mA, null).split('Average travel')[1] || '';
+apiA.setRoute('');
+check('Mine : A Ngo picked: Mine, Border, A Ngo - no port', o32.includes('<span class="tnt">A Ngo</span>') && !o32.includes('<span class="tnt">Port</span>'), true);
+check('...border to A Ngo 1h 30m, actual only (no target yet)', /travel ↓<\/div><div class="tconnect"><\/div><div class="tchiprow"><span class="tchip unplan"[^>]*>1h 30m</.test(o32), true);
+check('...the way home held to the border-to-mine target (5h 00m)', o32.includes('<span class="tchip plan">5h 00m</span>'), true);
+check('...the truck that went to the port is not in the averages', !o32.includes('Port'), true);
 check('Off-plan, not "Came, not in plan"', out.includes('Off-plan') && !out.includes('Came, not in plan'), true);
 check('every date on the axis, dd/mm', out.includes('>01/11</text>') && out.includes('>02/11</text>') && out.includes('>05/11</text>'), true);
 check('grey line between days', (out.match(/class="scsep"/g) || []).length >= 4, true);

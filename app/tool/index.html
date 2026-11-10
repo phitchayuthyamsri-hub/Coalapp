@@ -3100,6 +3100,68 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scchips button{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer}
     [data-page-panel="score"] .scchips button span{opacity:.7;margin-left:4px}
     [data-page-panel="score"] .scchips button:hover{color:var(--ink);border-color:var(--accent)}
+    /* Location diagram, copied from Reports > Performance (generated 10/11/2026) */
+    [data-page-panel="score"] .sctime{--plan:#34d399; --plan-bg:#123026; --plan-line:#1f5c47; --plan-tx:#5ee6a8; --act:#e0a93f; --act-bg:#33280f; --act-line:#5e4a1c; --act-tx:#f0c674; --loc-mine:#2dd4bf; --loc-border:#c084fc; --loc-port:#38bdf8; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+    [data-page-panel="score"] .sctime .timewrap{margin-bottom:18px;display:flex;flex-direction:column;align-items:center}
+    [data-page-panel="score"] .sctime .timewrap .ttl{font-size:12px;font-weight:700;color:var(--ink);margin:0 0 6px 2px}
+    [data-page-panel="score"] .sctime .timewrap .sub{font-weight:500;color:var(--muted);font-size:11px}
+    [data-page-panel="score"] .sctime .tlegend{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin:0 0 12px 2px;font-size:11px;color:var(--ink)}
+    [data-page-panel="score"] .sctime .tlegend .tkey{display:inline-flex;gap:5px;align-items:center}
+    [data-page-panel="score"] .sctime .tlegend .tkey.muted{color:var(--muted)}
+    [data-page-panel="score"] .sctime .tlegend .tkey b{font-variant-numeric:tabular-nums}
+    [data-page-panel="score"] .sctime .tlegend .sw{width:11px;height:11px;border-radius:0;display:inline-block}
+    [data-page-panel="score"] .sctime .sw.plan{background:#10693a}
+    [data-page-panel="score"] .sctime .sw.unplan{background:#b9791f}
+    [data-page-panel="score"] .sctime .tflow{display:flex;flex-direction:column;gap:0;width:100%}
+    [data-page-panel="score"] .sctime .tnode{background:var(--panel);border:1px solid var(--line); border-radius:0;padding:0 0 10px;overflow:hidden;border-left:4px solid #999}
+    [data-page-panel="score"] .sctime .tnode.mine{border-left-color:#1b7a43}
+    [data-page-panel="score"] .sctime .tnode.border{border-left-color:#7b3fa0}
+    [data-page-panel="score"] .sctime .tnode.port{border-left-color:#1f5fb0}
+    [data-page-panel="score"] .sctime .tnhd{padding:9px 12px 7px;display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.15;border-bottom:1px solid var(--line);margin-bottom:8px}
+    [data-page-panel="score"] .sctime .tnt{font-size:13px;font-weight:700;color:var(--ink)}
+    [data-page-panel="score"] .sctime .tns{font-size:10px;color:var(--muted)}
+    [data-page-panel="score"] .sctime .tmrow{display:flex;gap:0;align-items:stretch}
+    [data-page-panel="score"] .sctime .tmetric{padding:6px 14px;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center}
+    [data-page-panel="score"] .sctime .tmetric:not(:first-child){border-left:1px solid var(--line)}
+    [data-page-panel="score"] .sctime .tmlbl{font-size:10.5px;color:var(--muted);font-weight:600;display:block;margin-bottom:6px}
+    [data-page-panel="score"] .sctime .tvals{display:flex;flex-direction:column;gap:4px;align-items:center}
+    [data-page-panel="score"] .sctime .tchip{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;padding:2px 7px;border-radius:0; display:inline-flex;align-items:baseline;gap:3px;border:1px solid transparent}
+    [data-page-panel="score"] .sctime .tchip i{font-style:normal;font-size:8.5px;font-weight:500;opacity:.7}
+    [data-page-panel="score"] .sctime .tchip.plan{background:#e7f3ec;color:#10693a;border-color:#cfe7d9}
+    [data-page-panel="score"] .sctime .tchip.unplan{background:#f6edda;color:#8a5a12;border-color:#ecdcb8}
+    [data-page-panel="score"] .sctime .tchip.na{background:transparent;color:var(--muted);border-color:var(--line);font-weight:500}
+    [data-page-panel="score"] .sctime .tdiff{font-size:9px;font-weight:800;padding:0 4px;border-radius:0;background:var(--line);color:var(--muted);line-height:1.4}
+    [data-page-panel="score"] .sctime .tdiff.up{background:var(--plan-bg,#123026);color:var(--plan)}
+    [data-page-panel="score"] .sctime .tdiff.down{background:#3a1c1c;color:var(--act-tx,#f0c674)}
+    [data-page-panel="score"] .sctime .tedge{display:flex;flex-direction:row;gap:0;padding:0 0 0 4px;min-height:72px}
+    [data-page-panel="score"] .sctime .tlane{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:6px 10px;text-align:center}
+    [data-page-panel="score"] .sctime .tlane.fwd{border-right:1px solid var(--line)}
+    [data-page-panel="score"] .sctime .telbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;white-space:nowrap}
+    [data-page-panel="score"] .sctime .tlane.back .telbl{color:var(--accent)}
+    [data-page-panel="score"] .sctime .tconnect{width:2px;flex:1;min-height:16px;background:var(--line);position:relative;margin:2px 0}
+    [data-page-panel="score"] .sctime .tconnect::after{content:'';position:absolute;bottom:-1px;left:-3px; border-top:7px solid var(--line);border-left:4px solid transparent;border-right:4px solid transparent}
+    [data-page-panel="score"] .sctime .tconnect.back{background:var(--accent);opacity:.8}
+    [data-page-panel="score"] .sctime .tconnect.back::after{bottom:auto;top:-1px; border-top:none;border-bottom:7px solid var(--accent);border-left:4px solid transparent;border-right:4px solid transparent}
+    [data-page-panel="score"] .sctime .tedge .tvals{flex-direction:column;gap:4px;align-items:center}
+    [data-page-panel="score"] .sctime .tlane .tvals{flex-direction:column;gap:4px;align-items:center}
+    [data-page-panel="score"] .sctime .tchiprow{display:flex;flex-direction:row;gap:6px;align-items:center;justify-content:center}
+    [data-page-panel="score"] .sctime .tflow-wrap{display:flex;flex-direction:column;align-items:center;width:480px;margin:0 auto}
+    [data-page-panel="score"] .sctime .tflow-col-hdr{display:none}
+    [data-page-panel="score"] .sctime .tlegend .sw{width:11px;height:11px;border-radius:0;display:inline-block}
+    [data-page-panel="score"] .sctime .sw.plan{background:var(--ok)}
+    [data-page-panel="score"] .sctime .sw.unplan{background:var(--act)}
+    [data-page-panel="score"] .sctime .tnode{border-left-color:#5b6b78}
+    [data-page-panel="score"] .sctime .tnode.mine{border-left-color:var(--loc-mine)}
+    [data-page-panel="score"] .sctime .tnode.border{border-left-color:var(--loc-border)}
+    [data-page-panel="score"] .sctime .tnode.port{border-left-color:var(--loc-port)}
+    [data-page-panel="score"] .sctime .tchip.plan{background:var(--plan-bg);color:var(--plan-tx);border-color:var(--plan-line)}
+    [data-page-panel="score"] .sctime .tchip.unplan{background:var(--act-bg);color:var(--act-tx);border-color:var(--act-line)}
+    [data-page-panel="score"] .sctime .tmrow{display:flex;gap:0;align-items:stretch}
+    [data-page-panel="score"] .sctime .tmetric{padding:0 12px;margin:0;border-left:1px solid var(--line);flex:1 1 auto;min-width:96px}
+    [data-page-panel="score"] .sctime .tmetric:first-child{border-left:none}
+    [data-page-panel="score"] .sctime .tmlbl{font-size:10.5px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px}
+    [data-page-panel="score"] .sctime .tnode.ango{border-left-color:#e0a93f}
+    [data-page-panel="score"] .sctime .scroutenote{color:var(--muted);font-size:11.5px;margin:-4px 0 10px;text-align:center}
     [data-page-panel="score"] .scchips button.none{opacity:.45}
     [data-page-panel="score"] .scoff{margin-top:10px;background:rgba(224,169,63,.10);border-left:3px solid #e0a93f;border-radius:6px;padding:7px 12px;font-size:12.5px;color:var(--ink)}
     [data-page-panel="score"] .scchips button.on{background:var(--accent);border-color:var(--accent);color:#04201c;font-weight:700}
@@ -12717,6 +12779,38 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
              'Mine : Chan May':['mine','leave','border','ql49','port','ql49b','borderb','back'],
              'A Ngo : Chan May':['ango','ql49','port','ql49b']};
   var SC_WHERE={ango:'A Ngo',port:'the port'};
+  // 3.2 location diagram (user 10/11/2026: "what I want is the one on the right" -
+  // the Performance page's Average travel / time spending by location). Same
+  // segments and the same plan targets (PLAN_MIN); A Ngo legs have no target
+  // yet and show the actual only; the A Ngo trip's way home through the border
+  // is held to the border / border-to-mine targets.
+  var SC_TF={
+    mineIO:  function(L){ return L.MINE?durMin(L.MINE.in,L.MINE.out):null; },
+    loading: function(L){ return L.LOADING?durMin(L.LOADING.in,L.LOADING.out):null; },
+    travelMB:function(L){ return (L.MINE&&L.BORDER)?durMin(L.MINE.out,L.BORDER.in):null; },
+    borderIO:function(L){ return L.BORDER?durMin(L.BORDER.in,L.BORDER.out):null; },
+    travelBA:function(L){ return (L.BORDER&&L.ANGO)?durMin(L.BORDER.out,L.ANGO.in):null; },
+    angoIO:  function(L){ return L.ANGO?durMin(L.ANGO.in,L.ANGO.out):null; },
+    travelAP:function(L){ return (L.ANGO&&L.PORT)?durMin(L.ANGO.out,L.PORT.in):null; },
+    travelBP:function(L){ return (L.BORDER&&L.PORT)?durMin(L.BORDER.out,L.PORT.in):null; },
+    portIO:  function(L){ return L.PORT?durMin(L.PORT.in,L.PORT.out):null; },
+    backPB:  function(L){ return (L.PORT&&L.BORDER_BACK)?durMin(L.PORT.out,L.BORDER_BACK.in):null; },
+    borderBack:function(L){ return L.BORDER_BACK?durMin(L.BORDER_BACK.in,L.BORDER_BACK.out):null; },
+    backBM:  function(L){ return L.BORDER_BACK?durMin(L.BORDER_BACK.out,L.BACK_RET):null; },
+    backAB:  function(L){ return (L.ANGO&&L.BORDER_HOME)?durMin(L.ANGO.out,L.BORDER_HOME.in):null; },
+    borderHome:function(L){ return L.BORDER_HOME?durMin(L.BORDER_HOME.in,L.BORDER_HOME.out):null; },
+    backHM:  function(L){ return L.BORDER_HOME?durMin(L.BORDER_HOME.out,L.BACK_RET):null; }};
+  var SC_TARGET_OF={borderHome:'borderBack', backHM:'backBM'};
+  var SC_N={MINE:{t:'Mine',s:'XPPL',cls:'mine'},BORDER:{t:'Border',s:'Lalay',cls:'border'},
+            ANGO:{t:'A Ngo',s:'Warehouse',cls:'ango'},PORT:{t:'Port',s:'Chân Mây',cls:'port'}};
+  var SC_LAYOUT={
+    '':{nodes:[['MINE',[['mineIO','in / out'],['loading','loading']]],['BORDER',[['borderIO','in / out'],['borderBack','backhaul']]],['PORT',[['portIO','in / out']]]],
+        edges:[['travelMB','backBM'],['travelBP','backPB']]},
+    'Mine : A Ngo':{nodes:[['MINE',[['mineIO','in / out'],['loading','loading']]],['BORDER',[['borderIO','in / out'],['borderHome','way home']]],['ANGO',[['angoIO','in / out']]]],
+        edges:[['travelMB','backHM'],['travelBA','backAB']]},
+    'Mine : A Ngo : Chan May':{nodes:[['MINE',[['mineIO','in / out'],['loading','loading']]],['BORDER',[['borderIO','in / out'],['borderBack','backhaul']]],['ANGO',[['angoIO','in / out']]],['PORT',[['portIO','in / out']]]],
+        edges:[['travelMB','backBM'],['travelBA',null],['travelAP','backPB','port to border']]},
+    'Mine : Chan May':null};
   function scShift(iso,n){ var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return dKey(d); }
   function scDays(f,t){ var out=[], d=f; while(d<=t){ out.push(d); d=scShift(d,1); } return out; }
   function scMed(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
@@ -12749,7 +12843,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var sbd={}, tot=z();
     days.forEach(function(d){ var s=(p.sbd&&p.sbd[d])||z(); sbd[d]=s; for(var k in tot) tot[k]+=(s[k]||0); });
     // ---- 3.1 + 3.2: every plan that came, checkpoint by checkpoint
-    var cps={}, cpsR={}, offR={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var cps={}, cpsR={}, offR={}, tim={'':{}}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var addTim=function(rt,L){ [rt,''].forEach(function(r){ var T=tim[r]=tim[r]||{};
+      for(var k in SC_TF){ var v=SC_TF[k](L||{}); if(v!=null) (T[k]=T[k]||[]).push(v); } }); };
     var cpOf=function(rt){ if(!cpsR[rt]){ cpsR[rt]={}; SC_CP.forEach(function(c){ cpsR[rt][c.id]={ok:0,n:0}; }); } return cpsR[rt]; };
     var cyc=[];
     for(var k in (p.matchInfo||{})){
@@ -12772,6 +12868,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         cps[c.id].n++; R[c.id].n++; if(ok){ cps[c.id].ok++; R[c.id].ok++; } });
       if(away.length){ var o=offR[rt]=offR[rt]||{n:0,where:{},plates:[]}; o.n++; o.plates.push(pl.plate);
         away.forEach(function(w){ o.where[w]=(o.where[w]||0)+1; }); }
+      else addTim(rt,L);
       var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back),
           aP=scT(A.port), pP=scT(PL.PORT&&PL.PORT.out);
       // split at the port (unloading done): front haul before it, back haul after
@@ -12780,6 +12877,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       if(a0!=null&&a1!=null&&p0!=null&&p1!=null&&p1>p0)
         cyc.push({plate:pl.plate,d:pl.d,plan:scH(p1-p0),act:scH(a1-a0),diff:scH((a1-a0)-(p1-p0)),fh:fh,bh:bh});
     }
+    // trucks that came with no plan count in "All routes", as on the Performance page
+    ((p.list&&p.list.unplanned)||[]).forEach(function(a){ if(!scFleetOk(a.plate)||!scCoOk(a.plate)) return;
+      var T=tim['']; var L=(a.ent&&a.ent.locs)||{}; for(var k in SC_TF){ var v=SC_TF[k](L); if(v!=null) (T[k]=T[k]||[]).push(v); } });
     // ---- 3.3: unloading done -> back at the mine (user 10/11/2026: "once truck
     //      finish unload how long does it take to go back to the mine again").
     //      Every fleet trip that left Chan May port in the period, planned or not.
@@ -12798,7 +12898,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         (IX.byPlate[pk]||[]).some(function(c){ var t=scT(c.xpplIn); if(t!=null&&t>=d0&&t<d0+36*36e5){ came=true; return true; } return false; });
         g=came?'came':'lost'; }
       lost[r.day][g]++; lrows.push({plate:pk,d:r.day,g:g,remark:r.remark,company:r.company}); });
-    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cpsR:cpsR,offR:offR,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
+    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cpsR:cpsR,offR:offR,tim:tim,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
   }
 
   // ---------------------------------------------------------------- drawing
@@ -12928,28 +13028,29 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
       +chips+row('fh','Front haul <span>out, loaded</span>')+row('bh','Back haul <span>home, empty</span>')+offNote+'</section>';
     // ---- 3.2 + 3.3 side by side
-    var bins=[{k:'s',label:'> 2 h shorter',color:SC_C.blue,f:function(x){return x<-2;}},
-              {k:'w',label:'within 2 h',color:SC_C.ok,f:function(x){return x>=-2&&x<=2;}},
-              {k:'a',label:'2-12 h longer',color:'#fca5a5',f:function(x){return x>2&&x<=12;}},
-              {k:'b',label:'12-24 h longer',color:SC_C.miss,f:function(x){return x>12&&x<=24;}},
-              {k:'c',label:'1-2 days longer',color:'#ef4444',f:function(x){return x>24&&x<=48;}},
-              {k:'e',label:'> 2 days longer',color:'#dc2626',f:function(x){return x>48;}}];
-    var bc=bins.map(function(b){ return m.cyc.filter(function(c){return b.f(c.diff);}).length; }), bmax=Math.max.apply(null,bc.concat([1]));
-    var hist=bins.map(function(b,i){ return '<div class="schb" data-tip="'+escAttr(b.label+': '+bc[i]+' cycles')+'"><div class="schbar"><div style="height:'+(100*bc[i]/bmax)+'%;background:'+b.color+'"></div></div><b>'+bc[i]+'</b><span>'+escAttr(b.label)+'</span></div>'; }).join('');
-    var legs=[{t:'Front haul',s:'mine arrival to leaving the port',v:m.cyc.filter(function(c){return c.fh;}).map(function(c){return c.fh;})},
-              {t:'Back haul',s:'leaving the port to the mine',v:m.cyc.filter(function(c){return c.bh;}).map(function(c){return c.bh;})},
-              {t:'Whole cycle',s:'mine arrival to the next',v:m.cyc.map(function(c){return {act:c.act,plan:c.plan};})}];
-    legs.forEach(function(l){ l.a=scMed(l.v.map(function(x){return x.act;})); l.p=scMed(l.v.map(function(x){return x.plan;})); });
-    var mx2=Math.max.apply(null,legs.map(function(l){return Math.max(l.a||0,l.p||0);}).concat([1]));
-    var legRow=function(l){ if(l.a==null) return '<div class="scleg"><div class="sclegh">'+l.t+' <span>'+l.s+'</span></div><div class="scmut">no trip measured</div></div>';
-      var g=l.a-l.p;
-      return '<div class="scleg"><div class="sclegh">'+l.t+' <span>'+l.s+' · '+l.v.length+' trips</span><em style="color:'+(g>2?SC_C.miss:g<-2?SC_C.blue:SC_C.ok)+'">'+(g>=0?'+':'')+Math.round(g)+' h</em></div>'
-        +'<div class="scvs"><div><span>Plan</span><div class="scvsbar"><div style="width:'+(100*l.p/mx2)+'%;background:#4b5563"></div></div><b>'+Math.round(l.p)+' h</b></div>'
-        +'<div><span>Actual</span><div class="scvsbar"><div style="width:'+(100*l.a/mx2)+'%;background:'+(g>2?SC_C.miss:SC_C.ok)+'"></div></div><b>'+Math.round(l.a)+' h</b></div></div></div>'; };
-    h+='<div class="sctwo"><section class="sccard"><h3><span class="scn">3.2</span>How long a cycle takes</h3>'
-      +'<div class="scsub">Median hours, plan against GPS, for the planned trucks that came. The port splits front haul from back haul.</div>'
-      +(m.cyc.length?legs.map(legRow).join('')
-        +'<div class="sclh" style="margin-top:12px">Whole cycle against plan, '+m.cyc.length+' cycles</div><div class="schist">'+hist+'</div><div class="scfoot">'+S.overP+'% of cycles ran more than 2 h over plan</div>':'<div class="scempty">No complete cycle against a plan in this period.</div>')
+    // ---- 3.2: the location diagram, for the route picked in 3.1
+    var lay=SC_LAYOUT[scSel.route]||SC_LAYOUT[''], T=(m.tim&&m.tim[scSel.route||''])||{};
+    var tfmt=function(v){ return v==null?'\u2014':fmtDur(v); };
+    var tcell=function(k){ var xs=T[k]||[], act=xs.length?xs.reduce(function(a,v){return a+v;},0)/xs.length:null,
+        pm=PLAN_MIN[SC_TARGET_OF[k]||k], tip=xs.length+' trip'+(xs.length===1?'':'s');
+      var chipA=act!=null?'<span class="tchip unplan" data-tip="'+escAttr('Actual, average of '+tip)+'">'+tfmt(act)+'</span>':'<span class="tchip unplan na">\u2014</span>';
+      if(pm==null) return '<div class="tchiprow">'+chipA+'</div>';
+      var dd=(act!=null&&pm)?Math.round((act-pm)/pm*100):null;
+      return '<div class="tchiprow"><span class="tchip plan">'+tfmt(pm)+'</span>'+chipA
+        +(dd!=null?'<span class="tdiff '+(dd>0?'down':dd<0?'up':'')+'">'+(dd>0?'+':'')+dd+'%</span>':'')+'</div>'; };
+    var flow='';
+    lay.nodes.forEach(function(nd,i){ var N=SC_N[nd[0]];
+      flow+='<div class="tnode '+N.cls+'"><div class="tnhd"><span class="tnt">'+N.t+'</span><span class="tns">'+N.s+'</span></div><div class="tmrow">'
+        +nd[1].map(function(mt){ return '<div class="tmetric"><span class="tmlbl">'+mt[1]+'</span>'+tcell(mt[0])+'</div>'; }).join('')+'</div></div>';
+      var e=lay.edges[i]; if(!e) return;
+      flow+='<div class="tedge"><div class="tlane fwd"><div class="telbl">travel \u2193</div><div class="tconnect"></div>'+tcell(e[0])+'</div>'
+        +'<div class="tlane back">'+(e[1]?'<div class="telbl">\u2191 '+(e[2]||'backhaul')+'</div><div class="tconnect back"></div>'+tcell(e[1]):'')+'</div></div>'; });
+    var nTrips=Math.max.apply(null,[0].concat(Object.keys(T).map(function(k){ return T[k].length; })));
+    h+='<div class="sctwo"><section class="sccard"><h3><span class="scn">3.2</span>Average travel / time spending by location</h3>'
+      +'<div class="scsub">'+(scSel.route?escAttr(scSel.route)+' (picked in 3.1)':'All routes, including the trucks that came off-plan')
+      +' \u00b7 average per trip, '+nTrips+' trips \u00b7 % = actual against the plan target (red over, green under)</div>'
+      +(nTrips?'<div class="sctime"><div class="timewrap"><div class="tlegend"><span class="tkey"><i class="sw plan"></i>Plan target</span><span class="tkey"><i class="sw unplan"></i>Actual</span></div>'
+        +'<div class="tflow">'+flow+'</div></div></div>':'<div class="scempty">No trip measured for this route in this period.</div>')
       +'</section>';
     var rb=[{label:'within a day',color:SC_C.ok,f:function(g){return g<=24;}},{label:'24-36 h',color:SC_C.extra,f:function(g){return g>24&&g<=36;}},
             {label:'36-48 h',color:SC_C.orange,f:function(g){return g>36&&g<=48;}},{label:'over 2 days',color:SC_C.miss,f:function(g){return g>48;}}];
