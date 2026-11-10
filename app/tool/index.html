@@ -12722,7 +12722,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         if(c.id==='mine') ok=!!mi.onTime;
         else if(c.win){ var m=scTod(t); ok=m>=c.win[0]&&m<=c.win[1]; }
         else { var pt=scT(P[c.id]); if(pt==null) return; ok=Math.abs(t-pt)<=36e5; }
-        var R=cpOf(pe.route||'(no route)');
+        // a plan with no route on it is Mine : Chan May (user 10/11/2026: the
+        // early plans were issued before the route was written on them)
+        var R=cpOf(pe.route||'Mine : Chan May');
         cps[c.id].n++; R[c.id].n++; if(ok){ cps[c.id].ok++; R[c.id].ok++; } });
       var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back),
           aP=scT(A.port), pP=scT(PL.PORT&&PL.PORT.out);

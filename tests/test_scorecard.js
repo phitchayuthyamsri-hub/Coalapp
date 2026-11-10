@@ -51,7 +51,7 @@ function build(plans, seqs, untimed, company) {
 }
 
 const plans = [
-  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', port: '2026-11-03T17:00', back: '2026-11-03T19:30', route: 'Mine : Chan May' },
+  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', port: '2026-11-03T17:00', back: '2026-11-03T19:30' },   // no route on the plan = Mine : Chan May
   { plate: 'B2', day: '2026-11-02', mine: '2026-11-02T07:00' }];
 const seqs = [
   { plate: 'A1', cycleDate: T('2026-11-02T07:30'), xpplIn: T('2026-11-02T07:30'), loadingIn: T('2026-11-02T07:40'), loadingOut: T('2026-11-02T08:30'),
@@ -106,6 +106,7 @@ check('Off-plan, not "Came, not in plan"', out.includes('Off-plan') && !out.incl
 check('every date on the axis, dd/mm', out.includes('>01/11</text>') && out.includes('>02/11</text>') && out.includes('>05/11</text>'), true);
 check('grey line between days', (out.match(/class="scsep"/g) || []).length >= 4, true);
 check('route slicer: A1 counted under its route', m0r.cpsR['Mine : Chan May'].mine, { ok: 1, n: 1 });
+check('a plan with no route counts as Mine : Chan May', m0r.cpsR['Mine : Chan May'] && !m0r.cpsR['(no route)'], true);
 check('...with a chip per route and All routes', out.includes('data-route="Mine : Chan May"') && out.includes('All routes'), true);
 check('Off-plan is a segment of the daily bar (no diamonds)', out.includes('Off-plan') && !/<path d="M/.test(out), true);
 check('square bar ends (no rounded corners)', !/rx="2"/.test(out), true);
