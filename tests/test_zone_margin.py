@@ -60,7 +60,7 @@ check("QL49: one position = the pass", len(visits(one, zone("ql49"))), 1)
 check("Dakrong (detour): one position = the pass", len(visits(one, zone("detour"))), 1)
 check("the mine keeps its 5-minute dwell (a drive-by is not a stay)", len(visits(one, zone("xppl"))), 0)
 check("the port: one position is the visit (nobody drives past it)", len(visits(one, zone("port"))), 1)
-check("A Ngo keeps its dwell (Chan May trucks drive past)", len(visits(one, zone("ango"))), 0)
+check("A Ngo: one position is the visit too (drive-bys on 13/10 were lost)", len(visits(one, zone("ango"))), 1)
 check("a zone with no role keeps its dwell too", len(visits(one, zone(""))), 0)
 
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))

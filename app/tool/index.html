@@ -12889,7 +12889,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       var rt=pe.route||'Mine : Chan May', pts=SC_RT[rt]||SC_CP.map(function(c){return c.id;}), away=[];
       came++; cameR[rt]=(cameR[rt]||0)+1; cpOf(rt);
       SC_CP.forEach(function(c){ var t=scT(A[c.id]); if(t==null) return; var ok;
-        if(pts.indexOf(c.id)<0){ if(SC_WHERE[c.id]) away.push(c.id); return; }
+        // A Ngo lies on the way to Chan May: passing it is only off route when the truck
+        // stopped there instead of going on to the port (10/11/2026)
+        if(pts.indexOf(c.id)<0){ if(SC_WHERE[c.id] && !(c.id==='ango' && scT(A.port)!=null)) away.push(c.id); return; }
         if(c.id==='mine') ok=!!mi.onTime;
         else if(c.win){ var m=scTod(t); ok=m>=c.win[0]&&m<=c.win[1]; }
         else { var pt=scT(P[c.id]); if(pt==null) return; ok=Math.abs(t-pt)<=36e5; }
