@@ -73,5 +73,17 @@ c = run([(XPPL, 0, 2), (BORDER, 6, 9), (ANGO, 10, 12), (XPPL, 22, 23)],
         {k: v for k, v in ROLES.items() if k != "ango"})
 check("nothing recorded, nothing breaks", (c["ango_in"], c["xppl_r"]), (None, T0 + timedelta(hours=22)))
 
+print("\none mine stay: stepped out and back (10/11/2026)")
+seqs = engine.recompute_sequences(trip("A1", [(XPPL, 0, 1), (XPPL, 2, 3), (LOAD, 2.2, 2.8), (BORDER, 8, 10),
+                                             (XPPL, 30, 31)]), ROLES)
+check("out at 1 h, back at 2 h, nowhere between: one trip", len(seqs), 2)
+check("...starting at the first arrival", seqs[0]["xppl_in"], T0)
+check("...leaving at the LAST exit before the border", seqs[0]["xppl_out"], T0 + timedelta(hours=3))
+check("...and it reaches the border", seqs[0]["lalay_out_in"], T0 + timedelta(hours=8))
+seqs = engine.recompute_sequences(trip("A1", [(XPPL, 0, 1), (XPPL, 40, 41), (BORDER, 46, 47)]), ROLES)
+check("back after more than a day with nothing seen: two trips (GPS outage)", len(seqs), 2)
+seqs = engine.recompute_sequences(trip("A1", [(XPPL, 0, 1), (BORDER, 6, 8), (XPPL, 20, 21)]), ROLES)
+check("a location in between: two trips, as before", [len(seqs), seqs[0]["xppl_out"]], [2, T0 + timedelta(hours=1)])
+
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))
 sys.exit(1 if FAIL else 0)

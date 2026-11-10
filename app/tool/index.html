@@ -9638,8 +9638,24 @@ function recomputeSequences() {
   }
 
   for (const [plate, visits] of byPlate) {
-    // All XPPL outer visits in chronological order
-    const xpplVisits = visits.filter(v => v.anchorId === xpplId);
+    // All XPPL outer visits in chronological order. A step out of the mine zone with
+    // no other location before coming back (under a day) is the same mine stay: it
+    // leaves at the LAST exit before the next location (10/11/2026, same rule as
+    // app/engine.py _merge_mine_stays).
+    const xpplVisits = [];
+    visits.filter(v => v.anchorId === xpplId).forEach(v => {
+      const prev = xpplVisits[xpplVisits.length - 1];
+      if (prev) {
+        const prevEnd = (prev.exit || prev.enter).getTime(), vIn = v.enter.getTime();
+        const elsewhere = visits.some(x => x.anchorId !== xpplId && x.anchorId !== loadingId && x.enter
+          && x.enter.getTime() > prevEnd && x.enter.getTime() < vIn);
+        if (!elsewhere && vIn - prevEnd < 24 * 3600e3) {
+          xpplVisits[xpplVisits.length - 1] = Object.assign({}, prev, { exit: v.exit || v.enter });
+          return;
+        }
+      }
+      xpplVisits.push(v);
+    });
     if (!xpplVisits.length) continue;
 
     // Each XPPL visit starts a cycle. The "XPPL R" closing step = next XPPL visit.

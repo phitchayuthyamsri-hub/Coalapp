@@ -305,6 +305,33 @@ def build_visits(pings, anchors, deactivated=None, now=None):
     return out
 
 # ── Sequence / cycle builder (forward-walking state machine) ─────────────────
+# A truck that steps out of the mine zone and comes back without going anywhere
+# else is still on the same mine stay (10/11/2026: 51 of 66 November "left the
+# mine, never reached the border" trips were trucks parked ~1.6 km out, back in
+# the zone an hour later). The stay leaves at the LAST exit before the next
+# location (user: "location last depart before re-enter next location"). Only
+# under a day apart: no full cycle is shorter, and a GPS outage that hides a
+# whole trip must not join two trips into one (the Daily report's 24 h floor).
+MINE_REVISIT_MERGE = timedelta(hours=24)
+
+
+def _merge_mine_stays(xppl_visits, vlist, mine_ids):
+    out = []
+    for v in xppl_visits:
+        if out:
+            prev = out[-1]
+            prev_end = prev["exit"] or prev["enter"]
+            elsewhere = any(x["anchor_id"] not in mine_ids and prev_end < x["enter"] < v["enter"]
+                            for x in vlist)
+            if not elsewhere and v["enter"] - prev_end < MINE_REVISIT_MERGE:
+                merged = dict(prev)
+                merged["exit"] = v["exit"] or v["enter"]
+                out[-1] = merged
+                continue
+        out.append(v)
+    return out
+
+
 def recompute_sequences(visits, roles):
     """
     roles: {xppl, loading, border, ql49, port, detour, ql49b, ql49p -> anchor_id}
@@ -328,7 +355,8 @@ def recompute_sequences(visits, roles):
         arr.sort(key=lambda v: v["enter"])
 
     for plate, vlist in by_plate.items():
-        xppl_visits = [v for v in vlist if v["anchor_id"] == xppl_id]
+        xppl_visits = _merge_mine_stays(
+            [v for v in vlist if v["anchor_id"] == xppl_id], vlist, (xppl_id, loading_id))
         if not xppl_visits:
             continue
         for i, start in enumerate(xppl_visits):

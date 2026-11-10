@@ -48,6 +48,15 @@ const r2 = Object.assign({}, ROLES); delete r2.ango;
 c = run([['X', 0, 2], ['B', 6, 9], ['A', 10, 12], ['X', 22, 23]], r2);
 check('A Ngo Warehouse still found', c.angoIn, H(10));
 
+console.log('\none mine stay: stepped out and back');
+const runAll = (stops) => fn({ roles: ROLES, anchors: ANCH, visits: stops.map(([id, i, o]) => ({ plate: 'A1', anchorId: id, anchorName: id, enter: H(i), exit: H(o) })), sequences: [] });
+let all = runAll([['X', 0, 1], ['X', 2, 3], ['L', 2.2, 2.8], ['B', 8, 10], ['X', 30, 31]]);
+check('out and back with nowhere between: one trip, leaving at the last exit', [all.length, all[0].xpplOut, all[0].lalayOutIn], [2, H(3), H(8)]);
+all = runAll([['X', 0, 1], ['X', 40, 41], ['B', 46, 47]]);
+check('back after more than a day: two trips', all.length, 2);
+all = runAll([['X', 0, 1], ['B', 6, 8], ['X', 20, 21]]);
+check('a location in between: two trips, as before', [all.length, all[0].xpplOut], [2, H(1)]);
+
 console.log('\nthe trip table');
 check('A Ngo In / Out columns, sortable',
       html.includes('<th data-seqsort="angoIn">A Ngo — In</th><th data-seqsort="angoOut">A Ngo — Out</th>'), true);
