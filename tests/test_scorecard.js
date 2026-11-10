@@ -27,7 +27,7 @@ function build(plans, seqs, untimed, company) {
   const ACS = { fleet: ['A1', 'B2', 'C3', 'D4'], plan: {}, actual: {}, merges: {}, weigh: {}, manual: {}, wb: {}, issues: [], recos: [],
                 fleetMeta: { A1: { company: 'Bac Nam' }, B2: { company: 'PTS' }, C3: { company: 'Bac Nam' }, D4: { company: 'Bac Nam' } } };
   for (const p of plans)
-    ACS.plan[p.plate + '|' + p.day] = { plate: p.plate, locs: { MINE: { in: p.mine, out: p.leave || null }, BORDER: { in: null, out: null }, PORT: { in: null, out: null } },
+    ACS.plan[p.plate + '|' + p.day] = { plate: p.plate, locs: { MINE: { in: p.mine, out: p.leave || null }, BORDER: { in: null, out: null }, PORT: { in: null, out: p.port || null } },
                                         ot: { mineReturn: p.back || null } };
   for (const c of seqs) ACS.actual[c.plate + '|' + dk(c.cycleDate)] = { plate: c.plate, cyc: dk(c.cycleDate), locs: {
     MINE: { in: I(c.xpplIn), out: I(c.xpplOut) }, LOADING: { in: I(c.loadingIn), out: I(c.loadingOut) },
@@ -51,7 +51,7 @@ function build(plans, seqs, untimed, company) {
 }
 
 const plans = [
-  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', back: '2026-11-03T19:30' },
+  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', port: '2026-11-03T17:00', back: '2026-11-03T19:30' },
   { plate: 'B2', day: '2026-11-02', mine: '2026-11-02T07:00' }];
 const seqs = [
   { plate: 'A1', cycleDate: T('2026-11-02T07:30'), xpplIn: T('2026-11-02T07:30'), loadingIn: T('2026-11-02T07:40'), loadingOut: T('2026-11-02T08:30'),
@@ -81,7 +81,9 @@ check('no time at a point = not counted there', cp('ql49b'), [0, 0]);
 
 console.log('\n3.2-3.3: cycle and recovery');
 check('cycle 36.5 h against 36.5 h planned', m.cyc.map(c => [c.plate, c.act, c.plan, c.diff]), [['A1', 36.5, 36.5, 0]]);
-check('back 20:00, loading again 21:00: 1 h', m.rec.filter(r => r.plate === 'A1').map(r => [r.d, r.gap]), [['2026-11-03', 1]]);
+check('front haul: 34.5 h against 34 h (mine to leaving the port)', m.cyc[0].fh, { act: 34.5, plan: 34 });
+check('back haul: 2 h against 2.5 h (port to the mine)', m.cyc[0].bh, { act: 2, plan: 2.5 });
+check('unloaded 18:00, back at the mine 20:00: 2 h, on the unload day', m.rec.filter(r => r.plate === 'A1').map(r => [r.d, r.gap]), [['2026-11-03', 2]]);
 
 console.log('\n4: opportunity lost');
 check('no reason and no GPS visit: lost', m.lost['2026-11-02'], { prev: 1, repair: 0, came: 1, lost: 1 });
@@ -94,10 +96,14 @@ check('Bac Nam: B2 (PTS) is out of the plan and the losses',
 
 console.log('\nthe page');
 const S = api.scSummary(api.run('2026-11-01', '2026-11-05'));
-check('headline figures', [S.cameP, S.onP, S.lost, S.quickP], [50, 50, 1, 100]);
+check('headline figures', [S.cameP, S.onP, S.lost, S.quickP, S.recMed, S.bhPlan], [50, 50, 1, 100, 2, 2.5]);
 const out = api.scDraw(api.run('2026-11-01', '2026-11-05'), null);
 check('draws the four steps', ['Did the plan happen?', 'Where the schedule slips', 'How long a cycle takes',
-      'Back at the mine, loading again', 'Opportunity lost'].every(t => out.includes(t)), true);
+      'Unloaded, back to the mine', 'Opportunity lost'].every(t => out.includes(t)), true);
+check('front haul and back haul rows', (out.match(/Front haul/g) || []).length >= 2 && (out.match(/Back haul/g) || []).length >= 2, true);
+check('Off-plan, not "Came, not in plan"', out.includes('Off-plan') && !out.includes('Came, not in plan'), true);
+check('every date on the axis, dd/mm', out.includes('>01/11</text>') && out.includes('>02/11</text>') && out.includes('>05/11</text>'), true);
+check('grey line between days', (out.match(/class="scsep"/g) || []).length >= 4, true);
 check('the menu has it', /data-page="score">Scorecard</.test(html), true);
 check('the page scrolls inside itself (10/11/2026: no scroll bar)',
       /\[data-page-panel="score"\] \.scwrap\{flex:1 1 auto;min-height:0;overflow-y:auto/.test(html), true);

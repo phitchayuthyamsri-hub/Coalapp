@@ -3095,7 +3095,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scax{fill:#8b98a5;font-size:10px}
     [data-page-panel="score"] .sclegend{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:11.5px;margin-top:6px}
     [data-page-panel="score"] .sclegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-    [data-page-panel="score"] .scroute{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;position:relative;padding-top:4px}
+    [data-page-panel="score"] .schaul{margin-top:10px}
+    [data-page-panel="score"] .schaul+.schaul{border-top:1px solid var(--line);padding-top:10px}
+    [data-page-panel="score"] .schaulh{font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:4px}
+    [data-page-panel="score"] .schaulh span,[data-page-panel="score"] .sclegh span{color:var(--muted);font-weight:400;margin-left:6px}
+    [data-page-panel="score"] .scroute{display:grid;gap:6px;position:relative;padding-top:4px}
     [data-page-panel="score"] .scroute:before{content:"";position:absolute;left:6%;right:6%;top:42px;height:2px;background:repeating-linear-gradient(90deg,#3a4651 0 8px,transparent 8px 14px)}
     [data-page-panel="score"] .scnode{position:relative;text-align:center;padding:2px 2px 6px;border-radius:10px}
     [data-page-panel="score"] .scnode.worst{background:rgba(248,113,113,.08);outline:1px solid rgba(248,113,113,.45)}
@@ -3106,7 +3110,11 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scnr{color:var(--muted);font-size:10.5px}
     [data-page-panel="score"] .scnb{font-size:11.5px;font-weight:700;margin-top:2px}
     [data-page-panel="score"] .sctag{display:inline-block;margin-top:4px;background:#f87171;color:#1b0f0f;font-size:10px;font-weight:800;border-radius:999px;padding:1px 8px;text-transform:uppercase;letter-spacing:.4px}
-    [data-page-panel="score"] .scvs{display:grid;gap:8px;margin:4px 0 14px}
+    [data-page-panel="score"] .scleg{padding:6px 0;border-bottom:1px dashed #26313a}
+    [data-page-panel="score"] .sclegh{font-weight:700;font-size:12.5px;margin-bottom:6px;display:flex;align-items:baseline}
+    [data-page-panel="score"] .sclegh em{margin-left:auto;font-style:normal;font-weight:800}
+    [data-page-panel="score"] .scsep{stroke:#3a4651;stroke-width:1}
+    [data-page-panel="score"] .scvs{display:grid;gap:6px;margin:2px 0 6px}
     [data-page-panel="score"] .scvs>div{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:8px}
     [data-page-panel="score"] .scvs span{color:var(--muted);font-size:12px}
     [data-page-panel="score"] .scvs b{font-size:16px;color:#fff;text-align:right}
@@ -3131,7 +3139,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     @media (max-width:900px){
       [data-page-panel="score"] .sctiles{grid-template-columns:repeat(2,minmax(0,1fr))}
       [data-page-panel="score"] .sctwo{grid-template-columns:1fr}
-      [data-page-panel="score"] .scroute{grid-template-columns:repeat(4,minmax(0,1fr))}
+      [data-page-panel="score"] .scroute{grid-template-columns:repeat(3,minmax(0,1fr)) !important}
       [data-page-panel="score"] .scroute:before{display:none}
     }
   </style>
@@ -12653,14 +12661,14 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
   // Along the road, in the order a truck meets them. A window is the gate's own
   // hours (Setting); the mine and the return are judged against the plan.
   var SC_CP=[
-    {id:'mine',   label:'Arrive mine',    rule:'within 1 h of plan'},
-    {id:'leave',  label:'Leave mine',     rule:'within 1 h of plan'},
-    {id:'border', label:'Border, loaded', rule:'15:00 - 17:00', win:[15*60,17*60]},
-    {id:'ql49',   label:'QL49, loaded',   rule:'19:00 - 24:00', win:[19*60,24*60]},
-    {id:'port',   label:'Port',           rule:'leave 07:00 - 17:00', win:[7*60,17*60]},
-    {id:'ql49b',  label:'QL49, empty',    rule:'00:00 - 05:00', win:[0,5*60]},
-    {id:'borderb',label:'Border, empty',  rule:'07:00 - 19:00', win:[7*60,19*60]},
-    {id:'back',   label:'Back at mine',   rule:'within 1 h of plan'}];
+    {id:'mine',   haul:'fh', label:'Arrive mine',    rule:'within 1 h of plan'},
+    {id:'leave',  haul:'fh', label:'Leave mine',     rule:'within 1 h of plan'},
+    {id:'border', haul:'fh', label:'Border, loaded', rule:'15:00 - 17:00', win:[15*60,17*60]},
+    {id:'ql49',   haul:'fh', label:'QL49, loaded',   rule:'19:00 - 24:00', win:[19*60,24*60]},
+    {id:'port',   haul:'fh', label:'Port',           rule:'leave 07:00 - 17:00', win:[7*60,17*60]},
+    {id:'ql49b',  haul:'bh', label:'QL49, empty',    rule:'00:00 - 05:00', win:[0,5*60]},
+    {id:'borderb',haul:'bh', label:'Border, empty',  rule:'07:00 - 19:00', win:[7*60,19*60]},
+    {id:'back',   haul:'bh', label:'Back at mine',   rule:'within 1 h of plan'}];
   function scShift(iso,n){ var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return dKey(d); }
   function scDays(f,t){ var out=[], d=f; while(d<=t){ out.push(d); d=scShift(d,1); } return out; }
   function scMed(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
@@ -12708,17 +12716,23 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         else if(c.win){ var m=scTod(t); ok=m>=c.win[0]&&m<=c.win[1]; }
         else { var pt=scT(P[c.id]); if(pt==null) return; ok=Math.abs(t-pt)<=36e5; }
         cps[c.id].n++; if(ok) cps[c.id].ok++; });
-      var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back);
+      var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back),
+          aP=scT(A.port), pP=scT(PL.PORT&&PL.PORT.out);
+      // split at the port (unloading done): front haul before it, back haul after
+      var fh=(a0!=null&&aP!=null&&p0!=null&&pP!=null&&aP>a0&&pP>p0)?{act:scH(aP-a0),plan:scH(pP-p0)}:null,
+          bh=(aP!=null&&a1!=null&&pP!=null&&p1!=null&&a1>aP&&p1>pP)?{act:scH(a1-aP),plan:scH(p1-pP)}:null;
       if(a0!=null&&a1!=null&&p0!=null&&p1!=null&&p1>p0)
-        cyc.push({plate:pl.plate,d:pl.d,plan:scH(p1-p0),act:scH(a1-a0),diff:scH((a1-a0)-(p1-p0))});
+        cyc.push({plate:pl.plate,d:pl.d,plan:scH(p1-p0),act:scH(a1-a0),diff:scH((a1-a0)-(p1-p0)),fh:fh,bh:bh});
     }
-    // ---- 3.3: back at the mine -> its next loading, every fleet truck
+    // ---- 3.3: unloading done -> back at the mine (user 10/11/2026: "once truck
+    //      finish unload how long does it take to go back to the mine again").
+    //      Every fleet trip that left Chan May port in the period, planned or not.
+    //      A Ngo has no GPS point of its own, so trips unloading there are not seen.
     var rec=[];
-    for(var pp in IX.byPlate){ if(!scFleetOk(pp)||!scCoOk(pp)) continue; var ss=IX.byPlate[pp];
-      for(var i=0;i<ss.length;i++){ var back=scT(ss[i].xpplR); if(back==null) continue; var bd=dKey(new Date(back));
-        if(bd<from||bd>to) continue; var nx=null;
-        for(var j=i+1;j<ss.length;j++){ var st=scT(ss[j].loadingIn)||scT(ss[j].xpplOut); if(st!=null&&st>back){ nx=st; break; } }
-        rec.push({plate:pp,d:bd,back:back,gap:nx!=null?scH(nx-back):null}); } }
+    for(var pp in IX.byPlate){ if(!scFleetOk(pp)||!scCoOk(pp)) continue;
+      IX.byPlate[pp].forEach(function(c){ var u=scT(c.chanMayOut); if(u==null) return; var ud=dKey(new Date(u));
+        if(ud<from||ud>to) return; var back=scT(c.xpplR);
+        rec.push({plate:pp,d:ud,unload:u,back:back,gap:(back!=null&&back>u)?scH(back-u):null}); }); }
     // ---- 4: declared BH with no time - why, and did the GPS see it come anyway
     var lost={}, lrows=[];
     days.forEach(function(d){ lost[d]={prev:0,repair:0,came:0,lost:0}; });
@@ -12736,13 +12750,16 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
   function scNice(v){ var raw=Math.max(1,v)/4, e=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/e; return 4*(f<=1?1:f<=2?2:f<=5?5:10)*e; }
   // Stacked columns, one per day; optional marker series on the same count axis.
   function scColumns(days,series,valOf,marker){
-    var n=days.length, W=Math.max(520,n*24+56), H=170, L=34, R=10, T=10, B=22, ph=H-T-B;
+    var n=days.length, W=Math.max(520,n*38+56), H=180, L=34, R=10, T=10, B=26, ph=H-T-B;
     var tot=days.map(function(d){ return series.reduce(function(s,x){ return s+(valOf(d,x.k)||0); },0); });
     var mx=Math.max.apply(null,tot.concat(marker?days.map(function(d){return marker.val(d)||0;}):[0]).concat([1]));
-    var top=scNice(mx), cw=(W-L-R)/n, bw=Math.min(16,cw*0.6), step=Math.ceil(n/16);
+    // every date shown (user 10/11/2026), thinned only past six weeks
+    var top=scNice(mx), cw=(W-L-R)/n, bw=Math.min(18,cw*0.55), step=n>45?Math.ceil(n/31):1;
+    var sepTop=T, sepBot=T+ph+16;
     var s='<svg viewBox="0 0 '+W+' '+H+'" class="scsvg" role="img">';
     for(var g=0;g<=4;g++){ var v=top*g/4, y=T+ph*(1-v/top);
       s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" class="scgrid"/><text x="'+(L-6)+'" y="'+(y+3.5)+'" class="scax" text-anchor="end">'+Math.round(v)+'</text>'; }
+    for(var q=1;q<n;q++){ var sx=(L+cw*q).toFixed(1); s+='<line x1="'+sx+'" x2="'+sx+'" y1="'+sepTop+'" y2="'+sepBot+'" class="scsep"/>'; }
     days.forEach(function(d,i){ var x=L+cw*i+(cw-bw)/2, y=T+ph, lines=[scDM(d)];
       series.forEach(function(se){ var v=valOf(d,se.k)||0; if(!v) return; var h=ph*v/top; y-=h;
         s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,h-2).toFixed(1)+'" rx="2" fill="'+se.color+'"/>';
@@ -12752,7 +12769,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         lines.push(marker.label+': '+mv); } }
       if(lines.length===1) lines.push('nothing');
       s+='<rect x="'+(L+cw*i).toFixed(1)+'" y="'+T+'" width="'+cw.toFixed(1)+'" height="'+ph+'" fill="transparent" data-tip="'+escAttr(lines.join('\n'))+'"/>';
-      if(i%step===0) s+='<text x="'+(L+cw*i+cw/2).toFixed(1)+'" y="'+(H-8)+'" class="scax" text-anchor="middle">'+d.slice(8,10)+'</text>'; });
+      if(i%step===0) s+='<text x="'+(L+cw*i+cw/2).toFixed(1)+'" y="'+(H-8)+'" class="scax" text-anchor="middle">'+scDM(d)+'</text>'; });
     return s+'</svg>';
   }
   function scLegend(items){ return '<div class="sclegend">'+items.map(function(it){
@@ -12781,12 +12798,13 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var t=m.tot, judged=t.planned-t.waiting, came=t.asPlanned+t.offPlan;
     var cy=m.cyc, act=scMed(cy.map(function(c){return c.act;})), pln=scMed(cy.map(function(c){return c.plan;})),
         over=cy.filter(function(c){return c.diff>2;}).length;
-    var gaps=m.rec.filter(function(r){return r.gap!=null;}), quick=gaps.filter(function(r){return r.gap<=2;}).length;
+    var gaps=m.rec.filter(function(r){return r.gap!=null;}), quick=gaps.filter(function(r){return r.gap<=24;}).length,
+        recMed=scMed(gaps.map(function(r){return r.gap;})), bhPlan=scMed(cy.filter(function(c){return c.bh;}).map(function(c){return c.bh.plan;}));
     var lost=m.lrows.filter(function(r){return r.g==='lost';}).length;
     return {judged:judged, came:came, cameP:scPct(came,judged), onP:scPct(t.asPlanned,judged), offP:scPct(t.offPlan,judged),
             missP:scPct(t.noShow,judged), gpsP:scPct(t.noGps,judged), unP:scPct(t.unplan,judged),
             act:act, pln:pln, gap:(act!=null&&pln!=null)?act-pln:null, overP:scPct(over,cy.length), over:over,
-            quickP:scPct(quick,gaps.length), quick:quick, gaps:gaps.length, lost:lost};
+            quickP:scPct(quick,gaps.length), quick:quick, gaps:gaps.length, recMed:recMed, bhPlan:bhPlan, lost:lost};
   }
 
   function scDraw(m,prev){
@@ -12797,9 +12815,10 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var worst=null; SC_CP.forEach(function(c){ var v=m.cps[c.id]; if(v.n>=3){ var pc=scPct(v.ok,v.n); if(!worst||pc<worst.pc) worst={c:c,pc:pc}; } });
     var say=[];
     if(S.judged) say.push('<b>'+S.cameP+'%</b> of the planned trucks reached the mine, and only <b>'+S.onP+'%</b> within an hour of their slot.');
-    if(S.judged&&t.noShow) say.push('<b>'+t.noShow+'</b> planned trucks never came ('+S.missP+'%), while <b>'+t.unplan+'</b> came that were not in the plan.');
+    if(S.judged&&t.noShow) say.push('<b>'+t.noShow+'</b> planned trucks never came ('+S.missP+'%), while <b>'+t.unplan+'</b> came off-plan.');
     if(worst) say.push('The schedule slips most at <b>'+escAttr(worst.c.label.toLowerCase())+'</b>: '+worst.pc+'% on time ('+escAttr(worst.c.rule)+').');
     if(S.gap!=null) say.push('A cycle takes <b>'+Math.round(S.act)+' h</b>, '+(S.gap>=0?'<b>'+Math.round(S.gap)+' h more</b>':'<b>'+Math.round(-S.gap)+' h less</b>')+' than planned.');
+    if(S.recMed!=null) say.push('After unloading, a truck takes <b>'+Math.round(S.recMed)+' h</b> to be back at the mine'+(S.bhPlan!=null?' (plan '+Math.round(S.bhPlan)+' h)':'')+'.');
     if(S.lost) say.push('<b>'+S.lost+'</b> trucks were declared coming back with no time and never came.');
     h+='<div class="scsay">'+(say.length?say.map(function(x){return '<div>'+x+'</div>';}).join(''):'Nothing planned or declared in this period.')+'</div>';
     // ---- hero tiles
@@ -12811,27 +12830,29 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       +'</div>';
     // ---- 1-2
     var parts=[{v:t.asPlanned,color:SC_C.ok,label:'On time (within 1 h)',short:'on time'},
-               {v:t.offPlan,color:SC_C.off,label:'Came, 1-12 h off the slot',short:'came off-slot'},
+               {v:t.offPlan,color:SC_C.off,label:'Not on time (came 1-12 h off the slot)',short:'not on time'},
                {v:t.noShow,color:SC_C.miss,label:'Did not come',short:'did not come'},
                {v:t.noGps,color:SC_C.nogps,label:'No GPS around the plan time',short:'no GPS'},
                {v:t.waiting,color:SC_C.wait,label:'Waiting (window still open)',short:'waiting'}];
-    var ser=[{k:'asPlanned',label:'On time',color:SC_C.ok},{k:'offPlan',label:'Came off-slot',color:SC_C.off},
+    var ser=[{k:'asPlanned',label:'On time',color:SC_C.ok},{k:'offPlan',label:'Not on time',color:SC_C.off},
              {k:'noShow',label:'Did not come',color:SC_C.miss},{k:'noGps',label:'No GPS',color:SC_C.nogps},{k:'waiting',label:'Waiting',color:SC_C.wait}];
     h+='<section class="sccard"><h3><span class="scn">1-2</span>Did the plan happen?</h3>'
       +'<div class="scsub">'+t.planned+' trucks planned · '+period+'</div>'
       +scSplit(parts)
-      +(t.unplan?'<div class="scpill" style="border-color:'+SC_C.extra+'"><i style="background:'+SC_C.extra+'"></i>+'+t.unplan+' trucks came that were <b>not in the plan</b>'+(S.unP!=null?' ('+S.unP+'% of the plan)':'')+'</div>':'')
-      +'<div class="scchart">'+scColumns(m.days,ser,function(dd,k){return m.sbd[dd][k];},{label:'Came, not in plan',color:SC_C.extra,val:function(dd){return m.sbd[dd].unplan;}})+'</div>'
-      +scLegend(ser.filter(function(x){return x.k!=='waiting'||t.waiting;}).concat([{label:'Came, not in plan',color:SC_C.extra,diamond:true}]))
+      +(t.unplan?'<div class="scpill" style="border-color:'+SC_C.extra+'"><i style="background:'+SC_C.extra+'"></i>+'+t.unplan+' <b>Off-plan</b> trucks came with no plan'+(S.unP!=null?' ('+S.unP+'% of the plan)':'')+'</div>':'')
+      +'<div class="scchart">'+scColumns(m.days,ser,function(dd,k){return m.sbd[dd][k];},{label:'Off-plan',color:SC_C.extra,val:function(dd){return m.sbd[dd].unplan;}})+'</div>'
+      +scLegend(ser.filter(function(x){return x.k!=='waiting'||t.waiting;}).concat([{label:'Off-plan',color:SC_C.extra,diamond:true}]))
       +'</section>';
     // ---- 3.1
-    var nodes=SC_CP.map(function(c){ var v=m.cps[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
+    var node=function(c){ var v=m.cps[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
       return '<div class="scnode'+(worst&&worst.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' of '+v.n+' trucks on time')+'">'
         +scRing(pc,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
-        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst&&worst.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; }).join('');
+        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst&&worst.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
+    var row=function(haul,title){ var cs=SC_CP.filter(function(c){return c.haul===haul;});
+      return '<div class="schaul"><div class="schaulh">'+title+'</div><div class="scroute" style="grid-template-columns:repeat('+cs.length+',minmax(0,1fr))">'+cs.map(node).join('')+'</div></div>'; };
     h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
       +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
-      +'<div class="scroute">'+nodes+'</div></section>';
+      +row('fh','Front haul <span>mine to port, loaded</span>')+row('bh','Back haul <span>port to mine, empty</span>')+'</section>';
     // ---- 3.2 + 3.3 side by side
     var bins=[{k:'s',label:'> 2 h shorter',color:SC_C.blue,f:function(x){return x<-2;}},
               {k:'w',label:'within 2 h',color:SC_C.ok,f:function(x){return x>=-2&&x<=2;}},
@@ -12841,23 +12862,32 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
               {k:'e',label:'> 2 days longer',color:'#dc2626',f:function(x){return x>48;}}];
     var bc=bins.map(function(b){ return m.cyc.filter(function(c){return b.f(c.diff);}).length; }), bmax=Math.max.apply(null,bc.concat([1]));
     var hist=bins.map(function(b,i){ return '<div class="schb" data-tip="'+escAttr(b.label+': '+bc[i]+' cycles')+'"><div class="schbar"><div style="height:'+(100*bc[i]/bmax)+'%;background:'+b.color+'"></div></div><b>'+bc[i]+'</b><span>'+escAttr(b.label)+'</span></div>'; }).join('');
-    var mx2=Math.max(S.act||0,S.pln||0,1);
+    var legs=[{t:'Front haul',s:'mine arrival to leaving the port',v:m.cyc.filter(function(c){return c.fh;}).map(function(c){return c.fh;})},
+              {t:'Back haul',s:'leaving the port to the mine',v:m.cyc.filter(function(c){return c.bh;}).map(function(c){return c.bh;})},
+              {t:'Whole cycle',s:'mine arrival to the next',v:m.cyc.map(function(c){return {act:c.act,plan:c.plan};})}];
+    legs.forEach(function(l){ l.a=scMed(l.v.map(function(x){return x.act;})); l.p=scMed(l.v.map(function(x){return x.plan;})); });
+    var mx2=Math.max.apply(null,legs.map(function(l){return Math.max(l.a||0,l.p||0);}).concat([1]));
+    var legRow=function(l){ if(l.a==null) return '<div class="scleg"><div class="sclegh">'+l.t+' <span>'+l.s+'</span></div><div class="scmut">no trip measured</div></div>';
+      var g=l.a-l.p;
+      return '<div class="scleg"><div class="sclegh">'+l.t+' <span>'+l.s+' · '+l.v.length+' trips</span><em style="color:'+(g>2?SC_C.miss:g<-2?SC_C.blue:SC_C.ok)+'">'+(g>=0?'+':'')+Math.round(g)+' h</em></div>'
+        +'<div class="scvs"><div><span>Plan</span><div class="scvsbar"><div style="width:'+(100*l.p/mx2)+'%;background:#4b5563"></div></div><b>'+Math.round(l.p)+' h</b></div>'
+        +'<div><span>Actual</span><div class="scvsbar"><div style="width:'+(100*l.a/mx2)+'%;background:'+(g>2?SC_C.miss:SC_C.ok)+'"></div></div><b>'+Math.round(l.a)+' h</b></div></div></div>'; };
     h+='<div class="sctwo"><section class="sccard"><h3><span class="scn">3.2</span>How long a cycle takes</h3>'
-      +'<div class="scsub">Mine arrival to the next mine arrival, median of '+m.cyc.length+' cycles</div>'
-      +(m.cyc.length?'<div class="scvs"><div><span>Plan</span><div class="scvsbar"><div style="width:'+(100*S.pln/mx2)+'%;background:#4b5563"></div></div><b>'+Math.round(S.pln)+' h</b></div>'
-        +'<div><span>Actual</span><div class="scvsbar"><div style="width:'+(100*S.act/mx2)+'%;background:'+(S.gap>2?SC_C.miss:SC_C.ok)+'"></div></div><b>'+Math.round(S.act)+' h</b></div></div>'
-        +'<div class="schist">'+hist+'</div><div class="scfoot">'+S.overP+'% of cycles ran more than 2 h over plan</div>':'<div class="scempty">No complete cycle against a plan in this period.</div>')
+      +'<div class="scsub">Median hours, plan against GPS, for the planned trucks that came. The port splits front haul from back haul.</div>'
+      +(m.cyc.length?legs.map(legRow).join('')
+        +'<div class="sclh" style="margin-top:12px">Whole cycle against plan, '+m.cyc.length+' cycles</div><div class="schist">'+hist+'</div><div class="scfoot">'+S.overP+'% of cycles ran more than 2 h over plan</div>':'<div class="scempty">No complete cycle against a plan in this period.</div>')
       +'</section>';
-    var rb=[{label:'within 2 h',color:SC_C.ok,f:function(g){return g<=2;}},{label:'2-12 h',color:SC_C.extra,f:function(g){return g>2&&g<=12;}},
-            {label:'12-24 h',color:SC_C.orange,f:function(g){return g>12&&g<=24;}},{label:'over a day',color:SC_C.miss,f:function(g){return g>24;}}];
-    var gl=m.rec.filter(function(r){return r.gap!=null;});
-    var slow=gl.filter(function(r){return r.gap>12;}).sort(function(a,b){return b.gap-a.gap;}).slice(0,5);
-    h+='<section class="sccard"><h3><span class="scn">3.3</span>Back at the mine, loading again</h3>'
-      +'<div class="scsub">From the truck reaching the mine to its next loading, '+gl.length+' returns</div>'
-      +(gl.length?'<div class="scbig"><b>'+S.quickP+'%</b> load again within 2 hours</div>'
+    var rb=[{label:'within a day',color:SC_C.ok,f:function(g){return g<=24;}},{label:'24-36 h',color:SC_C.extra,f:function(g){return g>24&&g<=36;}},
+            {label:'36-48 h',color:SC_C.orange,f:function(g){return g>36&&g<=48;}},{label:'over 2 days',color:SC_C.miss,f:function(g){return g>48;}}];
+    var gl=m.rec.filter(function(r){return r.gap!=null;}), notBack=m.rec.length-gl.length;
+    var slow=gl.slice().sort(function(a,b){return b.gap-a.gap;}).slice(0,5);
+    h+='<section class="sccard"><h3><span class="scn">3.3</span>Unloaded, back to the mine</h3>'
+      +'<div class="scsub">From leaving Chan May port (unloading done) to reaching the mine again, '+gl.length+' trips'
+      +(notBack?' · '+notBack+' not back yet':'')+'. Trips unloading at A Ngo have no GPS point there, so they are not in this.</div>'
+      +(gl.length?'<div class="scbig"><b>'+Math.round(S.recMed)+' h</b> median to be back at the mine'+(S.bhPlan!=null?' · plan '+Math.round(S.bhPlan)+' h':'')+'</div>'
         +scSplit(rb.map(function(b){ return {v:gl.filter(function(r){return b.f(r.gap);}).length,color:b.color,label:b.label}; }))
-        +(slow.length?'<div class="sclist"><div class="sclh">Longest waits</div>'+slow.map(function(r){ return '<div><span>'+r.plate+'</span><span class="scmut">'+escAttr(scCo(r.plate))+' · back '+scWhen(r.back)+'</span><b>'+Math.round(r.gap)+' h</b></div>'; }).join('')+'</div>':'')
-        :'<div class="scempty">No truck came back to the mine in this period.</div>')
+        +'<div class="sclist"><div class="sclh">Longest to come back</div>'+slow.map(function(r){ return '<div><span>'+r.plate+'</span><span class="scmut">'+escAttr(scCo(r.plate))+' · unloaded '+scWhen(r.unload)+'</span><b>'+Math.round(r.gap)+' h</b></div>'; }).join('')+'</div>'
+        :'<div class="scempty">No truck left the port in this period.</div>')
       +'</section></div>';
     // ---- 4
     var lser=[{k:'lost',label:'No reason, did not come',color:SC_C.miss},{k:'repair',label:'Breakdown / repair',color:SC_C.extra},
