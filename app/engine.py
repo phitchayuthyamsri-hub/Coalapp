@@ -83,8 +83,10 @@ def in_zone(lat, lng, poly, margin_km=ZONE_EDGE_KM):
 
 # Checkpoints a truck drives THROUGH: one position there is the pass, whatever the
 # zone's minimum dwell (10/11/2026: sparse providers send one position at the border
-# or on QL49 and the 5-minute dwell threw the pass away - e.g. 74H00718 on 08/11).
-PASS_ROLES = ("border", "ql49", "ql49b", "ql49p", "detour")
+# or on QL49 and the 5-minute dwell threw the pass away - e.g. 74H00718 on 08/11). The
+# port is a destination nobody drives past, so one position there is the visit too;
+# A Ngo keeps its dwell: trucks bound for Chan May drive past it.
+PASS_ROLES = ("border", "ql49", "ql49b", "ql49p", "detour", "port")
 
 
 def polygon_centroid(poly):
