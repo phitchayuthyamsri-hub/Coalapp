@@ -93,12 +93,19 @@ check("the company is named on each truck",
 
 print("\nthe Subcontractor page and Process (21/10/2026)")
 # Hoanh Son's first login: no sheet of its own for the day.
-hint = client("hieu").get("/api/shift/suggest?date=2026-10-23").get_json()
+# The live hint is for a day still being declared - tomorrow, not 23/10,
+# which since 10/11/2026 is answered as too old to work out again.
+from datetime import datetime as _dt, timedelta as _td
+TMR = (_dt.utcnow() + _td(hours=31)).strftime("%Y-%m-%d")
+hint = client("hieu").get("/api/shift/suggest?date=" + TMR).get_json()
 check("the GPS hint lists only Hoanh Son's trucks, not the fleet",
       sorted(r["plate"] for r in hint.get("rows", [])), ["75C11111", "75C22222"])
 check("...and Bac Nam's lists only Bac Nam's",
-      sorted(r["plate"] for r in client("huytrv").get("/api/shift/suggest?date=2026-10-23").get_json().get("rows", [])),
+      sorted(r["plate"] for r in client("huytrv").get("/api/shift/suggest?date=" + TMR).get_json().get("rows", [])),
       ["20H01469", "20H01474"])
+old = client("huytrv").get("/api/shift/suggest?date=2026-10-02").get_json()
+check("a past day with no stamp answers at once, empty, saying why",
+      (old.get("rows"), old.get("too_old"), old.get("stamped")), ([], True, False))
 with app.app_context():
     dlb = DailyList(list_date="2026-10-22", subcontractor_id=BN, state="draft")
     db.session.add(dlb)

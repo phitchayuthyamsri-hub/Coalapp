@@ -3536,6 +3536,13 @@ def suggest():
         return jsonify(**dict(dl.hint, stamped=True,
                               stamped_at=_local(dl.hint_at).strftime("%Y-%m-%d %H:%M"),
                               stamped_by=dl.hint_by or ""))
+    # A day before yesterday with no stamp (declared before stamping began,
+    # 08/10/2026): nothing to fill in any more, and replaying its GPS took 64 s
+    # and held a worker - 02/10 opened showing 10/11's trucks, then nothing
+    # (user 10/11/2026). Answer at once instead.
+    if day < (datetime.utcnow() + LOCAL_OFFSET - timedelta(days=1)).strftime("%Y-%m-%d"):
+        return jsonify(date=day, rows=[], trucks=0, seen=0, unseen=0,
+                       subcontractor_id=only, stamped=False, too_old=True)
     return jsonify(**dict(_gps_view(day, only), stamped=False))
 
 

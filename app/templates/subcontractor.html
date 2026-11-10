@@ -310,12 +310,34 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 });
 
 // ── load ────────────────────────────────────────────────────────────────────
+// Only the newest load may draw (10/11/2026): picking 02/10 while 10/11 was
+// still loading left 10/11's trucks on screen under the 02/10 label, because
+// the slower, older answer landed last.
+let LOAD_SEQ = 0, LOADING = false;
 async function load(){
   const day = $('#day').value;
+  const my = ++LOAD_SEQ;
+  LOADING = true;
+  // Nothing of the previous day stays on screen while this one loads.
+  ROWS = []; LIST = null;
+  if (GRID) draw();
+  $('#gpsNote').innerHTML = '<div class="note n-info">Loading ' + esc(day.split('-').reverse().join('/')) + '…</div>';
   let list = {rows: []}, sug = {rows: []};
-  try { list = await jget('/api/shift/list?date=' + day + subQ()); } catch (e) {}
-  try { sug = await jget('/api/shift/suggest?date=' + day + subQ()); } catch (e) {}
-  try { ROUTES = await jget('/api/route-seqs'); } catch (e) { ROUTES = []; }
+  const q = 'date=' + day + subQ();
+  const [l1, s1, r1] = await Promise.all([
+    jget('/api/shift/list?' + q).catch(() => null),
+    jget('/api/shift/suggest?' + q).catch(() => null),
+    jget('/api/route-seqs').catch(() => null)]);
+  if (my !== LOAD_SEQ) return;                 // another day was picked meanwhile
+  if (l1) list = l1;
+  if (s1) sug = s1;
+  ROUTES = r1 || [];
+  LOADING = false;
+  if (!l1){
+    $('#gpsNote').innerHTML = '<div class="note n-warn"><b>The sheet for this day could not be loaded.</b> '
+      + 'Press Reload in a moment.</div>';
+    return;
+  }
 
   SUGGEST = {};
   (sug.rows || []).forEach(r => { SUGGEST[r.plate] = r; });
@@ -397,7 +419,10 @@ async function load(){
     ? '<div class="note n-info"><b>GPS as at ' + esc(hm(sug.stamped_at)) + '</b> &mdash; when this '
       + 'day was first declared' + (sug.stamped_by ? ' (' + esc(String(sug.stamped_by).split('@')[0]) + ')' : '')
       + '. It stays as it was then; later uploads do not change it.</div>'
-    : '';
+    : sug.too_old
+      ? '<div class="note n-info">No GPS column for this day: it was declared before the GPS '
+        + 'was kept with each declaration, and working it out again for a past day is not useful.</div>'
+      : '';
   $('#gpsNote').innerHTML = stampNote + (unseen
     ? '<div class="note n-warn"><b>' + unseen + ' truck' + (unseen === 1 ? '' : 's')
       + ' not seen by GPS</b> in the 24 hours before ' + (sug.stamped ? 'that' : 'now')
@@ -625,6 +650,10 @@ function paint(){
 // ── save ────────────────────────────────────────────────────────────────────
 $('#save').onclick = async function(){
   const m = $('#saveMsg');
+  // Never save while a day is loading: the grid is empty or another day's.
+  if (LOADING || !LIST){
+    m.textContent = 'Wait for the day to finish loading, then save.'; m.className = 'msg err'; return;
+  }
   const bhMissing = ROWS.filter(r => r.status === 'BH' && !(r.date && r.time));
   if (bhMissing.length && !confirm(bhMissing.length + ' truck(s) coming back have no arrival '
       + 'time. They cannot be planned without one. Save anyway?')) return;
