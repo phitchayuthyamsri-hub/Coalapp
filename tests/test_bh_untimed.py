@@ -90,5 +90,15 @@ check("a company login sees its own sheets only",
 check("...all of its own period", len(own["rows"]), 5)
 check("a bad period is refused", client("boss").get("/api/shift/bh-untimed?from=x&to=y").status_code, 400)
 
+with app.app_context():
+    from app.models import PlanSnapshot
+    from app import tool_link
+    db.session.add(PlanSnapshot(week_start="2026-10-26", day="2026-10-27", issued_by="boss", rows=[
+        {"plate": "20H01381", "day": "2026-10-27", "route_name": "Mine : A Ngo : Chan May",
+         "t": {"arrive_mine": "2026-10-27T07:00", "back": "2026-10-29T07:00"}}]))
+    db.session.commit()
+    check("the plan feed carries the route (Scorecard route slicer)",
+          tool_link._plan(None)["20H01381|2026-10-27"]["route"], "Mine : A Ngo : Chan May")
+
 print("\n%s" % ("ALL PASS" if not FAIL else "%d FAILED" % FAIL))
 sys.exit(1 if FAIL else 0)

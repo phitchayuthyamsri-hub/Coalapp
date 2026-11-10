@@ -28,7 +28,7 @@ function build(plans, seqs, untimed, company) {
                 fleetMeta: { A1: { company: 'Bac Nam' }, B2: { company: 'PTS' }, C3: { company: 'Bac Nam' }, D4: { company: 'Bac Nam' } } };
   for (const p of plans)
     ACS.plan[p.plate + '|' + p.day] = { plate: p.plate, locs: { MINE: { in: p.mine, out: p.leave || null }, BORDER: { in: null, out: null }, PORT: { in: null, out: p.port || null } },
-                                        ot: { mineReturn: p.back || null } };
+                                        ot: { mineReturn: p.back || null }, route: p.route || '' };
   for (const c of seqs) ACS.actual[c.plate + '|' + dk(c.cycleDate)] = { plate: c.plate, cyc: dk(c.cycleDate), locs: {
     MINE: { in: I(c.xpplIn), out: I(c.xpplOut) }, LOADING: { in: I(c.loadingIn), out: I(c.loadingOut) },
     BORDER: { in: I(c.lalayOutIn), out: I(c.lalayOutOut) }, PORT: { in: I(c.chanMayIn), out: I(c.chanMayOut) },
@@ -51,7 +51,7 @@ function build(plans, seqs, untimed, company) {
 }
 
 const plans = [
-  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', port: '2026-11-03T17:00', back: '2026-11-03T19:30' },
+  { plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', port: '2026-11-03T17:00', back: '2026-11-03T19:30', route: 'Mine : Chan May' },
   { plate: 'B2', day: '2026-11-02', mine: '2026-11-02T07:00' }];
 const seqs = [
   { plate: 'A1', cycleDate: T('2026-11-02T07:30'), xpplIn: T('2026-11-02T07:30'), loadingIn: T('2026-11-02T07:40'), loadingOut: T('2026-11-02T08:30'),
@@ -97,13 +97,18 @@ check('Bac Nam: B2 (PTS) is out of the plan and the losses',
 console.log('\nthe page');
 const S = api.scSummary(api.run('2026-11-01', '2026-11-05'));
 check('headline figures', [S.cameP, S.onP, S.lost, S.quickP, S.recMed, S.bhPlan], [50, 50, 1, 100, 2, 2.5]);
-const out = api.scDraw(api.run('2026-11-01', '2026-11-05'), null);
+const m0r = api.run('2026-11-01', '2026-11-05');
+const out = api.scDraw(m0r, null);
 check('draws the four steps', ['Did the plan happen?', 'Where the schedule slips', 'How long a cycle takes',
       'Unloaded, back to the mine', 'Opportunity lost'].every(t => out.includes(t)), true);
 check('front haul and back haul rows', (out.match(/Front haul/g) || []).length >= 2 && (out.match(/Back haul/g) || []).length >= 2, true);
 check('Off-plan, not "Came, not in plan"', out.includes('Off-plan') && !out.includes('Came, not in plan'), true);
 check('every date on the axis, dd/mm', out.includes('>01/11</text>') && out.includes('>02/11</text>') && out.includes('>05/11</text>'), true);
 check('grey line between days', (out.match(/class="scsep"/g) || []).length >= 4, true);
+check('route slicer: A1 counted under its route', m0r.cpsR['Mine : Chan May'].mine, { ok: 1, n: 1 });
+check('...with a chip per route and All routes', out.includes('data-route="Mine : Chan May"') && out.includes('All routes'), true);
+check('Off-plan is a segment of the daily bar (no diamonds)', out.includes('Off-plan') && !/<path d="M/.test(out), true);
+check('square bar ends (no rounded corners)', !/rx="2"/.test(out), true);
 check('the menu has it', /data-page="score">Scorecard</.test(html), true);
 check('the page scrolls inside itself (10/11/2026: no scroll bar)',
       /\[data-page-panel="score"\] \.scwrap\{flex:1 1 auto;min-height:0;overflow-y:auto/.test(html), true);

@@ -122,6 +122,9 @@ def _plan(only):
                 "depPort": t.get("depart_port"),
                 "borderBack": None,
                 "mineReturn": t.get("back"),
+                # The route the plan sent the truck on (Scorecard route slicer,
+                # 10/11/2026), e.g. "Mine : A Ngo : Chan May".
+                "route": r.get("route_name") or "",
             }
     return out
 

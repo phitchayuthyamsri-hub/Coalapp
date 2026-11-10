@@ -3081,7 +3081,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scsub{color:var(--muted);font-size:12px;margin-bottom:12px}
     [data-page-panel="score"] .sctwo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     [data-page-panel="score"] .sctwo .sccard{margin-bottom:14px}
-    [data-page-panel="score"] .scsplit{display:flex;gap:2px;height:30px;border-radius:6px;overflow:hidden}
+    [data-page-panel="score"] .scsplit{display:flex;gap:2px;height:30px;overflow:hidden}
     [data-page-panel="score"] .scsplit div{min-width:3px}
     [data-page-panel="score"] .scsplitlab{display:flex;gap:2px;margin-top:6px}
     [data-page-panel="score"] .scsplitlab div{overflow:hidden;white-space:nowrap;min-width:3px}
@@ -3094,7 +3094,13 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scgrid{stroke:#2a343d;stroke-width:1}
     [data-page-panel="score"] .scax{fill:#8b98a5;font-size:10px}
     [data-page-panel="score"] .sclegend{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:11.5px;margin-top:6px}
-    [data-page-panel="score"] .sclegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+    [data-page-panel="score"] .sclegend i{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px}
+    [data-page-panel="score"] .scchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+    [data-page-panel="score"] .scchips button{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer}
+    [data-page-panel="score"] .scchips button span{opacity:.7;margin-left:4px}
+    [data-page-panel="score"] .scchips button:hover{color:var(--ink);border-color:var(--accent)}
+    [data-page-panel="score"] .scchips button.none{opacity:.45}
+    [data-page-panel="score"] .scchips button.on{background:var(--accent);border-color:var(--accent);color:#04201c;font-weight:700}
     [data-page-panel="score"] .schaul{margin-top:10px}
     [data-page-panel="score"] .schaul+.schaul{border-top:1px solid var(--line);padding-top:10px}
     [data-page-panel="score"] .schaulh{font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:4px}
@@ -3118,12 +3124,12 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .scvs>div{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:8px}
     [data-page-panel="score"] .scvs span{color:var(--muted);font-size:12px}
     [data-page-panel="score"] .scvs b{font-size:16px;color:#fff;text-align:right}
-    [data-page-panel="score"] .scvsbar{height:14px;background:var(--panel2);border-radius:4px;overflow:hidden}
-    [data-page-panel="score"] .scvsbar div{height:100%;border-radius:4px}
+    [data-page-panel="score"] .scvsbar{height:14px;background:var(--panel2);overflow:hidden}
+    [data-page-panel="score"] .scvsbar div{height:100%}
     [data-page-panel="score"] .schist{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;align-items:end}
     [data-page-panel="score"] .schb{text-align:center}
     [data-page-panel="score"] .schbar{height:110px;display:flex;align-items:flex-end;justify-content:center}
-    [data-page-panel="score"] .schbar div{width:70%;border-radius:4px 4px 0 0;min-height:2px}
+    [data-page-panel="score"] .schbar div{width:70%;min-height:2px}
     [data-page-panel="score"] .schb b{display:block;font-size:14px;margin-top:4px}
     [data-page-panel="score"] .schb span{color:var(--muted);font-size:10.5px;line-height:1.2;display:block}
     [data-page-panel="score"] .scfoot{color:var(--muted);font-size:12px;margin-top:10px}
@@ -11787,7 +11793,7 @@ function acpBuild(){
   ACS.plan={};
   for(var k in (din.plan||{})){ var e=din.plan[k]; var p=normPlate(e.plate); ACS.plan[p+'|'+e.date]={plate:p,
     locs:{MINE:{in:e.mineArrive||null,out:e.depMine||null},BORDER:{in:e.borderArrive||null,out:e.depBorder||null},PORT:{in:e.portArrive||null,out:e.depPort||null}},
-    ot:{borderBackArrive:e.borderBack||null,mineReturn:e.mineReturn||null}}; }
+    ot:{borderBackArrive:e.borderBack||null,mineReturn:e.mineReturn||null}, route:e.route||''}; }
   ACS.actual={}; var I=function(x){return x?new Date(x).toISOString():null;};
   (A.sequences||[]).forEach(function(c){ if(!c.plate||!c.cycleDate) return; var p=normPlate(c.plate); var d=dKey(new Date(c.cycleDate));
     ACS.actual[p+'|'+d]={plate:p,cyc:d,locs:{
@@ -12655,7 +12661,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
   // computePerf run over the chosen period - so the two pages never disagree.
   // Steps 3-4 are worked out here from the same plans and GPS cycles, plus the
   // trucks the companies declared BH with no time (/api/shift/bh-untimed).
-  var scSel={from:null,to:null,company:''}, scUntimed={}, scBusy=false;
+  var scSel={from:null,to:null,company:'',route:''}, scUntimed={}, scBusy=false, scLast=null;
   var SC_C={ok:'#34d399',off:'#a78bfa',miss:'#f87171',nogps:'#9aa4b2',wait:'#7aa7ff',extra:'#e0a93f',
             blue:'#60a5fa',orange:'#fb923c'};
   // Along the road, in the order a truck meets them. A window is the gate's own
@@ -12701,7 +12707,8 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var sbd={}, tot=z();
     days.forEach(function(d){ var s=(p.sbd&&p.sbd[d])||z(); sbd[d]=s; for(var k in tot) tot[k]+=(s[k]||0); });
     // ---- 3.1 + 3.2: every plan that came, checkpoint by checkpoint
-    var cps={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var cps={}, cpsR={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var cpOf=function(rt){ if(!cpsR[rt]){ cpsR[rt]={}; SC_CP.forEach(function(c){ cpsR[rt][c.id]={ok:0,n:0}; }); } return cpsR[rt]; };
     var cyc=[];
     for(var k in (p.matchInfo||{})){
       var mi=p.matchInfo[k], pl=p.planByKey&&p.planByKey[k], ac=p.actByKey&&p.actByKey[mi.actKey];
@@ -12715,7 +12722,8 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         if(c.id==='mine') ok=!!mi.onTime;
         else if(c.win){ var m=scTod(t); ok=m>=c.win[0]&&m<=c.win[1]; }
         else { var pt=scT(P[c.id]); if(pt==null) return; ok=Math.abs(t-pt)<=36e5; }
-        cps[c.id].n++; if(ok) cps[c.id].ok++; });
+        var R=cpOf(pe.route||'(no route)');
+        cps[c.id].n++; R[c.id].n++; if(ok){ cps[c.id].ok++; R[c.id].ok++; } });
       var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back),
           aP=scT(A.port), pP=scT(PL.PORT&&PL.PORT.out);
       // split at the port (unloading done): front haul before it, back haul after
@@ -12742,7 +12750,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         (IX.byPlate[pk]||[]).some(function(c){ var t=scT(c.xpplIn); if(t!=null&&t>=d0&&t<d0+36*36e5){ came=true; return true; } return false; });
         g=came?'came':'lost'; }
       lost[r.day][g]++; lrows.push({plate:pk,d:r.day,g:g,remark:r.remark,company:r.company}); });
-    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
+    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cpsR:cpsR,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
   }
 
   // ---------------------------------------------------------------- drawing
@@ -12762,7 +12770,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     for(var q=1;q<n;q++){ var sx=(L+cw*q).toFixed(1); s+='<line x1="'+sx+'" x2="'+sx+'" y1="'+sepTop+'" y2="'+sepBot+'" class="scsep"/>'; }
     days.forEach(function(d,i){ var x=L+cw*i+(cw-bw)/2, y=T+ph, lines=[scDM(d)];
       series.forEach(function(se){ var v=valOf(d,se.k)||0; if(!v) return; var h=ph*v/top; y-=h;
-        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,h-2).toFixed(1)+'" rx="2" fill="'+se.color+'"/>';
+        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,h-2).toFixed(1)+'" fill="'+se.color+'"/>';
         lines.push(se.label+': '+v); });
       if(marker){ var mv=marker.val(d)||0; if(mv){ var my=T+ph*(1-mv/top), cx=L+cw*i+cw/2;
         s+='<path d="M'+cx+' '+(my-5)+' L'+(cx+5)+' '+my+' L'+cx+' '+(my+5)+' L'+(cx-5)+' '+my+'Z" fill="'+marker.color+'" stroke="#161e25" stroke-width="2"/>';
@@ -12835,24 +12843,36 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
                {v:t.noGps,color:SC_C.nogps,label:'No GPS around the plan time',short:'no GPS'},
                {v:t.waiting,color:SC_C.wait,label:'Waiting (window still open)',short:'waiting'}];
     var ser=[{k:'asPlanned',label:'On time',color:SC_C.ok},{k:'offPlan',label:'Not on time',color:SC_C.off},
-             {k:'noShow',label:'Did not come',color:SC_C.miss},{k:'noGps',label:'No GPS',color:SC_C.nogps},{k:'waiting',label:'Waiting',color:SC_C.wait}];
+             {k:'noShow',label:'Did not come',color:SC_C.miss},{k:'noGps',label:'No GPS',color:SC_C.nogps},{k:'waiting',label:'Waiting',color:SC_C.wait},
+             {k:'unplan',label:'Off-plan',color:SC_C.extra}];
     h+='<section class="sccard"><h3><span class="scn">1-2</span>Did the plan happen?</h3>'
       +'<div class="scsub">'+t.planned+' trucks planned · '+period+'</div>'
       +scSplit(parts)
-      +(t.unplan?'<div class="scpill" style="border-color:'+SC_C.extra+'"><i style="background:'+SC_C.extra+'"></i>+'+t.unplan+' <b>Off-plan</b> trucks came with no plan'+(S.unP!=null?' ('+S.unP+'% of the plan)':'')+'</div>':'')
-      +'<div class="scchart">'+scColumns(m.days,ser,function(dd,k){return m.sbd[dd][k];},{label:'Off-plan',color:SC_C.extra,val:function(dd){return m.sbd[dd].unplan;}})+'</div>'
-      +scLegend(ser.filter(function(x){return x.k!=='waiting'||t.waiting;}).concat([{label:'Off-plan',color:SC_C.extra,diamond:true}]))
+      +(t.unplan?'<div class="scpill" style="border-color:'+SC_C.extra+'"><i style="background:'+SC_C.extra+';transform:none"></i>+'+t.unplan+' <b>Off-plan</b> trucks came with no plan'+(S.unP!=null?' ('+S.unP+'% of the plan)':'')+'</div>':'')
+      +'<div class="scchart">'+scColumns(m.days,ser,function(dd,k){return m.sbd[dd][k];})+'</div>'
+      +scLegend(ser.filter(function(x){return x.k!=='waiting'||t.waiting;}))
       +'</section>';
     // ---- 3.1
-    var node=function(c){ var v=m.cps[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
-      return '<div class="scnode'+(worst&&worst.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' of '+v.n+' trucks on time')+'">'
+    // Route slicer (user 10/11/2026): the four corridors the plan uses, in this order.
+    var RT_ORDER=['Mine : A Ngo','Mine : A Ngo : Chan May','Mine : Chan May','A Ngo : Chan May'];
+    // all four always offered, even in a period one of them has no truck
+    var rts=RT_ORDER.concat(Object.keys(m.cpsR||{}).filter(function(r){ return RT_ORDER.indexOf(r)<0; }).sort());
+    var zero={}; SC_CP.forEach(function(c){ zero[c.id]={ok:0,n:0}; });
+    var cpR=function(r){ return (m.cpsR&&m.cpsR[r])||zero; };
+    if(scSel.route&&rts.indexOf(scSel.route)<0) scSel.route='';
+    var CPU=scSel.route?cpR(scSel.route):m.cps, nTr=function(c){ var mx=0; SC_CP.forEach(function(k){ mx=Math.max(mx,c[k.id].n); }); return mx; };
+    var worst3=null; SC_CP.forEach(function(c){ var v=CPU[c.id]; if(v.n>=3){ var pc=scPct(v.ok,v.n); if(!worst3||pc<worst3.pc) worst3={c:c,pc:pc}; } });
+    var chips='<div class="scchips"><button data-route=""'+(scSel.route?'':' class="on"')+'>All routes <span>'+nTr(m.cps)+'</span></button>'
+      +rts.map(function(r){ var n=nTr(cpR(r)); return '<button data-route="'+escAttr(r)+'" class="'+(scSel.route===r?'on':'')+(n?'':' none')+'">'+escAttr(r)+' <span>'+n+'</span></button>'; }).join('')+'</div>';
+    var node=function(c){ var v=CPU[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
+      return '<div class="scnode'+(worst3&&worst3.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' of '+v.n+' trucks on time')+'">'
         +scRing(pc,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
-        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst&&worst.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
+        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst3&&worst3.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
     var row=function(haul,title){ var cs=SC_CP.filter(function(c){return c.haul===haul;});
       return '<div class="schaul"><div class="schaulh">'+title+'</div><div class="scroute" style="grid-template-columns:repeat('+cs.length+',minmax(0,1fr))">'+cs.map(node).join('')+'</div></div>'; };
     h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
       +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
-      +row('fh','Front haul <span>mine to port, loaded</span>')+row('bh','Back haul <span>port to mine, empty</span>')+'</section>';
+      +chips+row('fh','Front haul <span>mine to port, loaded</span>')+row('bh','Back haul <span>port to mine, empty</span>')+'</section>';
     // ---- 3.2 + 3.3 side by side
     var bins=[{k:'s',label:'> 2 h shorter',color:SC_C.blue,f:function(x){return x<-2;}},
               {k:'w',label:'within 2 h',color:SC_C.ok,f:function(x){return x>=-2&&x<=2;}},
@@ -12923,7 +12943,8 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       if(!un){ try { var r=await fetch('/api/shift/bh-untimed?from='+pf+'&to='+scSel.to); un=r.ok?await r.json():{rows:[]}; } catch(e){ un={rows:[]}; } scUntimed[key]=un; }
       var IX=scSeqIndex();
       var m=scMetrics(scSel.from,scSel.to,un,IX), pv=scMetrics(pf,pt,un,IX);
-      body.innerHTML=scDraw(m,(pv.tot.planned||pv.lrows.length)?pv:null);
+      scLast={m:m,pv:(pv.tot.planned||pv.lrows.length)?pv:null};
+      body.innerHTML=scDraw(scLast.m,scLast.pv);
       var note=document.getElementById('scPrevNote'); if(note) note.textContent='Arrows compare with '+scDM(pf)+' - '+scDM(pt)+', the same number of days before.';
     } catch(e){ console.error('scorecard',e); body.innerHTML='<div class="scempty">Could not work out the scorecard: '+escAttr(e.message||e)+'</div>'; }
     finally { scBusy=false; }
@@ -12934,6 +12955,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var fi=document.getElementById('scFrom'), ti=document.getElementById('scTo'), cs=document.getElementById('scCompany');
     if(fi) fi.addEventListener('change',go); if(ti) ti.addEventListener('change',go);
     if(cs) cs.addEventListener('change',function(e){ scSel.company=e.target.value; renderScorecard(); });
+    var sb=document.getElementById('scBody');
+    if(sb) sb.addEventListener('click',function(e){ var b=e.target.closest('[data-route]'); if(!b||!scLast) return;
+      scSel.route=b.getAttribute('data-route'); var y=sb.parentNode.scrollTop; sb.innerHTML=scDraw(scLast.m,scLast.pv); sb.parentNode.scrollTop=y; });
     document.querySelectorAll('#scQuick button').forEach(function(b){ b.addEventListener('click',function(){
       var y=scShift(dKey(new Date()),-1), q=b.dataset.q;
       if(q==='month'){ scSel.from=y.slice(0,8)+'01'; scSel.to=y; }
