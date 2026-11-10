@@ -128,6 +128,8 @@ const oSame = apiA.scDraw(mA, null).split('Where the schedule slips')[1].split('
 apiA.setRoute('');
 check('every circle out of the same 2: A Ngo 1 on time, 0 late, no data 1 (50%)',
       /A Ngo<\/div>.*?1 on time <span class="sclate">· 0 late<\/span><\/div><div class="scnod">no data 1 \(50%\)/.test(oSame), true);
+check('ring parts: on time always green, late red, no data grey (never two reds)',
+      (() => { const r = (oSame.split('A Ngo</div>')[0].split('<svg').pop()) || ''; return r.includes('stroke="#34d399"'); })(), true);
 check('...arrive mine: 2 on time, nothing missing', /Arrive mine<\/div>.*?2 on time <span class="sclate">· 0 late<\/span><\/div><div class="scnod">no data 0 \(0%\)/.test(oSame), true);
 
 console.log('\nthe page');

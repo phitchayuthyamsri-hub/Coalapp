@@ -13064,7 +13064,9 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var node=function(c){ var v=CPU[c.id], late=v.n-v.ok, nod=Math.max(0,TOT-v.n), pc=scPct(v.ok,TOT), b=scBand(pc);
       return '<div class="scnode'+(worst3&&worst3.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' on time, '+late+' late, '+nod+' no data - of '+TOT+' planned trucks that came'
           +(nod?'\nno data = no GPS time there, the truck has not got there yet'+(c.id==='leave'||c.id==='back'||c.id==='ango'?', or the plan has no time for it':''):''))+'">'
-        +scRing3(v.ok,late,nod,TOT,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
+        // on time is always green, so it never looks like late (10/11/2026: a red on-time
+        // arc next to the red late arc read as "all late"); the rating stays on the text
+        +scRing3(v.ok,late,nod,TOT,SC_C.ok)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
         +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+' on time <span class="sclate">· '+late+' late</span></div>'
         +'<div class="scnod">no data '+nod+' ('+(TOT?Math.round(100*nod/TOT):0)+'%)</div>'
         +(worst3&&worst3.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
