@@ -3163,7 +3163,9 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     [data-page-panel="score"] .sctime .tnode.ango{border-left-color:#e0a93f}
     [data-page-panel="score"] .sctime .scroutenote{color:var(--muted);font-size:11.5px;margin:-4px 0 10px;text-align:center}
     [data-page-panel="score"] .scchips button.none{opacity:.45}
-    [data-page-panel="score"] .scway{background:rgba(255,255,255,.03);outline:1px dashed #3a4651}
+    [data-page-panel="score"] .scway{background:var(--panel);outline:1px dashed #3a4651;display:flex;flex-direction:column;gap:6px;padding:6px 8px;z-index:1}
+    [data-page-panel="score"] .scwayitem{display:flex;align-items:center;gap:10px;text-align:left}
+    [data-page-panel="score"] .scwayitem .scring{width:58px;height:58px;flex:0 0 auto}
     [data-page-panel="score"] .scoff{margin-top:10px;background:rgba(224,169,63,.10);border-left:3px solid #e0a93f;border-radius:6px;padding:7px 12px;font-size:12.5px;color:var(--ink)}
     [data-page-panel="score"] .scchips button.on{background:var(--accent);border-color:var(--accent);color:#04201c;font-weight:700}
     [data-page-panel="score"] .schaul{margin-top:10px}
@@ -12845,7 +12847,7 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
     var sbd={}, tot=z();
     days.forEach(function(d){ var s=(p.sbd&&p.sbd[d])||z(); sbd[d]=s; for(var k in tot) tot[k]+=(s[k]||0); });
     // ---- 3.1 + 3.2: every plan that came, checkpoint by checkpoint
-    var cps={}, cpsR={}, offR={}, tim={'':{}}, way={n:0,ql49:0,dak:0,both:0}, wayR={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var cps={}, cpsR={}, offR={}, tim={'':{}}, way={n:0,ql49:0,dak:0,none:0}, wayR={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
     var addTim=function(rt,L){ [rt,''].forEach(function(r){ var T=tim[r]=tim[r]||{};
       for(var k in SC_TF){ var v=SC_TF[k](L||{}); if(v!=null) (T[k]=T[k]||[]).push(v); } }); };
     var cpOf=function(rt){ if(!cpsR[rt]){ cpsR[rt]={}; SC_CP.forEach(function(c){ cpsR[rt][c.id]={ok:0,n:0}; }); } return cpsR[rt]; };
@@ -12871,9 +12873,11 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       if(away.length){ var o=offR[rt]=offR[rt]||{n:0,where:{},plates:[]}; o.n++; o.plates.push(pl.plate);
         away.forEach(function(w){ o.where[w]=(o.where[w]||0)+1; }); }
       else addTim(rt,L);
-      // the way home: Dakrong = the Detour route zone on QL9, QL49 = the QL49 zone after the port
-      if(!away.length && scT(A.port)!=null){ var gq=scT(A.ql49b)!=null, gd=!!(L.DETOUR&&(L.DETOUR.in||L.DETOUR.out));
-        [way, wayR[rt]=wayR[rt]||{n:0,ql49:0,dak:0,both:0}].forEach(function(W){ W.n++; if(gq) W.ql49++; if(gd) W.dak++; if(gq&&gd) W.both++; }); }
+      // the way home: Dakrong = the Detour route zone on QL9, QL49 = the QL49 zone after the
+      // port. One road per truck (user 10/11/2026: "don't mix - if it's Dakrong, it's
+      // Dakrong only"): a truck that passed Dakrong is Dakrong even if it touched QL49.
+      if(!away.length && scT(A.port)!=null){ var gd=!!(L.DETOUR&&(L.DETOUR.in||L.DETOUR.out)), gq=!gd&&scT(A.ql49b)!=null;
+        [way, wayR[rt]=wayR[rt]||{n:0,ql49:0,dak:0,none:0}].forEach(function(W){ W.n++; if(gd) W.dak++; else if(gq) W.ql49++; else W.none++; }); }
       var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back),
           aP=scT(A.port), pP=scT(PL.PORT&&PL.PORT.out);
       // split at the port (unloading done): front haul before it, back haul after
@@ -13027,13 +13031,15 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
         +scRing(pc,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
         +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst3&&worst3.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; };
     var ids=scSel.route&&SC_RT[scSel.route]?SC_RT[scSel.route]:SC_CP.map(function(c){return c.id;}).concat(['way']);
-    var WY=scSel.route?((m.wayR&&m.wayR[scSel.route])||{n:0,ql49:0,dak:0,both:0}):(m.way||{n:0,ql49:0,dak:0,both:0});
-    var wayNode=function(label,cnt,color,sub){ var pc=WY.n?Math.round(100*cnt/WY.n):null;
-      return '<div class="scnode scway" data-tip="'+escAttr(label+'\n'+cnt+' of '+WY.n+' trucks that left the port went home this way'+(WY.both?'\n('+WY.both+' passed both roads)':''))+'">'
-        +scRing(pc,color)+'<div class="scnl">'+label+'</div><div class="scnr">'+sub+'</div><div class="scnb" style="color:var(--ink)">'+cnt+' of '+WY.n+'</div></div>'; };
+    var WY=scSel.route?((m.wayR&&m.wayR[scSel.route])||{n:0,ql49:0,dak:0,none:0}):(m.way||{n:0,ql49:0,dak:0,none:0});
+    var wayNode=function(label,cnt,color){ var pc=WY.n?Math.round(100*cnt/WY.n):null;
+      return '<div class="scwayitem" data-tip="'+escAttr(label+'\n'+cnt+' of '+WY.n+' trucks that left the port went home this way only'+(WY.none?'\n'+WY.none+' not seen on either road':''))+'">'
+        +scRing(pc,color)+'<div><div class="scnl">'+label+'</div><div class="scnb" style="color:var(--ink)">'+cnt+' of '+WY.n+'</div></div></div>'; };
     var row=function(haul,title){ var cs=SC_CP.filter(function(c){return c.haul===haul&&ids.indexOf(c.id)>=0;});
-      var pre=(haul==='bh'&&ids.indexOf('way')>=0)?wayNode('QL49',WY.ql49,SC_C.blue,'way home')+wayNode('Dakrong (QL9)',WY.dak,'#2dd4bf','way home'):'';
-      var cols=cs.length+(pre?2:0); if(!cols) return '';
+      // the two roads home stacked in one column, QL49 above Dakrong (user 10/11/2026)
+      var pre=(haul==='bh'&&ids.indexOf('way')>=0)?'<div class="scnode scway"><div class="scnr" style="margin-bottom:4px">way home</div>'
+        +wayNode('QL49',WY.ql49,SC_C.blue)+wayNode('Dakrong (QL9)',WY.dak,'#2dd4bf')+'</div>':'';
+      var cols=cs.length+(pre?1:0); if(!cols) return '';
       return '<div class="schaul"><div class="schaulh">'+title+'</div><div class="scroute" style="grid-template-columns:repeat('+cols+',minmax(0,1fr))">'+pre+cs.map(node).join('')+'</div></div>'; };
     h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
       +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'

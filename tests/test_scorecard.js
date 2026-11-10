@@ -83,9 +83,11 @@ check('port left 18:00: outside 07:00-17:00', cp('port'), [0, 1]);
 check('back 30 min after plan: on time', cp('back'), [1, 1]);
 check('no time at a point = not counted there', cp('borderb'), [0, 0]);
 check('QL49 empty is no longer judged on its window', m.cps.ql49b, undefined);
-check('the way home is counted: A1 went home by Dakrong', m.way, { n: 1, ql49: 0, dak: 1, both: 0 });
+check('the way home is counted: A1 went home by Dakrong', m.way, { n: 1, ql49: 0, dak: 1, none: 0 });
+const seqsBoth = seqs.map(c => c.detourIn ? Object.assign({}, c, { ql49BackIn: T('2026-11-03T18:20'), ql49BackOut: T('2026-11-03T18:30') }) : c);
+check('passed QL49 and Dakrong: Dakrong only, never both', build(plans, seqsBoth, untimed).run('2026-11-01', '2026-11-05').way, { n: 1, ql49: 0, dak: 1, none: 0 });
 const outW = api.scDraw(m, null);
-check('two circles in the back haul row: QL49 and Dakrong', outW.includes('>QL49</div>') && outW.includes('>Dakrong (QL9)</div>'), true);
+check('QL49 and Dakrong stacked in one column, QL49 on top', /class="scnode scway">[\s\S]*>QL49<\/div>[\s\S]*>Dakrong \(QL9\)<\/div>/.test(outW), true);
 check('...counted, not judged (0 of 1 / 1 of 1)', outW.includes('>0 of 1</div>') && outW.includes('>1 of 1</div>'), true);
 
 console.log('\n3.2-3.3: cycle and recovery');
