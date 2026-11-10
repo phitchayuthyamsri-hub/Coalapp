@@ -34,6 +34,7 @@ function build(plans, seqs, untimed, company) {
     BORDER: { in: I(c.lalayOutIn), out: I(c.lalayOutOut) }, PORT: { in: I(c.chanMayIn), out: I(c.chanMayOut) },
     BORDER_BACK: { in: null, out: I(c.lalayBackOut) }, BACK_RET: I(c.xpplR), QL49_BACK: { in: null, out: I(c.ql49BackOut) },
     ANGO: c.angoIn ? { in: I(c.angoIn), out: I(c.angoOut) } : undefined,
+    DETOUR: c.detourIn ? { in: I(c.detourIn), out: I(c.detourOut) } : undefined,
     BORDER_HOME: c.borderHomeOut ? { in: null, out: I(c.borderHomeOut) } : undefined } };
   const all = { from: '2026-10-01', plates: {} };
   for (const pl of ACS.fleet) { all.plates[pl] = {}; for (let d = 1; d <= 9; d++) all.plates[pl]['2026-11-0' + d] = (1 << 24) - 1; }
@@ -59,7 +60,7 @@ const plans = [
 const seqs = [
   { plate: 'A1', cycleDate: T('2026-11-02T07:30'), xpplIn: T('2026-11-02T07:30'), loadingIn: T('2026-11-02T07:40'), loadingOut: T('2026-11-02T08:30'),
     xpplOut: T('2026-11-02T08:40'), lalayOutOut: T('2026-11-02T16:00'), ql49OutOut: T('2026-11-02T20:00'), chanMayOut: T('2026-11-03T18:00'),
-    xpplR: T('2026-11-03T20:00') },
+    detourIn: T('2026-11-03T18:40'), detourOut: T('2026-11-03T18:50'), xpplR: T('2026-11-03T20:00') },
   { plate: 'A1', cycleDate: T('2026-11-03T20:00'), xpplIn: T('2026-11-03T20:00'), loadingIn: T('2026-11-03T21:00'), loadingOut: T('2026-11-03T22:00') },
   { plate: 'D4', cycleDate: T('2026-11-02T20:00'), xpplIn: T('2026-11-02T20:00') }];
 const untimed = { rows: [
@@ -80,7 +81,12 @@ check('border crossed 16:00: inside 15:00-17:00', cp('border'), [1, 1]);
 check('QL49 entered 20:00: inside 19:00-24:00', cp('ql49'), [1, 1]);
 check('port left 18:00: outside 07:00-17:00', cp('port'), [0, 1]);
 check('back 30 min after plan: on time', cp('back'), [1, 1]);
-check('no time at a point = not counted there', cp('ql49b'), [0, 0]);
+check('no time at a point = not counted there', cp('borderb'), [0, 0]);
+check('QL49 empty is no longer judged on its window', m.cps.ql49b, undefined);
+check('the way home is counted: A1 went home by Dakrong', m.way, { n: 1, ql49: 0, dak: 1, both: 0 });
+const outW = api.scDraw(m, null);
+check('two circles in the back haul row: QL49 and Dakrong', outW.includes('>QL49</div>') && outW.includes('>Dakrong (QL9)</div>'), true);
+check('...counted, not judged (0 of 1 / 1 of 1)', outW.includes('>0 of 1</div>') && outW.includes('>1 of 1</div>'), true);
 
 console.log('\n3.2-3.3: cycle and recovery');
 check('cycle 36.5 h against 36.5 h planned', m.cyc.map(c => [c.plate, c.act, c.plan, c.diff]), [['A1', 36.5, 36.5, 0]]);
