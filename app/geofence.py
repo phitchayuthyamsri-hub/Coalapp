@@ -55,7 +55,7 @@ def for_engine():
     """Every zone, retired ones included, in the shape engine.build_visits
     reads - with its versions, so the engine can pick the right one per ping."""
     vers = _versions_by_anchor()
-    return [{"id": a.id, "name": a.name, "polygon": a.polygon,
+    return [{"id": a.id, "name": a.name, "polygon": a.polygon, "role": a.role or "",
              "min_dwell_min": a.min_dwell_min if a.min_dwell_min is not None else 5,
              "versions": vers.get(a.id) or [],
              "retired_at": a.retired_at}

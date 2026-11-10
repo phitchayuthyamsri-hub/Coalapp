@@ -42,6 +42,51 @@ def point_in_polygon(lat, lng, poly):
         j = i
     return inside
 
+# A position this close to a zone's edge counts as in the zone (10/11/2026: 1-10 Nov,
+# 37 points were missing because the truck stood 60-300 m outside the drawn edge -
+# back at the mine 29, A Ngo 6, border 2). Further out is left as it is.
+ZONE_EDGE_KM = 0.3
+_BBOX = {}
+
+
+def _edge_km(lat, lng, a, b):
+    k = 111.32
+    cl = math.cos(math.radians(lat))
+    ax, ay = (a[1] - lng) * k * cl, (a[0] - lat) * k
+    bx, by = (b[1] - lng) * k * cl, (b[0] - lat) * k
+    dx, dy = bx - ax, by - ay
+    t = 0.0 if (dx == 0 and dy == 0) else max(0.0, min(1.0, -(ax * dx + ay * dy) / (dx * dx + dy * dy)))
+    return math.hypot(ax + t * dx, ay + t * dy)
+
+
+def in_zone(lat, lng, poly, margin_km=ZONE_EDGE_KM):
+    """Inside the polygon, or within margin_km of its edge."""
+    if point_in_polygon(lat, lng, poly):
+        return True
+    if not margin_km:
+        return False
+    key = id(poly)
+    bb = _BBOX.get(key)
+    if bb is None or bb[0] is not poly:
+        if len(_BBOX) > 500:          # zones are re-read on every run; keep the cache small
+            _BBOX.clear()
+        lats = [p[0] for p in poly]; lngs = [p[1] for p in poly]
+        dlat = margin_km / 111.32
+        dlng = margin_km / (111.32 * max(0.2, math.cos(math.radians(sum(lats) / len(lats)))))
+        bb = (poly, min(lats) - dlat, max(lats) + dlat, min(lngs) - dlng, max(lngs) + dlng)
+        _BBOX[key] = bb
+    if not (bb[1] <= lat <= bb[2] and bb[3] <= lng <= bb[4]):
+        return False
+    n = len(poly)
+    return any(_edge_km(lat, lng, poly[i], poly[(i + 1) % n]) <= margin_km for i in range(n))
+
+
+# Checkpoints a truck drives THROUGH: one position there is the pass, whatever the
+# zone's minimum dwell (10/11/2026: sparse providers send one position at the border
+# or on QL49 and the 5-minute dwell threw the pass away - e.g. 74H00718 on 08/11).
+PASS_ROLES = ("border", "ql49", "ql49b", "ql49p", "detour")
+
+
 def polygon_centroid(poly):
     lat = sum(p[0] for p in poly) / len(poly)
     lng = sum(p[1] for p in poly) / len(poly)
@@ -260,10 +305,10 @@ def build_visits(pings, anchors, deactivated=None, now=None):
             prev_ping = None
             for ping in plist:
                 poly, dwell = anchor_at(anchor, ping["dt"])
-                inside_now = bool(poly) and point_in_polygon(ping["lat"], ping["lng"], poly)
+                inside_now = bool(poly) and in_zone(ping["lat"], ping["lng"], poly)
                 if not inside_prev and inside_now:
                     visit_count += 1
-                    min_ms = (dwell or 0) * 60000
+                    min_ms = 0 if anchor.get("role") in PASS_ROLES else (dwell or 0) * 60000
                     current = {"plate": plate, "anchor_id": anchor["id"],
                                "anchor_name": anchor["name"], "visit_num": visit_count,
                                "enter": ping["dt"], "exit": None, "open": False,
