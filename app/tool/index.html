@@ -12877,7 +12877,10 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       var mi=p.matchInfo[k], pl=p.planByKey&&p.planByKey[k], ac=p.actByKey&&p.actByKey[mi.actKey];
       if(!pl||!ac||!scFleetOk(pl.plate)||!scCoOk(pl.plate)) continue;
       var pe=pl.ent||{}, ae=ac.ent||{}, L=ae.locs||{}, PL=pe.locs||{}, s=IX.byKey[mi.actKey]||{};
-      var A={mine:L.MINE&&L.MINE.in, leave:L.LOADING&&L.LOADING.out, border:L.BORDER&&L.BORDER.out,
+      // leave mine = the departure from the mine zone (its last exit before the next
+      // location), the loading-area exit only when that is missing (10/11/2026: every
+      // truck that came left the mine, but the loading zone is often not caught)
+      var A={mine:L.MINE&&L.MINE.in, leave:(L.MINE&&L.MINE.out)||(L.LOADING&&L.LOADING.out), border:L.BORDER&&L.BORDER.out,
              ango:L.ANGO&&L.ANGO.in, ql49:s.ql49OutOut, port:L.PORT&&L.PORT.out, ql49b:L.QL49_BACK&&L.QL49_BACK.out,
              borderb:(L.BORDER_BACK&&L.BORDER_BACK.out)||(L.BORDER_HOME&&L.BORDER_HOME.out), back:L.BACK_RET};
       var P={leave:PL.MINE&&PL.MINE.out, ango:pe.ango, back:pe.ot&&pe.ot.mineReturn};
