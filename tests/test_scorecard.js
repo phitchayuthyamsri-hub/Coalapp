@@ -99,6 +99,8 @@ const out = api.scDraw(api.run('2026-11-01', '2026-11-05'), null);
 check('draws the four steps', ['Did the plan happen?', 'Where the schedule slips', 'How long a cycle takes',
       'Back at the mine, loading again', 'Opportunity lost'].every(t => out.includes(t)), true);
 check('the menu has it', /data-page="score">Scorecard</.test(html), true);
+check('the page scrolls inside itself (10/11/2026: no scroll bar)',
+      /\[data-page-panel="score"\] \.scwrap\{flex:1 1 auto;min-height:0;overflow-y:auto/.test(html), true);
 
 console.log('\n' + (FAIL ? FAIL + ' FAILED' : 'ALL PASS'));
 process.exit(FAIL ? 1 : 0);
