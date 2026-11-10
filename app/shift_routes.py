@@ -4074,6 +4074,60 @@ def dates():
                    scoped=(only is not None))
 
 
+_PREV_TRIP = re.compile(r"b[ốổoồ]c\s*m[ỏo]|b[ổố]\s*m[ỏo]", re.I)
+_REPAIR = re.compile(r"h[ỏo]ng|s[ửu]a", re.I)
+
+
+def _untimed_group(remark):
+    """Why a truck declared BH carries no time, from the remark as typed:
+    'prev' - still on its previous trip ('Bốc mỏ 30/09': loaded the day before),
+    'repair' - broken down or in repair ('Xe hỏng…', '…sửa xe'),
+    '' - nothing said. The page then asks the GPS whether it came anyway."""
+    t = remark or ""
+    if _REPAIR.search(t):
+        return "repair"
+    if _PREV_TRIP.search(t):
+        return "prev"
+    return ""
+
+
+@bp.get("/bh-untimed")
+@login_required
+def bh_untimed():
+    """Opportunity lost (Reports > Scorecard, 10/11/2026): every truck a company
+    declared BH (coming back) with no time at the mine, per day, with the remark
+    it typed - plus how many trucks were declared and how many BH, for scale.
+
+    Read-only. A company login sees its own sheets only."""
+    frm = request.args.get("from") or ""
+    to = request.args.get("to") or ""
+    if not (re.match(r"^\d{4}-\d{2}-\d{2}$", frm) and re.match(r"^\d{4}-\d{2}-\d{2}$", to)):
+        return jsonify(error="from and to are needed, as YYYY-MM-DD"), 400
+    q = (db.session.query(DailyList.list_date, DailyList.subcontractor_id, DailyListRow)
+         .join(DailyListRow, DailyListRow.list_id == DailyList.id)
+         .filter(DailyList.list_date >= frm, DailyList.list_date <= to))
+    if _role() == "subcontractor":
+        q = q.filter(DailyList.subcontractor_id == getattr(current_user, "subcontractor_id", None))
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
+    days, rows = {}, []
+    for day, sid, r in q.all():
+        dd = days.setdefault(day, {"declared": 0, "bh": 0, "untimed": 0})
+        dd["declared"] += 1
+        if (r.note or "").strip() != "BH":
+            continue
+        dd["bh"] += 1
+        if (r.arrive_hhmm or "").strip():
+            continue
+        dd["untimed"] += 1
+        remark = (r.remark or r.reason or "").strip()
+        rows.append({"day": day, "plate": r.plate,
+                     "key": re.sub(r"[^A-Z0-9]", "", (r.plate or "").upper()),
+                     "company": subs.get(sid, ""), "location": r.location or "",
+                     "remark": remark, "group": _untimed_group(remark)})
+    rows.sort(key=lambda x: (x["day"], x["company"], x["plate"]))
+    return jsonify(days=days, rows=rows)
+
+
 @bp.get("/list")
 @login_required
 def get_list():

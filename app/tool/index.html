@@ -2393,6 +2393,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     <div class="nav-group-menu">
       <button data-page="perf" class="active">Performance</button>
       <button data-page="daily">Daily performance</button>
+      <button data-page="score">Scorecard</button>
       <button data-page="pva">Plan vs Actual</button>
     </div>
   </div>
@@ -3048,6 +3049,100 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
     </div>
     </div>
   </div>
+</div>
+
+<!-- ============ PAGE: SCORECARD (Reports > Scorecard, 10/11/2026) ============ -->
+<div class="page" data-page-panel="score">
+  <style>
+    [data-page-panel="score"] .scwrap{padding:18px 22px 60px;max-width:1240px;margin:0 auto;color:var(--ink);font-size:13px}
+    [data-page-panel="score"] .scctrl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+    [data-page-panel="score"] .scctrl label{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:12px}
+    [data-page-panel="score"] .scctrl input,[data-page-panel="score"] .scctrl select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12.5px}
+    [data-page-panel="score"] #scQuick{display:inline-flex;gap:4px}
+    [data-page-panel="score"] #scQuick button{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+    [data-page-panel="score"] #scQuick button:hover{color:var(--ink);border-color:var(--accent)}
+    [data-page-panel="score"] .scnote{color:var(--muted);font-size:11.5px;margin-left:auto}
+    [data-page-panel="score"] .scsay{background:linear-gradient(90deg,rgba(45,212,191,.10),rgba(45,212,191,0));border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:14px;line-height:1.65}
+    [data-page-panel="score"] .scsay b{color:#fff}
+    [data-page-panel="score"] .sctiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+    [data-page-panel="score"] .sctile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+    [data-page-panel="score"] .sctk{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.2px}
+    [data-page-panel="score"] .sctv{font-size:38px;font-weight:700;line-height:1.15;margin:4px 0 2px;color:#fff;font-variant-numeric:tabular-nums}
+    [data-page-panel="score"] .scts{color:var(--muted);font-size:12px}
+    [data-page-panel="score"] .scdelta{margin-top:8px;font-size:12px;font-weight:700}
+    [data-page-panel="score"] .scdelta span{color:var(--muted);font-weight:400}
+    [data-page-panel="score"] .scdelta.good{color:#34d399} [data-page-panel="score"] .scdelta.bad{color:#f87171} [data-page-panel="score"] .scdelta.flat{color:var(--muted)}
+    [data-page-panel="score"] .sccard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;min-width:0}
+    [data-page-panel="score"] .sccard h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;gap:8px}
+    [data-page-panel="score"] .scn{background:var(--panel2);border:1px solid var(--line);color:var(--accent);border-radius:6px;font-size:11px;padding:1px 6px}
+    [data-page-panel="score"] .scsub{color:var(--muted);font-size:12px;margin-bottom:12px}
+    [data-page-panel="score"] .sctwo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    [data-page-panel="score"] .sctwo .sccard{margin-bottom:14px}
+    [data-page-panel="score"] .scsplit{display:flex;gap:2px;height:30px;border-radius:6px;overflow:hidden}
+    [data-page-panel="score"] .scsplit div{min-width:3px}
+    [data-page-panel="score"] .scsplitlab{display:flex;gap:2px;margin-top:6px}
+    [data-page-panel="score"] .scsplitlab div{overflow:hidden;white-space:nowrap;min-width:3px}
+    [data-page-panel="score"] .scsplitlab b{display:block;font-size:16px;color:#fff}
+    [data-page-panel="score"] .scsplitlab span{color:var(--muted);font-size:11px}
+    [data-page-panel="score"] .scpill{display:inline-flex;align-items:center;gap:8px;margin:12px 0 4px;border:1px solid;border-radius:999px;padding:4px 12px;font-size:12.5px}
+    [data-page-panel="score"] .scpill i{width:9px;height:9px;transform:rotate(45deg);display:inline-block}
+    [data-page-panel="score"] .scchart{overflow-x:auto;margin-top:10px}
+    [data-page-panel="score"] .scsvg{width:100%;min-width:520px;height:auto;display:block}
+    [data-page-panel="score"] .scgrid{stroke:#2a343d;stroke-width:1}
+    [data-page-panel="score"] .scax{fill:#8b98a5;font-size:10px}
+    [data-page-panel="score"] .sclegend{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:11.5px;margin-top:6px}
+    [data-page-panel="score"] .sclegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+    [data-page-panel="score"] .scroute{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;position:relative;padding-top:4px}
+    [data-page-panel="score"] .scroute:before{content:"";position:absolute;left:6%;right:6%;top:42px;height:2px;background:repeating-linear-gradient(90deg,#3a4651 0 8px,transparent 8px 14px)}
+    [data-page-panel="score"] .scnode{position:relative;text-align:center;padding:2px 2px 6px;border-radius:10px}
+    [data-page-panel="score"] .scnode.worst{background:rgba(248,113,113,.08);outline:1px solid rgba(248,113,113,.45)}
+    [data-page-panel="score"] .scring{width:76px;height:76px;position:relative;background:var(--panel);border-radius:50%}
+    [data-page-panel="score"] .scringbg{fill:var(--panel);stroke:#26313a;stroke-width:7}
+    [data-page-panel="score"] .scringtxt{fill:#fff;font-size:15px;font-weight:700}
+    [data-page-panel="score"] .scnl{font-weight:600;font-size:12px;margin-top:4px}
+    [data-page-panel="score"] .scnr{color:var(--muted);font-size:10.5px}
+    [data-page-panel="score"] .scnb{font-size:11.5px;font-weight:700;margin-top:2px}
+    [data-page-panel="score"] .sctag{display:inline-block;margin-top:4px;background:#f87171;color:#1b0f0f;font-size:10px;font-weight:800;border-radius:999px;padding:1px 8px;text-transform:uppercase;letter-spacing:.4px}
+    [data-page-panel="score"] .scvs{display:grid;gap:8px;margin:4px 0 14px}
+    [data-page-panel="score"] .scvs>div{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:8px}
+    [data-page-panel="score"] .scvs span{color:var(--muted);font-size:12px}
+    [data-page-panel="score"] .scvs b{font-size:16px;color:#fff;text-align:right}
+    [data-page-panel="score"] .scvsbar{height:14px;background:var(--panel2);border-radius:4px;overflow:hidden}
+    [data-page-panel="score"] .scvsbar div{height:100%;border-radius:4px}
+    [data-page-panel="score"] .schist{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;align-items:end}
+    [data-page-panel="score"] .schb{text-align:center}
+    [data-page-panel="score"] .schbar{height:110px;display:flex;align-items:flex-end;justify-content:center}
+    [data-page-panel="score"] .schbar div{width:70%;border-radius:4px 4px 0 0;min-height:2px}
+    [data-page-panel="score"] .schb b{display:block;font-size:14px;margin-top:4px}
+    [data-page-panel="score"] .schb span{color:var(--muted);font-size:10.5px;line-height:1.2;display:block}
+    [data-page-panel="score"] .scfoot{color:var(--muted);font-size:12px;margin-top:10px}
+    [data-page-panel="score"] .scbig{font-size:14px;margin-bottom:10px;color:var(--muted)}
+    [data-page-panel="score"] .scbig b{font-size:30px;color:#fff;margin-right:6px}
+    [data-page-panel="score"] .sclist{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
+    [data-page-panel="score"] .sclh{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+    [data-page-panel="score"] .sclist>div:not(.sclh){display:grid;grid-template-columns:96px 1fr auto;gap:8px;padding:4px 0;border-bottom:1px dashed #26313a;font-size:12.5px}
+    [data-page-panel="score"] .sclist span:first-child{font-family:var(--mono)}
+    [data-page-panel="score"] .scmut{color:var(--muted)}
+    [data-page-panel="score"] .scempty{color:var(--muted);padding:18px 4px}
+    #scTip{position:fixed;z-index:9999;display:none;pointer-events:none;background:#0a1014;border:1px solid #2a343d;color:#e6edf3;border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.5;box-shadow:0 6px 18px rgba(0,0,0,.4);max-width:280px}
+    @media (max-width:900px){
+      [data-page-panel="score"] .sctiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+      [data-page-panel="score"] .sctwo{grid-template-columns:1fr}
+      [data-page-panel="score"] .scroute{grid-template-columns:repeat(4,minmax(0,1fr))}
+      [data-page-panel="score"] .scroute:before{display:none}
+    }
+  </style>
+  <div class="scwrap">
+    <div class="scctrl">
+      <label>From <input type="date" id="scFrom"></label>
+      <label>To <input type="date" id="scTo"></label>
+      <span id="scQuick"><button data-q="month">This month</button><button data-q="last">Last month</button><button data-q="7">Last 7 days</button><button data-q="30">Last 30 days</button></span>
+      <label id="scCompanyWrap">Subcontractor <select id="scCompany"></select></label>
+      <span class="scnote" id="scPrevNote"></span>
+    </div>
+    <div id="scBody"></div>
+  </div>
+  <div id="scTip"></div>
 </div>
 
 <!-- ============ PAGE: DAILY PERFORMANCE ============ -->
@@ -8431,6 +8526,7 @@ document.querySelectorAll('#pageNav button[data-page]').forEach(btn => {
     if (t === 'ops') { const _of = document.getElementById('opsFrame'); if (_of && !_of.getAttribute('src')) _of.setAttribute('src', _of.dataset.src); }
     if (t === 'perf') { if (window.renderPerfTab) window.renderPerfTab(); }
     if (t === 'daily') { if (window.renderPerfTab) window.renderPerfTab(); }
+    if (t === 'score') { if (window.renderScorecard) window.renderScorecard(); }
     if (t === 'subfleet') { renderSubFleet(); }
     try { injectPageHelp(); } catch (e) {}
   });
@@ -12480,6 +12576,8 @@ function computePerf(){
     dates, sbd, grid, arrivalBadge, timing,
     counts:{planned:plannedActs.length, unplan:unplanned.length},
     actsInRange: actUniq,
+    // the pairs themselves, for the Scorecard's checkpoints (10/11/2026)
+    matchInfo, planByKey, actByKey,
     list:{asPlanned, offPlan, waiting:waitingFinal, noShow:noShowFinal, noGps:noGpsFinal, unplanned}
   };
 }
@@ -12540,6 +12638,285 @@ function applyPerfYear(y){ perfMode='year'; perfYear=y; populatePerfYears(); ref
       render();
     });
   })();
+  // ======================= SCORECARD (Reports > Scorecard) =======================
+  // 10/11/2026 (user): the October performance file, "in program, more visualize,
+  // less number and more impact". Steps 1-2 ARE the Daily report's numbers -
+  // computePerf run over the chosen period - so the two pages never disagree.
+  // Steps 3-4 are worked out here from the same plans and GPS cycles, plus the
+  // trucks the companies declared BH with no time (/api/shift/bh-untimed).
+  var scSel={from:null,to:null,company:''}, scUntimed={}, scBusy=false;
+  var SC_C={ok:'#34d399',off:'#a78bfa',miss:'#f87171',nogps:'#9aa4b2',wait:'#7aa7ff',extra:'#e0a93f',
+            blue:'#60a5fa',orange:'#fb923c'};
+  // Along the road, in the order a truck meets them. A window is the gate's own
+  // hours (Setting); the mine and the return are judged against the plan.
+  var SC_CP=[
+    {id:'mine',   label:'Arrive mine',    rule:'within 1 h of plan'},
+    {id:'leave',  label:'Leave mine',     rule:'within 1 h of plan'},
+    {id:'border', label:'Border, loaded', rule:'15:00 - 17:00', win:[15*60,17*60]},
+    {id:'ql49',   label:'QL49, loaded',   rule:'19:00 - 24:00', win:[19*60,24*60]},
+    {id:'port',   label:'Port',           rule:'leave 07:00 - 17:00', win:[7*60,17*60]},
+    {id:'ql49b',  label:'QL49, empty',    rule:'00:00 - 05:00', win:[0,5*60]},
+    {id:'borderb',label:'Border, empty',  rule:'07:00 - 19:00', win:[7*60,19*60]},
+    {id:'back',   label:'Back at mine',   rule:'within 1 h of plan'}];
+  function scShift(iso,n){ var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return dKey(d); }
+  function scDays(f,t){ var out=[], d=f; while(d<=t){ out.push(d); d=scShift(d,1); } return out; }
+  function scMed(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+  function scPct(a,b){ return b? Math.round(100*a/b) : null; }
+  function scT(x){ if(x==null) return null; var t=(x instanceof Date)?x.getTime():Date.parse(x); return isNaN(t)?null:t; }
+  function scTod(t){ var d=new Date(t); return d.getHours()*60+d.getMinutes(); }
+  function scCo(pl){ return ((ACS.fleetMeta||{})[pl]||{}).company||''; }
+  function scFleetOk(pl){ return isInFleet(pl) && !isDeactivated(pl); }
+  function scCoOk(pl){ var c=scSel.company; return !c || (c==='-' ? !scCo(pl) : scCo(pl)===c); }
+  function scDM(iso){ return iso.slice(8,10)+'/'+iso.slice(5,7); }
+  function scWhen(t){ var d=new Date(t); return dKey(d).slice(8,10)+'/'+dKey(d).slice(5,7)+' '+hm(d); }
+  function scH(ms){ return Math.round(ms/36e5*10)/10; }
+
+  // The raw GPS cycles by plate, oldest first, and by the key ACS.actual uses.
+  function scSeqIndex(){
+    var byPlate={}, byKey={};
+    (STATE.sequences||[]).forEach(function(c){ if(!c||!c.plate) return; var p=normPlate(c.plate);
+      if(c.cycleDate) byKey[p+'|'+dKey(new Date(c.cycleDate))]=c;
+      if(c.xpplIn) (byPlate[p]=byPlate[p]||[]).push(c); });
+    for(var p in byPlate) byPlate[p].sort(function(a,b){ return scT(a.xpplIn)-scT(b.xpplIn); });
+    return {byPlate:byPlate, byKey:byKey};
+  }
+
+  function scMetrics(from,to,untimed,IX){
+    // ---- 1-2: the Daily report itself, in-fleet, this company
+    var keepR=perfRange, keepC=dailyCompany, keepS=STATE.filters?STATE.filters.fleetScope:null, p;
+    perfRange={from:from,to:to}; dailyCompany=scSel.company; if(STATE.filters) STATE.filters.fleetScope='in';
+    try { p=computePerf(); } finally { perfRange=keepR; dailyCompany=keepC; if(STATE.filters) STATE.filters.fleetScope=keepS; }
+    var days=scDays(from,to), z=function(){return {planned:0,asPlanned:0,offPlan:0,waiting:0,noShow:0,noGps:0,unplan:0};};
+    var sbd={}, tot=z();
+    days.forEach(function(d){ var s=(p.sbd&&p.sbd[d])||z(); sbd[d]=s; for(var k in tot) tot[k]+=(s[k]||0); });
+    // ---- 3.1 + 3.2: every plan that came, checkpoint by checkpoint
+    var cps={}; SC_CP.forEach(function(c){ cps[c.id]={ok:0,n:0}; });
+    var cyc=[];
+    for(var k in (p.matchInfo||{})){
+      var mi=p.matchInfo[k], pl=p.planByKey&&p.planByKey[k], ac=p.actByKey&&p.actByKey[mi.actKey];
+      if(!pl||!ac||!scFleetOk(pl.plate)||!scCoOk(pl.plate)) continue;
+      var pe=pl.ent||{}, ae=ac.ent||{}, L=ae.locs||{}, PL=pe.locs||{}, s=IX.byKey[mi.actKey]||{};
+      var A={mine:L.MINE&&L.MINE.in, leave:L.LOADING&&L.LOADING.out, border:L.BORDER&&L.BORDER.out,
+             ql49:s.ql49OutOut, port:L.PORT&&L.PORT.out, ql49b:L.QL49_BACK&&L.QL49_BACK.out,
+             borderb:L.BORDER_BACK&&L.BORDER_BACK.out, back:L.BACK_RET};
+      var P={leave:PL.MINE&&PL.MINE.out, back:pe.ot&&pe.ot.mineReturn};
+      SC_CP.forEach(function(c){ var t=scT(A[c.id]); if(t==null) return; var ok;
+        if(c.id==='mine') ok=!!mi.onTime;
+        else if(c.win){ var m=scTod(t); ok=m>=c.win[0]&&m<=c.win[1]; }
+        else { var pt=scT(P[c.id]); if(pt==null) return; ok=Math.abs(t-pt)<=36e5; }
+        cps[c.id].n++; if(ok) cps[c.id].ok++; });
+      var a0=scT(A.mine), a1=scT(A.back), p0=scT(PL.MINE&&PL.MINE.in), p1=scT(P.back);
+      if(a0!=null&&a1!=null&&p0!=null&&p1!=null&&p1>p0)
+        cyc.push({plate:pl.plate,d:pl.d,plan:scH(p1-p0),act:scH(a1-a0),diff:scH((a1-a0)-(p1-p0))});
+    }
+    // ---- 3.3: back at the mine -> its next loading, every fleet truck
+    var rec=[];
+    for(var pp in IX.byPlate){ if(!scFleetOk(pp)||!scCoOk(pp)) continue; var ss=IX.byPlate[pp];
+      for(var i=0;i<ss.length;i++){ var back=scT(ss[i].xpplR); if(back==null) continue; var bd=dKey(new Date(back));
+        if(bd<from||bd>to) continue; var nx=null;
+        for(var j=i+1;j<ss.length;j++){ var st=scT(ss[j].loadingIn)||scT(ss[j].xpplOut); if(st!=null&&st>back){ nx=st; break; } }
+        rec.push({plate:pp,d:bd,back:back,gap:nx!=null?scH(nx-back):null}); } }
+    // ---- 4: declared BH with no time - why, and did the GPS see it come anyway
+    var lost={}, lrows=[];
+    days.forEach(function(d){ lost[d]={prev:0,repair:0,came:0,lost:0}; });
+    ((untimed&&untimed.rows)||[]).forEach(function(r){ if(r.day<from||r.day>to) return; var pk=normPlate(r.key||r.plate);
+      if(!scCoOk(pk)) return; var g=r.group;
+      if(!g){ var d0=Date.parse(r.day+'T00:00:00'), came=false;
+        (IX.byPlate[pk]||[]).some(function(c){ var t=scT(c.xpplIn); if(t!=null&&t>=d0&&t<d0+36*36e5){ came=true; return true; } return false; });
+        g=came?'came':'lost'; }
+      lost[r.day][g]++; lrows.push({plate:pk,d:r.day,g:g,remark:r.remark,company:r.company}); });
+    return {from:from,to:to,days:days,sbd:sbd,tot:tot,cps:cps,cyc:cyc,rec:rec,lost:lost,lrows:lrows};
+  }
+
+  // ---------------------------------------------------------------- drawing
+  // Four even steps of 1, 2 or 5 x 10^k, so the axis reads 0 10 20 30 40, never 13 or 38.
+  function scNice(v){ var raw=Math.max(1,v)/4, e=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/e; return 4*(f<=1?1:f<=2?2:f<=5?5:10)*e; }
+  // Stacked columns, one per day; optional marker series on the same count axis.
+  function scColumns(days,series,valOf,marker){
+    var n=days.length, W=Math.max(520,n*24+56), H=170, L=34, R=10, T=10, B=22, ph=H-T-B;
+    var tot=days.map(function(d){ return series.reduce(function(s,x){ return s+(valOf(d,x.k)||0); },0); });
+    var mx=Math.max.apply(null,tot.concat(marker?days.map(function(d){return marker.val(d)||0;}):[0]).concat([1]));
+    var top=scNice(mx), cw=(W-L-R)/n, bw=Math.min(16,cw*0.6), step=Math.ceil(n/16);
+    var s='<svg viewBox="0 0 '+W+' '+H+'" class="scsvg" role="img">';
+    for(var g=0;g<=4;g++){ var v=top*g/4, y=T+ph*(1-v/top);
+      s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" class="scgrid"/><text x="'+(L-6)+'" y="'+(y+3.5)+'" class="scax" text-anchor="end">'+Math.round(v)+'</text>'; }
+    days.forEach(function(d,i){ var x=L+cw*i+(cw-bw)/2, y=T+ph, lines=[scDM(d)];
+      series.forEach(function(se){ var v=valOf(d,se.k)||0; if(!v) return; var h=ph*v/top; y-=h;
+        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,h-2).toFixed(1)+'" rx="2" fill="'+se.color+'"/>';
+        lines.push(se.label+': '+v); });
+      if(marker){ var mv=marker.val(d)||0; if(mv){ var my=T+ph*(1-mv/top), cx=L+cw*i+cw/2;
+        s+='<path d="M'+cx+' '+(my-5)+' L'+(cx+5)+' '+my+' L'+cx+' '+(my+5)+' L'+(cx-5)+' '+my+'Z" fill="'+marker.color+'" stroke="#161e25" stroke-width="2"/>';
+        lines.push(marker.label+': '+mv); } }
+      if(lines.length===1) lines.push('nothing');
+      s+='<rect x="'+(L+cw*i).toFixed(1)+'" y="'+T+'" width="'+cw.toFixed(1)+'" height="'+ph+'" fill="transparent" data-tip="'+escAttr(lines.join('\n'))+'"/>';
+      if(i%step===0) s+='<text x="'+(L+cw*i+cw/2).toFixed(1)+'" y="'+(H-8)+'" class="scax" text-anchor="middle">'+d.slice(8,10)+'</text>'; });
+    return s+'</svg>';
+  }
+  function scLegend(items){ return '<div class="sclegend">'+items.map(function(it){
+    return '<span><i style="background:'+it.color+(it.diamond?';transform:rotate(45deg);width:9px;height:9px':'')+'"></i>'+escAttr(it.label)+'</span>'; }).join('')+'</div>'; }
+  // One bar split into parts, each labelled underneath with its share.
+  function scSplit(parts){ var t=parts.reduce(function(s,x){ return s+x.v; },0); if(!t) return '<div class="scempty">Nothing in this period.</div>';
+    var bar='', lab='';
+    parts.forEach(function(x){ if(!x.v) return; var w=100*x.v/t;
+      bar+='<div style="width:'+w+'%;background:'+x.color+'" data-tip="'+escAttr(x.label+': '+x.v+' ('+Math.round(w)+'%)')+'"></div>';
+      // a sliver gets no label (they ran into each other); its share is on hover
+      lab+='<div style="width:'+w+'%">'+(w>=7?'<b>'+Math.round(w)+'%</b><span>'+escAttr(x.short||x.label)+'</span>':'')+'</div>'; });
+    return '<div class="scsplit">'+bar+'</div><div class="scsplitlab">'+lab+'</div>'; }
+  function scRing(pc,color){ var r=27, c=2*Math.PI*r, f=pc==null?0:pc/100;
+    return '<svg viewBox="0 0 70 70" class="scring"><circle cx="35" cy="35" r="'+r+'" class="scringbg"/>'
+      +'<circle cx="35" cy="35" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(c*f).toFixed(1)+' '+c.toFixed(1)+'" transform="rotate(-90 35 35)"/>'
+      +'<text x="35" y="40" text-anchor="middle" class="scringtxt">'+(pc==null?'-':pc+'%')+'</text></svg>'; }
+  function scBand(pc){ return pc==null?{c:'#4b5563',i:'·',t:'no data'}: pc>=80?{c:SC_C.ok,i:'✓',t:'good'}: pc>=50?{c:SC_C.extra,i:'!',t:'watch'}:{c:SC_C.miss,i:'✕',t:'poor'}; }
+  // A headline number with its change against the period before.
+  function scTile(title,big,sub,delta,goodUp,unit){
+    var dl='';
+    if(delta!=null&&isFinite(delta)){ var r=Math.round(delta*10)/10, good=goodUp?r>0:r<0, flat=Math.abs(r)<0.5;
+      dl='<div class="scdelta '+(flat?'flat':good?'good':'bad')+'">'+(flat?'▬ ':r>0?'▲ ':'▼ ')+(r>0?'+':'')+r+(unit||'')+' <span>vs period before</span></div>'; }
+    return '<div class="sctile"><div class="sctk">'+title+'</div><div class="sctv">'+big+'</div><div class="scts">'+sub+'</div>'+dl+'</div>'; }
+
+  function scSummary(m){
+    var t=m.tot, judged=t.planned-t.waiting, came=t.asPlanned+t.offPlan;
+    var cy=m.cyc, act=scMed(cy.map(function(c){return c.act;})), pln=scMed(cy.map(function(c){return c.plan;})),
+        over=cy.filter(function(c){return c.diff>2;}).length;
+    var gaps=m.rec.filter(function(r){return r.gap!=null;}), quick=gaps.filter(function(r){return r.gap<=2;}).length;
+    var lost=m.lrows.filter(function(r){return r.g==='lost';}).length;
+    return {judged:judged, came:came, cameP:scPct(came,judged), onP:scPct(t.asPlanned,judged), offP:scPct(t.offPlan,judged),
+            missP:scPct(t.noShow,judged), gpsP:scPct(t.noGps,judged), unP:scPct(t.unplan,judged),
+            act:act, pln:pln, gap:(act!=null&&pln!=null)?act-pln:null, overP:scPct(over,cy.length), over:over,
+            quickP:scPct(quick,gaps.length), quick:quick, gaps:gaps.length, lost:lost};
+  }
+
+  function scDraw(m,prev){
+    var S=scSummary(m), PV=prev?scSummary(prev):null, t=m.tot, h='';
+    var d=function(a,b){ return (PV&&a!=null&&b!=null)?a-b:null; };
+    var period=scDM(m.from)+' - '+scDM(m.to)+' '+m.to.slice(0,4);
+    // ---- what the period says, in words
+    var worst=null; SC_CP.forEach(function(c){ var v=m.cps[c.id]; if(v.n>=3){ var pc=scPct(v.ok,v.n); if(!worst||pc<worst.pc) worst={c:c,pc:pc}; } });
+    var say=[];
+    if(S.judged) say.push('<b>'+S.cameP+'%</b> of the planned trucks reached the mine, and only <b>'+S.onP+'%</b> within an hour of their slot.');
+    if(S.judged&&t.noShow) say.push('<b>'+t.noShow+'</b> planned trucks never came ('+S.missP+'%), while <b>'+t.unplan+'</b> came that were not in the plan.');
+    if(worst) say.push('The schedule slips most at <b>'+escAttr(worst.c.label.toLowerCase())+'</b>: '+worst.pc+'% on time ('+escAttr(worst.c.rule)+').');
+    if(S.gap!=null) say.push('A cycle takes <b>'+Math.round(S.act)+' h</b>, '+(S.gap>=0?'<b>'+Math.round(S.gap)+' h more</b>':'<b>'+Math.round(-S.gap)+' h less</b>')+' than planned.');
+    if(S.lost) say.push('<b>'+S.lost+'</b> trucks were declared coming back with no time and never came.');
+    h+='<div class="scsay">'+(say.length?say.map(function(x){return '<div>'+x+'</div>';}).join(''):'Nothing planned or declared in this period.')+'</div>';
+    // ---- hero tiles
+    h+='<div class="sctiles">'
+      +scTile('Came to the mine', S.cameP==null?'-':S.cameP+'%', S.came+' of '+S.judged+' planned trucks', d(S.cameP,PV&&PV.cameP), true, ' pts')
+      +scTile('On time (within 1 h)', S.onP==null?'-':S.onP+'%', t.asPlanned+' trucks on their slot', d(S.onP,PV&&PV.onP), true, ' pts')
+      +scTile('Cycle vs plan', S.gap==null?'-':(S.gap>=0?'+':'')+Math.round(S.gap*10)/10+' h', S.act==null?'no full cycle yet':Math.round(S.act)+' h actual, '+Math.round(S.pln)+' h planned', d(S.gap,PV&&PV.gap), false, ' h')
+      +scTile('Lost loads', S.lost, 'declared coming back, no time, never came', d(S.lost,PV&&PV.lost), false, '')
+      +'</div>';
+    // ---- 1-2
+    var parts=[{v:t.asPlanned,color:SC_C.ok,label:'On time (within 1 h)',short:'on time'},
+               {v:t.offPlan,color:SC_C.off,label:'Came, 1-12 h off the slot',short:'came off-slot'},
+               {v:t.noShow,color:SC_C.miss,label:'Did not come',short:'did not come'},
+               {v:t.noGps,color:SC_C.nogps,label:'No GPS around the plan time',short:'no GPS'},
+               {v:t.waiting,color:SC_C.wait,label:'Waiting (window still open)',short:'waiting'}];
+    var ser=[{k:'asPlanned',label:'On time',color:SC_C.ok},{k:'offPlan',label:'Came off-slot',color:SC_C.off},
+             {k:'noShow',label:'Did not come',color:SC_C.miss},{k:'noGps',label:'No GPS',color:SC_C.nogps},{k:'waiting',label:'Waiting',color:SC_C.wait}];
+    h+='<section class="sccard"><h3><span class="scn">1-2</span>Did the plan happen?</h3>'
+      +'<div class="scsub">'+t.planned+' trucks planned · '+period+'</div>'
+      +scSplit(parts)
+      +(t.unplan?'<div class="scpill" style="border-color:'+SC_C.extra+'"><i style="background:'+SC_C.extra+'"></i>+'+t.unplan+' trucks came that were <b>not in the plan</b>'+(S.unP!=null?' ('+S.unP+'% of the plan)':'')+'</div>':'')
+      +'<div class="scchart">'+scColumns(m.days,ser,function(dd,k){return m.sbd[dd][k];},{label:'Came, not in plan',color:SC_C.extra,val:function(dd){return m.sbd[dd].unplan;}})+'</div>'
+      +scLegend(ser.filter(function(x){return x.k!=='waiting'||t.waiting;}).concat([{label:'Came, not in plan',color:SC_C.extra,diamond:true}]))
+      +'</section>';
+    // ---- 3.1
+    var nodes=SC_CP.map(function(c){ var v=m.cps[c.id], pc=scPct(v.ok,v.n), b=scBand(pc);
+      return '<div class="scnode'+(worst&&worst.c.id===c.id?' worst':'')+'" data-tip="'+escAttr(c.label+'\n'+c.rule+'\n'+v.ok+' of '+v.n+' trucks on time')+'">'
+        +scRing(pc,b.c)+'<div class="scnl">'+escAttr(c.label)+'</div><div class="scnr">'+escAttr(c.rule)+'</div>'
+        +'<div class="scnb" style="color:'+b.c+'">'+b.i+' '+v.ok+'/'+v.n+'</div>'+(worst&&worst.c.id===c.id?'<div class="sctag">biggest slip</div>':'')+'</div>'; }).join('');
+    h+='<section class="sccard"><h3><span class="scn">3.1</span>Where the schedule slips</h3>'
+      +'<div class="scsub">Trucks that came, checked at each point on the road. ✓ 80% or more on time · ! 50-79% · ✕ under 50%</div>'
+      +'<div class="scroute">'+nodes+'</div></section>';
+    // ---- 3.2 + 3.3 side by side
+    var bins=[{k:'s',label:'> 2 h shorter',color:SC_C.blue,f:function(x){return x<-2;}},
+              {k:'w',label:'within 2 h',color:SC_C.ok,f:function(x){return x>=-2&&x<=2;}},
+              {k:'a',label:'2-12 h longer',color:'#fca5a5',f:function(x){return x>2&&x<=12;}},
+              {k:'b',label:'12-24 h longer',color:SC_C.miss,f:function(x){return x>12&&x<=24;}},
+              {k:'c',label:'1-2 days longer',color:'#ef4444',f:function(x){return x>24&&x<=48;}},
+              {k:'e',label:'> 2 days longer',color:'#dc2626',f:function(x){return x>48;}}];
+    var bc=bins.map(function(b){ return m.cyc.filter(function(c){return b.f(c.diff);}).length; }), bmax=Math.max.apply(null,bc.concat([1]));
+    var hist=bins.map(function(b,i){ return '<div class="schb" data-tip="'+escAttr(b.label+': '+bc[i]+' cycles')+'"><div class="schbar"><div style="height:'+(100*bc[i]/bmax)+'%;background:'+b.color+'"></div></div><b>'+bc[i]+'</b><span>'+escAttr(b.label)+'</span></div>'; }).join('');
+    var mx2=Math.max(S.act||0,S.pln||0,1);
+    h+='<div class="sctwo"><section class="sccard"><h3><span class="scn">3.2</span>How long a cycle takes</h3>'
+      +'<div class="scsub">Mine arrival to the next mine arrival, median of '+m.cyc.length+' cycles</div>'
+      +(m.cyc.length?'<div class="scvs"><div><span>Plan</span><div class="scvsbar"><div style="width:'+(100*S.pln/mx2)+'%;background:#4b5563"></div></div><b>'+Math.round(S.pln)+' h</b></div>'
+        +'<div><span>Actual</span><div class="scvsbar"><div style="width:'+(100*S.act/mx2)+'%;background:'+(S.gap>2?SC_C.miss:SC_C.ok)+'"></div></div><b>'+Math.round(S.act)+' h</b></div></div>'
+        +'<div class="schist">'+hist+'</div><div class="scfoot">'+S.overP+'% of cycles ran more than 2 h over plan</div>':'<div class="scempty">No complete cycle against a plan in this period.</div>')
+      +'</section>';
+    var rb=[{label:'within 2 h',color:SC_C.ok,f:function(g){return g<=2;}},{label:'2-12 h',color:SC_C.extra,f:function(g){return g>2&&g<=12;}},
+            {label:'12-24 h',color:SC_C.orange,f:function(g){return g>12&&g<=24;}},{label:'over a day',color:SC_C.miss,f:function(g){return g>24;}}];
+    var gl=m.rec.filter(function(r){return r.gap!=null;});
+    var slow=gl.filter(function(r){return r.gap>12;}).sort(function(a,b){return b.gap-a.gap;}).slice(0,5);
+    h+='<section class="sccard"><h3><span class="scn">3.3</span>Back at the mine, loading again</h3>'
+      +'<div class="scsub">From the truck reaching the mine to its next loading, '+gl.length+' returns</div>'
+      +(gl.length?'<div class="scbig"><b>'+S.quickP+'%</b> load again within 2 hours</div>'
+        +scSplit(rb.map(function(b){ return {v:gl.filter(function(r){return b.f(r.gap);}).length,color:b.color,label:b.label}; }))
+        +(slow.length?'<div class="sclist"><div class="sclh">Longest waits</div>'+slow.map(function(r){ return '<div><span>'+r.plate+'</span><span class="scmut">'+escAttr(scCo(r.plate))+' · back '+scWhen(r.back)+'</span><b>'+Math.round(r.gap)+' h</b></div>'; }).join('')+'</div>':'')
+        :'<div class="scempty">No truck came back to the mine in this period.</div>')
+      +'</section></div>';
+    // ---- 4
+    var lser=[{k:'lost',label:'No reason, did not come',color:SC_C.miss},{k:'repair',label:'Breakdown / repair',color:SC_C.extra},
+              {k:'came',label:'No reason, came anyway (time missing)',color:SC_C.nogps},{k:'prev',label:'Still on its previous trip',color:SC_C.blue}];
+    var cnt={}; m.lrows.filter(function(r){return r.g==='lost';}).forEach(function(r){ cnt[r.plate]=(cnt[r.plate]||0)+1; });
+    var topL=Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a]||(a<b?-1:1);}).slice(0,6);
+    var lt={prev:0,repair:0,came:0,lost:0}; m.lrows.forEach(function(r){ lt[r.g]++; });
+    h+='<section class="sccard"><h3><span class="scn">4</span>Opportunity lost</h3>'
+      +'<div class="scsub">Trucks the companies declared BH (coming back) with no time at the mine: '+m.lrows.length+' in this period</div>'
+      +(m.lrows.length?'<div class="scbig"><b style="color:'+SC_C.miss+'">'+lt.lost+'</b> never came and gave no reason</div>'
+        +'<div class="scchart">'+scColumns(m.days,lser,function(dd,k){return m.lost[dd][k];})+'</div>'+scLegend(lser)
+        +(topL.length?'<div class="sclist"><div class="sclh">Most often declared coming back, never came</div>'+topL.map(function(pl){ return '<div><span>'+pl+'</span><span class="scmut">'+escAttr(scCo(pl))+'</span><b>'+cnt[pl]+' day'+(cnt[pl]>1?'s':'')+'</b></div>'; }).join('')+'</div>':'')
+        :'<div class="scempty">No truck declared BH without a time in this period.</div>')
+      +'</section>';
+    return h;
+  }
+
+  async function renderScorecard(){
+    var body=document.getElementById('scBody'); if(!body) return;
+    try { acpBuild(); } catch(e){}
+    // the period: this month to yesterday (last month on the 1st)
+    if(!scSel.from){ var y=scShift(dKey(new Date()),-1); scSel.from=y.slice(0,8)+'01'; scSel.to=y; }
+    var fi=document.getElementById('scFrom'), ti=document.getElementById('scTo'); if(fi) fi.value=scSel.from; if(ti) ti.value=scSel.to;
+    var cs=document.getElementById('scCompany');
+    if(cs){ var names={}, none=false; for(var pl in (ACS.fleetMeta||{})){ var c=ACS.fleetMeta[pl].company||''; if(c) names[c]=1; else none=true; }
+      var ks=Object.keys(names).sort(); if(scSel.company&&scSel.company!=='-'&&!names[scSel.company]) scSel.company='';
+      cs.innerHTML='<option value="">All companies</option>'+ks.map(function(n){return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';}).join('')+(none?'<option value="-">(no company)</option>':'');
+      cs.value=scSel.company; var cw=document.getElementById('scCompanyWrap'); if(cw) cw.style.display=(ks.length+(none?1:0))>1?'':'none'; }
+    if(scBusy) return; scBusy=true;
+    body.innerHTML='<div class="scempty">Working it out…</div>';
+    try {
+      var n=scDays(scSel.from,scSel.to).length, pf=scShift(scSel.from,-n), pt=scShift(scSel.from,-1), key=pf+'|'+scSel.to, un=scUntimed[key];
+      if(!un){ try { var r=await fetch('/api/shift/bh-untimed?from='+pf+'&to='+scSel.to); un=r.ok?await r.json():{rows:[]}; } catch(e){ un={rows:[]}; } scUntimed[key]=un; }
+      var IX=scSeqIndex();
+      var m=scMetrics(scSel.from,scSel.to,un,IX), pv=scMetrics(pf,pt,un,IX);
+      body.innerHTML=scDraw(m,(pv.tot.planned||pv.lrows.length)?pv:null);
+      var note=document.getElementById('scPrevNote'); if(note) note.textContent='Arrows compare with '+scDM(pf)+' - '+scDM(pt)+', the same number of days before.';
+    } catch(e){ console.error('scorecard',e); body.innerHTML='<div class="scempty">Could not work out the scorecard: '+escAttr(e.message||e)+'</div>'; }
+    finally { scBusy=false; }
+  }
+  (function scWire(){
+    var go=function(){ var f=document.getElementById('scFrom').value, t=document.getElementById('scTo').value;
+      if(f&&t){ if(f>t){ var x=f; f=t; t=x; } scSel.from=f; scSel.to=t; renderScorecard(); } };
+    var fi=document.getElementById('scFrom'), ti=document.getElementById('scTo'), cs=document.getElementById('scCompany');
+    if(fi) fi.addEventListener('change',go); if(ti) ti.addEventListener('change',go);
+    if(cs) cs.addEventListener('change',function(e){ scSel.company=e.target.value; renderScorecard(); });
+    document.querySelectorAll('#scQuick button').forEach(function(b){ b.addEventListener('click',function(){
+      var y=scShift(dKey(new Date()),-1), q=b.dataset.q;
+      if(q==='month'){ scSel.from=y.slice(0,8)+'01'; scSel.to=y; }
+      else if(q==='last'){ var e=scShift(y.slice(0,8)+'01',-1); scSel.from=e.slice(0,8)+'01'; scSel.to=e; }
+      else { var k=+q; scSel.from=scShift(y,-(k-1)); scSel.to=y; }
+      renderScorecard(); }); });
+    // one tooltip for the whole page: anything with data-tip
+    var tip=document.getElementById('scTip'), host=document.querySelector('[data-page-panel="score"]');
+    if(tip&&host){ host.addEventListener('mousemove',function(e){ var el=e.target.closest('[data-tip]');
+        if(!el){ tip.style.display='none'; return; }
+        tip.innerHTML=escAttr(el.getAttribute('data-tip')).replace(/\n/g,'<br>'); tip.style.display='block';
+        var x=e.clientX+14, y=e.clientY+14; if(x+tip.offsetWidth>window.innerWidth-8) x=e.clientX-tip.offsetWidth-14;
+        if(y+tip.offsetHeight>window.innerHeight-8) y=e.clientY-tip.offsetHeight-14; tip.style.left=x+'px'; tip.style.top=y+'px'; });
+      host.addEventListener('mouseleave',function(){ tip.style.display='none'; }); }
+  })();
+  window.renderScorecard=renderScorecard;
   window.renderPerfTab=renderPerfTab;
 })();
 /*__PERFJS_END__*/
@@ -13001,7 +13378,7 @@ const I18N_VI = {
   "Daily performance":"Hiệu suất hằng ngày","Period":"Kỳ","From":"Từ","To":"Đến","All dates":"Tất cả các ngày",
   "Daily status counts":"Đếm trạng thái hằng ngày","Per-truck daily symbols":"Ký hiệu hằng ngày theo xe",
   "Planned truck":"Xe theo kế hoạch","Did not come":"Không đến","Come — not in plan":"Đến — ngoài kế hoạch","Total":"Tổng",
-  "Not as planned":"Không đúng kế hoạch","No GPS":"Không có GPS","Waiting":"Đang chờ","Subcontractor":"Nhà thầu phụ","(no company)":"(không có công ty)",
+  "Not as planned":"Không đúng kế hoạch","No GPS":"Không có GPS","Scorecard":"Bảng hiệu suất","This month":"Tháng này","Last month":"Tháng trước","Last 7 days":"7 ngày qua","Last 30 days":"30 ngày qua","Waiting":"Đang chờ","Subcontractor":"Nhà thầu phụ","(no company)":"(không có công ty)",
   "Parameter":"Tham số","GPS Data":"Dữ liệu GPS","Dispatch Plan":"Kế hoạch điều xe",
   "Truck Status":"Trạng thái xe","Weighbridge":"Trạm cân","Plan vs Actual":"Kế hoạch & Thực tế",
   "Fleet":"Đội xe","📖 Guide":"📖 Hướng dẫn",
