@@ -125,6 +125,7 @@ def _plan(only):
                 # The route the plan sent the truck on (Scorecard route slicer,
                 # 10/11/2026), e.g. "Mine : A Ngo : Chan May".
                 "route": r.get("route_name") or "",
+                "angoArrive": t.get("arrive_ango"),
             }
     return out
 

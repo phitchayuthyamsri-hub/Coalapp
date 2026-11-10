@@ -344,7 +344,11 @@ def recompute_sequences(visits, roles):
                  "detour_in": None, "detour_out": None,
                  "lalay_back_in": None, "lalay_back_out": None,
                  "xppl_r": nxt["enter"] if nxt else None,
-                 "backhaul_type": None}
+                 "backhaul_type": None,
+                 # A Ngo Warehouse on the way out, and the border crossing home
+                 # after it when the trip ends there (10/11/2026)
+                 "ango_in": None, "ango_out": None,
+                 "border_home_in": None, "border_home_out": None}
 
             window = [v for v in vlist if v["enter"] >= start["enter"]
                       and (cycle_end is None or v["enter"] < cycle_end)]
@@ -383,6 +387,27 @@ def recompute_sequences(visits, roles):
             if pv:
                 c["chan_may_in"], c["chan_may_out"] = pv["enter"], pv["exit"]
                 cursor = pv["exit"] or pv["enter"]
+
+            # A Ngo Warehouse (10/11/2026, Reports > Scorecard): the stop on the
+            # way OUT - after the loaded border crossing, before the port if the
+            # trip goes on to it. Found without moving the cursor, so QL49 and
+            # the port come out exactly as before; an A Ngo visit after the port
+            # (a truck going home that way) is not this stop. When the trip ends
+            # at A Ngo, its border crossing home goes in border_home_*, apart
+            # from lalay_back_*, which stays "after the port" for everyone else.
+            ango_id = roles.get("ango")
+            if ango_id and lo:
+                after_border = lo["exit"] or lo["enter"]
+                av = next((v for v in window if v["anchor_id"] == ango_id
+                           and v["enter"] > after_border
+                           and (pv is None or v["enter"] < pv["enter"])), None)
+                if av:
+                    c["ango_in"], c["ango_out"] = av["enter"], av["exit"]
+                    if pv is None and av["exit"]:
+                        hb = next((v for v in window if v["anchor_id"] == border_id
+                                   and v["enter"] > av["exit"]), None)
+                        if hb:
+                            c["border_home_in"], c["border_home_out"] = hb["enter"], hb["exit"]
 
             # Return leg — only after the port turnaround
             if pv and pv["exit"]:

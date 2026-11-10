@@ -28,11 +28,13 @@ function build(plans, seqs, untimed, company) {
                 fleetMeta: { A1: { company: 'Bac Nam' }, B2: { company: 'PTS' }, C3: { company: 'Bac Nam' }, D4: { company: 'Bac Nam' } } };
   for (const p of plans)
     ACS.plan[p.plate + '|' + p.day] = { plate: p.plate, locs: { MINE: { in: p.mine, out: p.leave || null }, BORDER: { in: null, out: null }, PORT: { in: null, out: p.port || null } },
-                                        ot: { mineReturn: p.back || null }, route: p.route || '' };
+                                        ot: { mineReturn: p.back || null }, route: p.route || '', ango: p.ango || null };
   for (const c of seqs) ACS.actual[c.plate + '|' + dk(c.cycleDate)] = { plate: c.plate, cyc: dk(c.cycleDate), locs: {
     MINE: { in: I(c.xpplIn), out: I(c.xpplOut) }, LOADING: { in: I(c.loadingIn), out: I(c.loadingOut) },
     BORDER: { in: I(c.lalayOutIn), out: I(c.lalayOutOut) }, PORT: { in: I(c.chanMayIn), out: I(c.chanMayOut) },
-    BORDER_BACK: { in: null, out: I(c.lalayBackOut) }, BACK_RET: I(c.xpplR), QL49_BACK: { in: null, out: I(c.ql49BackOut) } } };
+    BORDER_BACK: { in: null, out: I(c.lalayBackOut) }, BACK_RET: I(c.xpplR), QL49_BACK: { in: null, out: I(c.ql49BackOut) },
+    ANGO: c.angoIn ? { in: I(c.angoIn), out: I(c.angoOut) } : undefined,
+    BORDER_HOME: c.borderHomeOut ? { in: null, out: I(c.borderHomeOut) } : undefined } };
   const all = { from: '2026-10-01', plates: {} };
   for (const pl of ACS.fleet) { all.plates[pl] = {}; for (let d = 1; d <= 9; d++) all.plates[pl]['2026-11-0' + d] = (1 << 24) - 1; }
   const STATE = { gpsHours: all, loadActual: [], sequences: seqs, filters: { fleetScope: 'in' }, nowMs: Date.parse('2026-11-20T00:00:00+07:00') };
@@ -93,6 +95,24 @@ console.log('\nthe subcontractor filter');
 m = api.run('2026-11-01', '2026-11-05', 'Bac Nam');
 check('Bac Nam: B2 (PTS) is out of the plan and the losses',
       [m.tot.planned, m.tot.noShow, m.lrows.map(r => r.plate)], [1, 0, ['C3', 'D4']]);
+
+console.log('\neach route judged at its own points');
+const plA = [{ plate: 'A1', day: '2026-11-02', mine: '2026-11-02T07:00', leave: '2026-11-02T08:00', ango: '2026-11-02T17:00',
+               back: '2026-11-03T08:00', route: 'Mine : A Ngo' },
+             { plate: 'C3', day: '2026-11-02', mine: '2026-11-02T07:00', route: 'Mine : A Ngo' }];
+const sqA = [{ plate: 'A1', cycleDate: T('2026-11-02T07:20'), xpplIn: T('2026-11-02T07:20'), loadingOut: T('2026-11-02T08:10'),
+               lalayOutOut: T('2026-11-02T16:00'), angoIn: T('2026-11-02T17:30'), angoOut: T('2026-11-02T19:00'),
+               borderHomeOut: T('2026-11-03T02:00'), xpplR: T('2026-11-03T08:30') },
+             { plate: 'C3', cycleDate: T('2026-11-02T07:10'), xpplIn: T('2026-11-02T07:10'), lalayOutOut: T('2026-11-02T16:30'),
+               ql49OutOut: T('2026-11-02T20:00'), chanMayIn: T('2026-11-03T06:00'), chanMayOut: T('2026-11-03T09:00'), xpplR: T('2026-11-04T07:00') }];
+const apiA = build(plA, sqA, { rows: [] });
+const mA = apiA.run('2026-11-01', '2026-11-05');
+const RA = mA.cpsR['Mine : A Ngo'];
+check('A Ngo 30 min after plan: on time, at A Ngo', RA.ango, { ok: 1, n: 1 });
+check('border home after A Ngo counts as border, empty (02:00: outside 07-19)', RA.borderb, { ok: 0, n: 1 });
+check('a Mine : A Ngo truck is not judged at the port or QL49', [RA.port, RA.ql49], [{ ok: 0, n: 0 }, { ok: 0, n: 0 }]);
+check('...the one that went to the port is off route', [mA.offR['Mine : A Ngo'].n, mA.offR['Mine : A Ngo'].where], [1, { port: 1 }]);
+check('the page says so', /went to the port instead/.test(apiA.scDraw(mA, null)), true);
 
 console.log('\nthe page');
 const S = api.scSummary(api.run('2026-11-01', '2026-11-05'));

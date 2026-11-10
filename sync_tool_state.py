@@ -190,6 +190,8 @@ def build_timing():
         "detour_in": "detourIn", "detour_out": "detourOut",
         "lalay_back_in": "lalayBackIn", "lalay_back_out": "lalayBackOut",
         "xppl_r": "xpplR", "backhaul_type": "backhaulType",
+        "ango_in": "angoIn", "ango_out": "angoOut",
+        "border_home_in": "borderHomeIn", "border_home_out": "borderHomeOut",
     }
     s_out = []
     for s in sequences:
