@@ -2689,6 +2689,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
               <th data-seqsort="xpplIn">XPPL — In</th><th data-seqsort="loadingIn">Loading — In</th>
               <th data-seqsort="loadingOut">Loading — Out</th><th data-seqsort="xpplOut">XPPL — Out</th>
               <th data-seqsort="lalayOutIn">Lalay — In (out)</th><th data-seqsort="lalayOutOut">Lalay — Out (out)</th>
+              <th data-seqsort="angoIn">A Ngo — In</th><th data-seqsort="angoOut">A Ngo — Out</th>
               <th data-seqsort="ql49OutIn">QL 49 — In (out)</th><th data-seqsort="ql49OutOut">QL 49 — Out (out)</th>
               <th data-seqsort="chanMayIn">ChanMay — In</th><th data-seqsort="chanMayOut">ChanMay — Out</th>
               <th data-seqsort="ql49BackIn">QL 49 — In (back)</th><th data-seqsort="ql49BackOut">QL 49 — Out (back)</th>
@@ -9687,6 +9688,28 @@ function recomputeSequences() {
         cursor = (portVisit.exit || portVisit.enter).getTime();
       }
 
+      // A Ngo Warehouse (10/11/2026) - the same rule as app/engine.py. This page
+      // rebuilds the trips itself on load, so without it the server's A Ngo times
+      // were thrown away before any report saw them. The stop on the way OUT:
+      // after the loaded border crossing, before the port if the trip goes on
+      // (an A Ngo visit after the port is a truck going home that way). Found
+      // without moving the cursor, so nothing above changes. A trip that ends at
+      // A Ngo gets its border crossing home in borderHome*.
+      cycle.angoIn = null; cycle.angoOut = null; cycle.borderHomeIn = null; cycle.borderHomeOut = null;
+      const angoId = _cr(STATE.roles.ango || (STATE.anchors.find(a => /a\s*ngo/i.test(a.name || '')) || {}).id);
+      if (angoId && lalayOutVisit) {
+        const afterBorder = (lalayOutVisit.exit || lalayOutVisit.enter).getTime();
+        const angoVisit = windowVisits.find(v => v.anchorId === angoId && v.enter.getTime() > afterBorder
+          && (!portVisit || v.enter.getTime() < portVisit.enter.getTime()));
+        if (angoVisit) {
+          cycle.angoIn = angoVisit.enter; cycle.angoOut = angoVisit.exit;
+          if (!portVisit && angoVisit.exit) {
+            const homeV = windowVisits.find(v => v.anchorId === borderId && v.enter.getTime() > angoVisit.exit.getTime());
+            if (homeV) { cycle.borderHomeIn = homeV.enter; cycle.borderHomeOut = homeV.exit; }
+          }
+        }
+      }
+
       // RETURN LEG — only meaningful once ChanMay (the turnaround) is reached.
       // The return crossing CLOSES the cycle: find Lalay-back first, then accept QL49-back
       // and Detour only if they fall between ChanMay-out and that return crossing.
@@ -9816,6 +9839,8 @@ function seqSortValue(c, key) {
     case 'xpplOut': return c.xpplOut?.getTime() ?? null;
     case 'lalayOutIn': return c.lalayOutIn?.getTime() ?? null;
     case 'lalayOutOut': return c.lalayOutOut?.getTime() ?? null;
+    case 'angoIn': return c.angoIn?.getTime() ?? null;
+    case 'angoOut': return c.angoOut?.getTime() ?? null;
     case 'ql49OutIn': return c.ql49OutIn?.getTime() ?? null;
     case 'ql49OutOut': return c.ql49OutOut?.getTime() ?? null;
     case 'chanMayIn': return c.chanMayIn?.getTime() ?? null;
@@ -9878,6 +9903,8 @@ function renderSequenceTable() {
         <td>${f(c.xpplOut)}</td>
         <td>${f(c.lalayOutIn)}</td>
         <td>${f(c.lalayOutOut)}</td>
+        <td>${f(c.angoIn)}</td>
+        <td>${f(c.angoOut)}</td>
         <td>${f(c.ql49OutIn)}</td>
         <td>${f(c.ql49OutOut)}</td>
         <td>${f(c.chanMayIn)}</td>
@@ -9886,8 +9913,8 @@ function renderSequenceTable() {
         <td>${f(c.ql49BackOut)}</td>
         <td>${f(c.detourIn)}</td>
         <td>${f(c.detourOut)}</td>
-        <td>${f(c.lalayBackIn)}</td>
-        <td>${f(c.lalayBackOut)}</td>
+        <td>${f(c.lalayBackIn || c.borderHomeIn)}</td>
+        <td>${f(c.lalayBackOut || c.borderHomeOut)}</td>
         <td>${f(c.xpplR)}</td>
         <td class="off-route-cell"><span class="seq-missing">—</span></td>
         <td class="seq-remark"><span class="seq-missing">—</span></td>
@@ -9977,6 +10004,8 @@ function getSeqExportRows() {
       'XPPL — Out': c.xpplOut ? fmtDateTime(c.xpplOut) : '',
       'Lalay — In (out)': c.lalayOutIn ? fmtDateTime(c.lalayOutIn) : '',
       'Lalay — Out (out)': c.lalayOutOut ? fmtDateTime(c.lalayOutOut) : '',
+      'A Ngo — In': c.angoIn ? fmtDateTime(c.angoIn) : '',
+      'A Ngo — Out': c.angoOut ? fmtDateTime(c.angoOut) : '',
       'QL 49 — In (out)': c.ql49OutIn ? fmtDateTime(c.ql49OutIn) : '',
       'QL 49 — Out (out)': c.ql49OutOut ? fmtDateTime(c.ql49OutOut) : '',
       'ChanMay — In': c.chanMayIn ? fmtDateTime(c.chanMayIn) : '',
@@ -9988,8 +10017,8 @@ function getSeqExportRows() {
       'QL 49 — Out (back)': c.ql49BackOut ? fmtDateTime(c.ql49BackOut) : '',
       'Detour — In': c.detourIn ? fmtDateTime(c.detourIn) : '',
       'Detour — Out': c.detourOut ? fmtDateTime(c.detourOut) : '',
-      'Lalay — In (back)': c.lalayBackIn ? fmtDateTime(c.lalayBackIn) : '',
-      'Lalay — Out (back)': c.lalayBackOut ? fmtDateTime(c.lalayBackOut) : '',
+      'Lalay — In (back)': (c.lalayBackIn || c.borderHomeIn) ? fmtDateTime(c.lalayBackIn || c.borderHomeIn) : '',
+      'Lalay — Out (back)': (c.lalayBackOut || c.borderHomeOut) ? fmtDateTime(c.lalayBackOut || c.borderHomeOut) : '',
       'XPPL — In (R)': c.xpplR ? fmtDateTime(c.xpplR) : '',
       'Off-route': (c.offRouteAnchors || []).join(', '),
       'Remark': c.remark,
