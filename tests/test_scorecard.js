@@ -50,7 +50,8 @@ function build(plans, seqs, untimed, company) {
     ${html.slice(a, b)}
     ${html.slice(s0, s1)}
     return { run: (f,t,c) => { scSel.company=c||''; return scMetrics(f,t,${JSON.stringify(untimed)},scSeqIndex()); }, scSummary, scDraw,
-             setRoute: r => { scSel.route = r; }, chips: () => scChipsHtml };`);
+             setRoute: r => { scSel.route = r; }, chips: () => scChipsHtml,
+             scPages, scRemarks, scRmKey, scFileName, scRgb, sel: o => Object.assign(scSel, o) };`);
   return f(STATE, ACS);
 }
 
@@ -171,6 +172,27 @@ check('square bar ends (no rounded corners)', !/rx="2"/.test(out), true);
 check('the menu has it', /data-page="score">Scorecard</.test(html), true);
 check('the page scrolls inside itself (10/11/2026: no scroll bar)',
       /\[data-page-panel="score"\] \.scwrap\{flex:1 1 auto;min-height:0;overflow-y:auto/.test(html), true);
+
+console.log('\nRemarks + export (11/11/2026)');
+{ const store = {}; global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+  const api2 = build(plans, seqs, untimed); api2.sel({ from: '2026-11-01', to: '2026-11-05', company: '', route: '' });
+  const o = api2.scDraw(api2.run('2026-11-01', '2026-11-05'), null);
+  check('a remarks list at the end of each section (1-2, 3.1, 3.2, 3.3, 4)', ['12', '31', '32', '33', '4'].map(k => o.includes('class="scrm" data-sec="' + k + '"')), [true, true, true, true, true]);
+  check('...each opens with one empty typeable row and + Add row', (o.match(/<textarea rows="1"/g) || []).length === 5 && (o.match(/class="scrmadd"/g) || []).length === 5, true);
+  const key = api2.scRmKey('31');
+  check('kept per period, company and section', key, 'actualGpsScRemark|2026-11-01|2026-11-05||31');
+  store[key] = JSON.stringify([{ t: 'Border queue <3 h>' }, { t: 'second' }]);
+  const r = api2.scRemarks('31');
+  check('saved rows come back, numbered, text escaped', r.includes('>1</span>') && r.includes('>2</span>') && r.includes('Border queue &lt;3 h&gt;'), true);
+  check('...another period does not see them', (api2.sel({ to: '2026-11-06' }), api2.scRemarks('31')).includes('second'), false);
+  api2.sel({ to: '2026-11-05' });
+  check('A4 pages cut at a section end, not through one', api2.scPages(2300, 1000, { main: [300, 900, 1400, 2300], inner: [950] }), [[0, 900], [900, 1400], [1400, 2300]]);
+  check('...a section taller than a page is cut at a row inside it', api2.scPages(2500, 1000, { main: [2500], inner: [700, 1650] }), [[0, 700], [700, 1650], [1650, 2500]]);
+  check('...nowhere to cut: a full page', api2.scPages(1500, 1000, { main: [1500], inner: [] }), [[0, 1000], [1000, 1500]]);
+  check('file name carries period, company and route', (api2.sel({ company: 'Hoanh Son', route: 'Mine : A Ngo' }), api2.scFileName('pdf')), 'Scorecard_2026-11-01_2026-11-05_Hoanh_Son_Mine_-_A_Ngo.pdf');
+  check('page colour for the PDF background', api2.scRgb('#0e1418'), '0.055 0.078 0.094');
+  check('PDF and JPEG buttons in the frozen bar', html.includes('<span id="scExport"><button type="button" data-x="pdf"') && html.includes('data-x="jpg"'), true);
+  delete global.localStorage; }
 
 console.log('\n' + (FAIL ? FAIL + ' FAILED' : 'ALL PASS'));
 process.exit(FAIL ? 1 : 0);
