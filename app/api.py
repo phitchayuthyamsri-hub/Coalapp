@@ -1534,3 +1534,21 @@ def coalrpt_list():
     except ValueError:
         page = 0
     return jsonify(coal_report.list_rows(kind, request.args.get("q", ""), page))
+
+
+@bp.get("/coalrpt/daily")
+@login_required
+def coalrpt_daily():
+    """The daily e-mail report for one loading day (default: yesterday, local)."""
+    from . import coal_report
+    from datetime import timedelta as _td
+    day = _rs(request.args.get("day"))
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day or ""):
+        day = (datetime.utcnow() + _td(hours=7) - _td(days=1)).strftime("%Y-%m-%d")
+    try:
+        contracts = json.loads(_kv_get("coalRptContracts_v1") or "[]")
+    except Exception:
+        contracts = []
+    meta = _rpt_meta()
+    stamp = "|".join(str((meta.get(k) or {}).get("at", "")) for k in ("weigh", "ready", "contracts"))
+    return jsonify(coal_report.daily_report(day, contracts, stamp))

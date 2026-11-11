@@ -55,6 +55,29 @@
   .legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px}
   .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
   .empty{color:var(--mut);padding:24px;text-align:center}
+  /* Daily tab = the team's daily e-mail (11/11/2026): white sheet, Excel pivot (medium blue) tables */
+  .mail{background:#fff;color:#000;border-radius:6px;padding:18px 22px 24px;font-family:Calibri,'Segoe UI',Arial,sans-serif;overflow-x:auto}
+  .mail .mh{font-weight:700;font-size:14px;margin:4px 0 10px}
+  .xt{border-collapse:collapse;font-size:12.5px;width:auto;margin-left:6px}
+  .xt th{background:#305496;color:#fff;font-weight:700;text-align:left;padding:2px 8px;border-bottom:1px solid #8EA9DB;white-space:nowrap;position:static}
+  .xt th.n,.xt td.n{text-align:right}
+  .xt td{padding:2px 8px;border-bottom:1px solid #D9E1F2;white-space:nowrap;color:#000;text-align:left}
+  .xt td.cu{background:#8EA9DB;color:#fff;border-bottom-color:#8EA9DB}
+  .xt td.rl{background:#D9E1F2}
+  .xt td.ct{border:1px solid #8EA9DB}
+  .xt td.dc,.xt th.dc{background:#D9D9D9;color:#000}
+  .xt th.dc{background:#BFBFBF}
+  .xt td.bad{color:#C00000;font-weight:700}
+  .xt td.rm{color:#C00000;font-size:11.5px}
+  .xt tr.gt td{font-weight:700;border-top:1px solid #4472C4;border-bottom:none;background:#fff}
+  .xt tbody tr:hover{background:transparent}
+  .mchart{margin:14px 0 18px;max-width:1240px}
+  .mchart.tr{border:1px solid #D9D9D9}
+  .mchart.tr svg+svg{border-top:1px solid #D9D9D9}
+  .xsvg{width:100%;height:auto;display:block;font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#fff}
+  .trleg{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;font-size:14px;color:#595959;padding:6px 0;border-top:1px solid #D9D9D9;font-family:Calibri,'Segoe UI',Arial,sans-serif}
+  .trleg span{display:inline-flex;align-items:center;gap:6px}
+  .trleg i{display:inline-block;width:26px;height:11px}
 </style>
 <script src="/static/datefmt.js?v={{ asset_v('datefmt.js') }}"></script>
 </head>
@@ -107,9 +130,10 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','
 async function boot(){
   try{ ME=await (await fetch('/api/me')).json(); }catch(e){}
   if(!ME.can_edit) document.body.classList.add('noedit');
+  $('#marketBar').style.display='none';   // opens on Daily (the e-mail has no market filter)
   await reload();
   $('#mkt').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; MARKET=b.dataset.m; $$('#mkt button').forEach(x=>x.classList.toggle('on',x===b)); render(); });
-  document.querySelector('.tabs').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b)return; TAB=b.dataset.tab; $$('.tab').forEach(x=>x.classList.toggle('on',x===b)); $('#marketBar').style.display=(TAB==='data')?'none':''; render(); });
+  document.querySelector('.tabs').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b)return; TAB=b.dataset.tab; $$('.tab').forEach(x=>x.classList.toggle('on',x===b)); $('#marketBar').style.display=(TAB==='data'||TAB==='daily')?'none':''; render(); });
 }
 function $$(s){return [...document.querySelectorAll(s)];}
 
@@ -159,68 +183,122 @@ function render(){
 }
 
 /* ---------- DAILY ---------- */
-let DAILY_STATUS='Ongoing';
-function renderDaily(){
-  const A=aggregate(), asof=maxW();
-  const delivered={}; for(const ck in (RAW.totals||{})) delivered[ck]=RAW.totals[ck].t||0;   // whole history, not only the rows sent
-  const regToday=regCount(maxReg());
-  const contracts=(RAW.contracts||[]).filter(c=>(!MARKET||c.export===MARKET));
-  const shown=contracts.filter(c=>DAILY_STATUS==='All'||c.status===DAILY_STATUS);
-
-  let html='';
-  // status filter
-  html+='<div class="bar"><label>Status</label><div class="seg" id="stseg">'+
-    ['Ongoing','Stop','Complete','Cancelled','All'].map(s=>`<button data-s="${s}" class="${s===DAILY_STATUS?'on':''}">${s}</button>`).join('')+
-    '</div></div>';
-
-  // per-contract status table
-  html+='<div class="card"><h2>Contract status <span class="sub">— as of '+(asof?dmy(asof):'—')+' &middot; "Yesterday" = latest delivery day</span></h2><div class="tableScroll"><table><thead><tr>'+
-    ['Customer','Exp/Ovs','Term','End user','Contract','Start','End','GAR','Total qty','Yesterday','To-date','Remaining','Status'].map((h,i)=>`<th class="${i<8?'l':''}">${h}</th>`).join('')+
-    '</tr></thead><tbody>';
-  if(!shown.length) html+='<tr><td colspan="13" class="empty">No contracts.</td></tr>';
-  shown.forEach(c=>{ const ck=normC(c.contract); const del=delivered[ck]||0; const yest=(A.cd[ck]&&A.cd[ck][asof])?A.cd[ck][asof].t:0; const rem=(+c.qty||0)-del;
-    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.term)}</td><td class="l">${esc(c.endUser)}</td><td class="l">${esc(c.contract)}</td><td class="l">${dmy(c.start)}</td><td class="l">${dmy(c.end)}${c.extension?'<div class="muted" style="font-size:11px">ext '+dmy(c.extension)+'</div>':''}</td><td class="l">${esc(c.gar)}</td><td>${fmt(c.qty)}</td><td>${fmt(yest)}</td><td>${fmt(del)}</td><td class="${rem<0?'neg':''}">${fmt(rem)}</td><td class="l"><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td></tr>`;
-  });
-  html+='</tbody></table></div></div>';
-
-  // truck plan
-  html+='<div class="card"><h2>Truck plan <span class="sub">— weekly target = (total − delivered) ÷ remaining weeks &middot; '+WORKDAYS+' working days &middot; ton/trip 60 Oversea / 32 Domestic fallback</span></h2><div class="tableScroll"><table><thead><tr>'+
-    ['Customer','Exp/Ovs','Transporter','Contract','GAR','Week tons','Plan trucks','Plan/day','Variance','Registered',...BK_LABELS].map((h,i)=>`<th class="${i<5?'l':''}">${h}</th>`).join('')+
-    '</tr></thead><tbody>';
-  const planRows=contracts.filter(c=>c.status==='Ongoing');
-  if(!planRows.length) html+='<tr><td colspan="17" class="empty">No ongoing contracts.</td></tr>';
-  // recent buckets = sum last 7 delivery days per contract
-  planRows.forEach(c=>{ const ck=normC(c.contract); const del=delivered[ck]||0; const tpt=tonPerTrip(c);
-    const rw=remainingWeeks(c,asof||iso(new Date())); const weekTons=Math.max(0,((+c.qty||0)-del)/rw);
-    const planTrucks=Math.ceil(weekTons/tpt)||0; const planDay=Math.ceil(weekTons/WORKDAYS/tpt)||0;
-    const reg=regToday[ck]||0; const varc=reg-planDay;
-    const bk=[0,0,0,0,0,0,0]; if(A.bk[ck]){ const ds=Object.keys(A.bk[ck]).sort().slice(-7); ds.forEach(d=>A.bk[ck][d].forEach((v,i)=>bk[i]+=v)); }
-    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.transporter)}</td><td class="l">${esc(c.contract)}</td><td class="l">${esc(c.gar)}</td><td>${fmt(weekTons)}</td><td>${planTrucks}</td><td>${planDay}</td><td class="${varc<0?'neg':'pos'}">${varc>0?'+':''}${varc}</td><td>${reg}</td>`+bk.map(v=>`<td>${v||''}</td>`).join('')+'</tr>';
-  });
-  html+='</tbody></table></div><div class="legend muted">Registered = distinct plates in latest readiness ('+(maxReg()?dmy(maxReg()):'—')+'). Buckets = delivered trips by net weight, last 7 delivery days.</div></div>';
-
-  // 7-day day/night strip
-  html+='<div class="card"><h2>Daily trips — last 7 days <span class="sub">day (AM) / night (PM)</span></h2>'+dayNightSVG(A.dn,asof)+
-    '<div class="legend"><span><i style="background:var(--day)"></i>Day (AM)</span><span><i style="background:var(--night)"></i>Night (PM)</span></div></div>';
-
-  $('#view').innerHTML=html;
-  const st=$('#stseg'); if(st) st.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; DAILY_STATUS=b.dataset.s; renderDaily(); });
+// The team's daily e-mail, as the page (11/11/2026): "Daily report Coal actual movement &
+// NT truck readiness comparison report as of <day>". Contract status + Truck plan tables
+// (Excel pivot look), Day/Night trips of the last 7 days, and the Truck register charts
+// Weekly / Daily / By customer / By Subcontractor. The day is a loading day, 06:00-06:00.
+let DREP=null, DDAY='';
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dmy2=s=>{ if(!s)return''; const p=s.split('-'); return (+p[2])+'/'+p[1]+'/'+p[0].slice(2); };      // 9/06/26
+const dmy4=s=>{ if(!s)return''; const p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };                 // 04/11/2026
+const dLab=s=>{ const p=s.split('-'); return p[2]+'-'+MON[+p[1]-1]+'-'+p[0].slice(2); };                // 10-Nov-26
+// Excel accounting: 0 = "-", negatives in brackets
+const acc=(v,d=0)=>{ v=+v||0; const r=Math.round(v*Math.pow(10,d))/Math.pow(10,d); if(!r) return '-'; const s=Math.abs(r).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); return r<0?'('+s+')':s; };
+async function renderDaily(){
+  if(!DREP||DREP.day!==DDAY){ $('#view').innerHTML='<div class="empty">Building the report…</div>';
+    try{ DREP=await (await fetch('/api/coalrpt/daily'+(DDAY?'?day='+DDAY:''))).json(); DDAY=DREP.day; }
+    catch(e){ $('#view').innerHTML='<div class="empty">Could not build the report: '+esc(e)+'</div>'; return; } }
+  if(TAB!=='daily') return;
+  const R=DREP;
+  let h='<div class="bar"><label>Report day</label><button class="act" data-dd="-1">‹</button><input type="date" id="ddPick" value="'+R.day+'"><button class="act" data-dd="1">›</button>'+
+    '<span class="status">loading day '+dmy4(R.day)+' 06:00 → '+dmy4(addDays(R.day,1))+' 06:00</span></div>';
+  h+='<div class="mail"><p class="mh">Daily report Coal actual movement ;</p>'+statusTable(R)+'<br>'+planTable(R)+
+     '<div class="mchart">'+dnChart(R.dayNight)+'</div>'+
+     '<p class="mh">PSVN truck readiness comparison report ;</p>'+
+     '<div class="mchart tr">'+trChart(R.weekly.map(w=>({lab:w.label,reg:w.reg,act:w.act,nreg:w.nreg})),{title:'Weekly',h:330})+trLegend()+
+       trChart(R.daily.map(d=>({lab:d.date.slice(8),grp:MON[+d.date.slice(5,7)-1],reg:d.reg,act:d.act,nreg:d.nreg})),{title:'Daily',h:380})+
+       trChart(R.byCustomer.map(d=>({lab:d.customer,reg:d.reg,act:d.act,nreg:d.nreg})),{title:'By customer',h:380,area:'tri'})+
+       trChart(R.bySub.map(d=>({lab:d.company,grp:d.customer,reg:d.reg,act:d.act,nreg:d.nreg})),{title:'By Subcontractor',h:420,wrap:true})+'</div>'+
+     '</div>';
+  $('#view').innerHTML=h;
+  const pk=$('#ddPick'); if(pk) pk.addEventListener('change',()=>{ if(pk.value){ DDAY=pk.value; renderDaily(); } });
+  $$('#view [data-dd]').forEach(b=>b.addEventListener('click',()=>{ DDAY=addDays(R.day,+b.dataset.dd); renderDaily(); }));
 }
-function dayNightSVG(dn,asof){
-  const end=asof||iso(new Date()); const days=[]; for(let i=6;i>=0;i--)days.push(addDays(end,-i));
-  const max=Math.max(1,...days.map(d=>(dn[d]?dn[d].d+dn[d].n:0)));
-  const W=760,H=200,padB=34,padT=12,bw=70,gap=(W-bw*7)/8;
-  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px">`;
-  days.forEach((d,i)=>{ const x=gap+i*(bw+gap); const o=dn[d]||{d:0,n:0}; const tot=o.d+o.n;
-    const hT=H-padB-padT; const dh=(o.d/max)*hT, nh=(o.n/max)*hT;
-    let y=H-padB;
-    s+=`<rect x="${x}" y="${y-dh}" width="${bw}" height="${dh}" fill="var(--day)"/>`;
-    s+=`<rect x="${x}" y="${y-dh-nh}" width="${bw}" height="${nh}" fill="var(--night)"/>`;
-    if(tot)s+=`<text x="${x+bw/2}" y="${y-dh-nh-4}" fill="var(--ink)" font-size="11" text-anchor="middle">${tot}</text>`;
-    s+=`<text x="${x+bw/2}" y="${H-padB+14}" fill="var(--mut)" font-size="10" text-anchor="middle">${wkLabel(d)}</text>`;
-    s+=`<text x="${x+bw/2}" y="${H-padB+26}" fill="var(--mut)" font-size="9" text-anchor="middle">${o.d}/${o.n}</text>`;
-  });
+function statusTable(R){
+  const H=['Customer','Export/Oversea','Term','End user','Contract','Start','End','GAR','Total Quantity',dLab(R.day),'Contract to date','Balance remaining'];
+  let h='<table class="xt"><thead><tr>'+H.map((x,i)=>'<th class="'+(i>=8?'n':'')+'">'+x+'</th>').join('')+'</tr></thead><tbody>';
+  let prev='', T={q:0,d:0,t:0};
+  R.status.forEach(r=>{ const first=r.customer!==prev; prev=r.customer; T.q+=+r.qty||0; T.d+=+r.day||0; T.t+=+r.toDate||0;
+    h+='<tr><td class="cu">'+(first?esc(r.customer):'')+'</td><td class="rl">'+(first?esc(r.export):'')+'</td><td class="rl">'+(first?esc(r.term):'')+'</td><td class="rl">'+(first?esc(r.endUser):'')+'</td>'+
+      '<td>'+esc(r.contract)+'</td><td class="rl">'+dmy2(r.start)+'</td><td class="rl'+(r.ended?' bad" title="Contract ended - still Ongoing in the contract list':'')+'">'+dmy2(r.end)+'</td><td>'+esc(r.gar)+'</td>'+
+      '<td class="n">'+acc(r.qty)+'</td><td class="n">'+acc(r.day)+'</td><td class="n">'+acc(r.toDate)+'</td><td class="n">'+acc(Math.max(0,(+r.qty||0)-(+r.toDate||0)))+'</td></tr>'; });
+  h+='<tr class="gt"><td>Grand Total</td><td colspan="7"></td><td class="n">'+acc(T.q)+'</td><td class="n">'+acc(T.d)+'</td><td class="n">'+acc(T.t)+'</td><td class="n">'+acc(Math.max(0,T.q-T.t))+'</td></tr>';
+  return h+'</tbody></table>';
+}
+function planTable(R){
+  const H=['Customer','Export/Oversea','Transporter','Contract','GAR','Quantity','Plan truck','Plan truck / day','Variance','Truck register','32-34t','35-37t','38-40t','40-50t','51-60t','61-65t','66t+',dLab(R.day),'Remark'];
+  const tip={5:'Contract quantity - loaded to date',6:'Quantity / Ton per trip, rounded up',7:'Plan truck / days left in the contract, rounded up',8:'Trucks loaded on the day - Plan truck / day',9:'Truck readiness registrations for the day'};
+  let h='<table class="xt"><thead><tr>'+H.map((x,i)=>'<th class="'+(i>=5&&i<18?'n':'')+(i===17?' dc':'')+'"'+(tip[i]?' title="'+tip[i]+'"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>';
+  let prev=''; const T={q:0,p:0,pd:0,reg:0,b:[0,0,0,0,0,0,0],tr:0};
+  R.plan.forEach(r=>{ const first=r.customer!==prev; prev=r.customer;
+    T.q+=r.quantity; T.p+=r.plan; T.pd+=r.perDay; T.reg+=r.register; T.tr+=r.trips; r.bands.forEach((v,i)=>T.b[i]+=v);
+    h+='<tr><td class="cu">'+(first?esc(r.customer):'')+'</td><td class="rl">'+(first?esc(r.export):'')+'</td><td class="rl">'+(first?esc(r.transporter||'N/A'):'')+'</td>'+
+      '<td class="rl ct">'+esc(r.contract)+'</td><td>'+esc(r.gar)+'</td>'+
+      '<td class="n">'+acc(r.quantity)+'</td><td class="n">'+acc(r.plan)+'</td><td class="n" title="'+r.plan+' trucks over '+r.daysLeft+' day(s) to '+dmy2(r.refEnd)+' at '+r.tonPerTrip+' t/trip">'+acc(r.perDay)+'</td>'+
+      '<td class="n">'+acc(r.variance)+'</td><td class="n">'+acc(r.register)+'</td>'+r.bands.map(v=>'<td class="n">'+acc(v)+'</td>').join('')+
+      '<td class="n dc">'+acc(r.trips)+'</td><td class="rm">'+esc(r.remark)+'</td></tr>'; });
+  h+='<tr class="gt"><td>Grand Total</td><td colspan="4"></td><td class="n">'+acc(T.q)+'</td><td class="n">'+acc(T.p)+'</td><td class="n">'+acc(T.pd)+'</td><td class="n">'+acc(T.tr-T.pd)+'</td><td class="n">'+acc(T.reg)+'</td>'+
+    T.b.map(v=>'<td class="n">'+acc(v)+'</td>').join('')+'<td class="n dc">'+acc(T.tr)+'</td><td></td></tr>';
+  return h+'</tbody></table>';
+}
+// Day / Night trips, last 7 days (the e-mail's first picture)
+function dnChart(D){
+  const W=1423,H=289,L=24,Rr=W-24,T=24,B=304-110,n=D.length||1,sw=(Rr-L)/n,max=Math.max(1,...D.map(d=>Math.max(d.day,d.night)))*1.25;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" class="xsvg"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#E7E6E6" stroke-width="1.4"/></pattern></defs>'+
+    '<rect x="'+L+'" y="'+T+'" width="'+(Rr-L)+'" height="'+(B-T)+'" fill="url(#hatch)"/>';
+  for(let g=0;g<=6;g++){ const y=T+(B-T)*g/6; s+='<line x1="'+L+'" y1="'+y+'" x2="'+Rr+'" y2="'+y+'" stroke="#D9D9D9"/>'; }
+  for(let i=0;i<=n;i++){ const x=L+i*sw; s+='<line x1="'+x+'" y1="'+T+'" x2="'+x+'" y2="'+B+'" stroke="#D9D9D9"/>'; }
+  D.forEach((d,i)=>{ const x0=L+i*sw+sw*0.04, bw=sw*0.46;
+    [[d.day,'#2E75B6'],[d.night,'#ED7D31']].forEach(([v,c],j)=>{ const hh=(B-T)*v/max, x=x0+j*bw;
+      s+='<rect x="'+x+'" y="'+(B-hh)+'" width="'+bw+'" height="'+hh+'" fill="'+c+'"/>'+
+         '<text x="'+(x+bw/2)+'" y="'+(B-10)+'" text-anchor="middle" font-size="30" font-weight="700" fill="#000">'+v+'</text>'; });
+    s+='<text x="'+(L+i*sw+sw/2)+'" y="'+(B+52)+'" text-anchor="middle" font-size="34" fill="#595959">'+dmy4(d.date)+'</text>'; });
+  s+='<rect x="'+(W/2-80)+'" y="'+(H-27)+'" width="13" height="13" fill="#2E75B6"/><text x="'+(W/2-62)+'" y="'+(H-15)+'" font-size="20" fill="#595959">Day</text>'+
+     '<rect x="'+(W/2+2)+'" y="'+(H-27)+'" width="13" height="13" fill="#ED7D31"/><text x="'+(W/2+20)+'" y="'+(H-15)+'" font-size="20" fill="#595959">Night</text>';
   return s+'</svg>';
+}
+// Truck register combo chart: readiness area, Actual + Not-in-register stacked bars,
+// Total actual line, %Accuracy line (own scale) - the e-mail's second picture
+function trChart(P,o){
+  const W=1250,H=o.h||360,L=22,Rr=W-22,T=70,grp=P.some(p=>p.grp),B=H-(grp?(o.wrap?92:62):40),n=Math.max(1,P.length),sw=(Rr-L)/n;
+  const mx=Math.max(1,...P.map(p=>Math.max(p.reg,p.act+p.nreg)))*1.08;
+  const pc=P.map(p=>p.reg?p.act/p.reg:0), pmx=Math.max(0.1,...pc)*1.18;
+  const X=i=>L+i*sw+sw/2, Y=v=>B-(B-T)*v/mx, Yp=v=>B-(B-T)*v/pmx;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" class="xsvg">';
+  for(let g=0;g<=6;g++){ const y=T+(B-T)*g/6; s+='<line x1="'+L+'" y1="'+y+'" x2="'+Rr+'" y2="'+y+'" stroke="#D9D9D9"/>'; }
+  // readiness area
+  if(P.length){ const pts=P.map((p,i)=>X(i)+','+Y(p.reg)).join(' ');
+    s+='<polygon points="'+X(0)+','+B+' '+pts+' '+X(P.length-1)+','+B+'" fill="#A9D18E" fill-opacity=".75"/>'; }
+  P.forEach((p,i)=>{ const bw=sw*0.62, x=X(i)-bw/2, ya=Y(p.act), yn=Y(p.act+p.nreg);
+    s+='<rect x="'+x+'" y="'+ya+'" width="'+bw+'" height="'+(B-ya)+'" fill="#9DC3E6"/>';
+    if(p.nreg) s+='<rect x="'+x+'" y="'+yn+'" width="'+bw+'" height="'+(ya-yn)+'" fill="#FFC000"/>'; });
+  const line=(ys,c)=>'<polyline points="'+ys.map((y,i)=>X(i)+','+y).join(' ')+'" fill="none" stroke="'+c+'" stroke-width="3.2" stroke-linejoin="round"/>'+ys.map((y,i)=>'<circle cx="'+X(i)+'" cy="'+y+'" r="5" fill="#fff" stroke="'+c+'" stroke-width="2"/>').join('');
+  const tot=P.map(p=>Y(p.act+p.nreg)), acy=pc.map(Yp);
+  s+=line(tot,'#00B050')+line(acy,'#FF0000');
+  const fs=P.length>24?13:16;
+  P.forEach((p,i)=>{ s+='<text x="'+X(i)+'" y="'+(B-8)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="#404040">'+fmt(p.act)+'</text>'+
+    '<text x="'+X(i)+'" y="'+(tot[i]-11)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="#404040">'+fmt(p.act+p.nreg)+'</text>'+
+    '<text x="'+X(i)+'" y="'+(acy[i]-11)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="#404040">'+Math.round(pc[i]*100)+'%</text>'; });
+  // axis labels: one row, plus the group row (month / customer) with separators
+  s+='<line x1="'+L+'" y1="'+B+'" x2="'+Rr+'" y2="'+B+'" stroke="#BFBFBF"/>';
+  P.forEach((p,i)=>{ const lab=String(p.lab);
+    if(o.wrap&&lab.length>8&&lab.indexOf(' ')>0){ const k=lab.indexOf(' ');
+      s+='<text x="'+X(i)+'" y="'+(B+22)+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(lab.slice(0,k))+'</text><text x="'+X(i)+'" y="'+(B+42)+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(lab.slice(k+1))+'</text>'; }
+    else s+='<text x="'+X(i)+'" y="'+(B+24)+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(lab)+'</text>'; });
+  if(grp){ const gy=B+(o.wrap?50:30), ty=gy+26; let st=0;
+    for(let i=1;i<=P.length;i++){ if(i===P.length||P[i].grp!==P[st].grp){ const x0=L+st*sw, x1=L+i*sw, g=P[st].grp, k=g.indexOf(' ');
+        s+='<line x1="'+x1+'" y1="'+B+'" x2="'+x1+'" y2="'+(H-4)+'" stroke="#BFBFBF"/>';
+        if(o.wrap&&g.length>8&&k>0&&(x1-x0)<110) s+='<text x="'+((x0+x1)/2)+'" y="'+(ty-8)+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(g.slice(0,k))+'</text><text x="'+((x0+x1)/2)+'" y="'+(ty+12)+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(g.slice(k+1))+'</text>';
+        else s+='<text x="'+((x0+x1)/2)+'" y="'+ty+'" text-anchor="middle" font-size="17" fill="#595959">'+esc(g)+'</text>';
+        st=i; } }
+    s+='<line x1="'+L+'" y1="'+B+'" x2="'+L+'" y2="'+(H-4)+'" stroke="#BFBFBF"/><line x1="'+L+'" y1="'+gy+'" x2="'+Rr+'" y2="'+gy+'" stroke="#BFBFBF"/>'; }
+  if(!P.length) s+='<text x="'+(W/2)+'" y="'+((T+B)/2)+'" text-anchor="middle" font-size="20" fill="#7F7F7F">No registration or loading on this day</text>';
+  s+='<text x="'+(L+10)+'" y="62" font-size="64" fill="#000">'+esc(o.title)+'</text>';
+  return s+'</svg>';
+}
+function trLegend(){
+  const it=[['area','#A9D18E','Truck readiness'],['bar','#9DC3E6','Actual'],['bar','#FFC000','Not in truck registered'],['line','#00B050','Total actual'],['line','#FF0000','%Accuracy']];
+  return '<div class="trleg">'+it.map(([k,c,t])=>'<span>'+(k==='line'?'<svg width="40" height="12"><line x1="0" y1="6" x2="40" y2="6" stroke="'+c+'" stroke-width="3"/><circle cx="20" cy="6" r="4" fill="#fff" stroke="'+c+'" stroke-width="2"/></svg>':'<i style="background:'+c+'"></i>')+t+'</span>').join('')+'</div>';
 }
 
 /* ---------- WEEKLY ---------- */

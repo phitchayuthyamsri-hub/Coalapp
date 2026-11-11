@@ -164,5 +164,56 @@ check("...but cannot upload", client("look").post("/api/coalrpt/upload?kind=all"
 r = boss.post("/api/coalrpt/readiness/remove", json={"from": "2026-11-10", "to": "2026-11-10"}).get_json()
 check("remove register dates", (r["removed"], r["total"]), (2, 1))
 
+
+print("\nThe daily e-mail report (Daily tab)")
+from app import coal_report as CR                                  # noqa: E402
+from app.models import KVStore                                     # noqa: E402
+with app.app_context():
+    import json as _j
+    CR._DAILY_CACHE.clear()
+    db.session.query(CoalRptWeigh).delete(); db.session.query(CoalRptReady).delete()
+    rows = [
+        # (ticket, plate, day, ap, day_in, tons, contract)
+        ("T1", "73H-031.59", "2026-11-10", "d", "2026-11-10", 46.0, "Coal Offtake Agreement 291-PO8"),
+        ("T2", "73H-031.59", "2026-11-10", "n", "2026-11-11", 61.0, "Coal Offtake Agreement 291-PO8"),
+        ("T3", "ບກ 2369", "2026-11-10", "d", "2026-11-10", 33.0, "151Coal/KCL-XPPL/2026"),     # space removed by the ticket key
+        ("T4", "ບກ9999", "2026-11-10", "d", "2026-11-10", 36.0, "151Coal/KCL-XPPL/2026"),      # not registered
+        ("T5", "74H-019.66", "2026-11-09", "d", "2026-11-09", 45.0, "Coal Offtake Agreement 291-PO8")]
+    for t, p, d, ap, di, tons, c in rows:
+        db.session.add(CoalRptWeigh(id=t, plate=CR.norm_plate(p), plate_raw=p, day=d, ap=ap, day_in=di, net_t=tons, contract=c, market=""))
+    for i, (d, p, country, c, comp) in enumerate([
+            ("2026-11-10", "73H-031.59", "Vietnam", "Coal Offtake Agreement 291-PO8", "PTS"),
+            ("2026-11-10", "74H-019.66", "Vietnam", "Coal Offtake Agreement 291-PO8", "Bao Binh"),
+            ("2026-11-10", "LAບກ2369", "Laos", "151Coal/KCL-XPPL/2026", "KCL"),               # Lao plate over 7: characters 3-8
+            ("2026-11-09", "74H-019.66", "Vietnam", "Coal Offtake Agreement 291-PO8", "Bao Binh")]):
+        db.session.add(CoalRptReady(id="r%d" % i, reg_date=d, plate=CR.norm_plate(p), plate_raw=p, country=country, contract=c, company=comp, sub=comp))
+    db.session.commit()
+    contracts = [
+        {"customer": "Namtien", "export": "Oversea", "term": "EXW", "endUser": "N/A", "contract": "Coal Offtake Agreement 291-PO8",
+         "start": "2026-09-25", "end": "2026-12-25", "extension": "", "gar": "FC 5000 Kcal", "transporter": "NT", "qty": 1000, "tonPerTrip": 60, "status": "Ongoing"},
+        {"customer": "Khammouane", "export": "Domestic", "term": "EXW", "endUser": "N/A", "contract": "151Coal/KCL-XPPL/2026",
+         "start": "2026-09-19", "end": "2026-10-31", "extension": "", "gar": "FC 4600 Kcal", "transporter": "KCL", "qty": 2000, "tonPerTrip": 32, "status": "Ongoing"},
+        {"customer": "MHC", "export": "Domestic", "contract": "141Coal/MHC-XPPL/2026", "start": "2026-06-09", "end": "2026-08-31", "qty": 5, "tonPerTrip": 32, "status": "Complete"}]
+    kv = db.session.get(KVStore, "coalRptContracts_v1") or KVStore(key="coalRptContracts_v1"); kv.value = _j.dumps(contracts); db.session.add(kv); db.session.commit()
+R = boss.get("/api/coalrpt/daily?day=2026-11-10").get_json()
+st = {r["contract"]: r for r in R["status"]}
+check("only Ongoing contracts, e-mail order (Namtien before Khammouane)", [r["customer"] for r in R["status"]], ["Namtien", "Khammouane"])
+check("Contract status: day tons and to date (up to the day)", (st["Coal Offtake Agreement 291-PO8"]["day"], st["Coal Offtake Agreement 291-PO8"]["toDate"]), (107.0, 152.0))
+pl = {r["contract"]: r for r in R["plan"]}
+p8, kc = pl["Coal Offtake Agreement 291-PO8"], pl["151Coal/KCL-XPPL/2026"]
+check("Quantity = contract qty - to date", p8["quantity"], 848.0)
+check("Plan truck = Quantity / Ton per trip, rounded up (848/60)", p8["plan"], 15)
+check("Plan truck / day = Plan truck / days left (15 over 45 days to 25/12)", (p8["perDay"], p8["daysLeft"]), (1, 45))
+check("Variance = trucks on the day - plan per day", p8["variance"], 2 - 1)
+check("ended contract still Ongoing: planned to the end of the month, with a remark", (kc["refEnd"], kc["daysLeft"], "ended 31/10/26" in kc["remark"]), ("2026-11-30", 20, True))
+check("...the contract list keeps its own end date", st["151Coal/KCL-XPPL/2026"]["end"], "2026-10-31")
+check("Truck register = registrations of the day", (p8["register"], kc["register"]), (2, 1))
+check("volume bands: 46 t -> 40-50t, 61 t -> 61-65t", p8["bands"], [0, 0, 0, 1, 0, 1, 0])
+check("Day / Night of the last 7 days", [d for d in R["dayNight"] if d["date"] >= "2026-11-09"], [{"date": "2026-11-09", "day": 1, "night": 0}, {"date": "2026-11-10", "day": 3, "night": 1}])
+bs = {(d["customer"], d["company"]): (d["reg"], d["act"], d["nreg"]) for d in R["bySub"]}
+check("Truck register match: contract + truck + date, Lao plate chars 3-8, ticket spaces removed",
+      (bs[("Namtien", "PTS")], bs[("Khammouane", "KCL")], bs[("Khammouane", "No data")]), ((1, 2, 0), (1, 1, 0), (0, 0, 1)))
+check("Daily chart point for the day", [(d["reg"], d["act"], d["nreg"]) for d in R["daily"] if d["date"] == "2026-11-10"], [(3, 3, 1)])
+check("Weekly chart = Oversea only (ISO week 46: the Khammouane rows are Domestic)", [(w["reg"], w["act"], w["nreg"]) for w in R["weekly"] if w["label"] == "46"], [(3, 3, 0)])
 print("\n" + ("%d FAILED" % FAIL if FAIL else "ALL PASS"))
 sys.exit(1 if FAIL else 0)

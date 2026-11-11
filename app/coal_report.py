@@ -430,3 +430,220 @@ def list_rows(kind, q="", page=0, size=200):
         data = [{"id": r.id, "day": r.reg_date, "plate": r.plate_raw, "contract": r.contract, "country": r.country,
                  "company": r.company, "sub": r.sub, "status": r.status} for r in rows]
     return {"total": total, "page": page, "size": size, "rows": data}
+
+
+# ── the daily report, as the team e-mails it (11/11/2026) ────────────────────
+# "Daily report Coal actual movement & NT truck readiness comparison report":
+# Contract status + Truck plan tables, Day/Night trips of the last 7 days, and
+# the Truck register charts (Weekly / Daily / By customer / By Subcontractor).
+# Customer order of the e-mail's tables, and of its charts (new customers go
+# after these, Oversea before Domestic, A-Z).
+TABLE_ORDER = ["Namtien", "Thanh Cong", "Khammouane", "Lao Cement", "MHC", "TGS", "LCIS", "LRY", "LSL"]
+CHART_ORDER = ["Thanh Cong", "TGS", "Khammouane", "Namtien", "Lao Cement", "LCIS"]
+BAND_TOP = (34, 37, 40, 50, 60, 65)        # Calculation file col AO, in tons: <=34000 kg ... 66t+
+_DAILY_CACHE = {}
+
+
+def band_of(tons):
+    for i, top in enumerate(BAND_TOP):
+        if tons <= top:
+            return i
+    return 6
+
+
+def _ci(s):
+    return (s or "").strip().upper()
+
+
+def ready_plate_key(plate, country):
+    """TruckRegister[Index2]: a Lao plate longer than 7 keeps characters 3-8."""
+    p = plate or ""
+    if (country or "").strip().upper() == "LAOS" and len(p) > 7:
+        p = p[2:8]
+    return p.upper()
+
+
+def ticket_plate_key(plate):
+    """ActualTimeLoad_Data[Index]: TRIM(SUBSTITUTE(Truck No, " ", ""))."""
+    return (plate or "").replace(" ", "").strip().upper()
+
+
+def _order_key(order):
+    def k(name_market):
+        name, market = name_market
+        if name in order:
+            return (0, order.index(name), "")
+        return (1, 0 if market == "Oversea" else 1, name.upper())
+    return k
+
+
+def plan_for(c, to_date, day):
+    """The Truck plan columns by the user's rule (11/11/2026):
+    Quantity = contract quantity - loaded to date; Plan truck = Quantity / Ton per
+    trip, rounded up; Plan truck / day = Plan truck / days left in the contract,
+    rounded up. A contract past its end but still 'Ongoing' is counted to the end
+    of the month, with a remark (the contract list itself is left as it is)."""
+    D = date.fromisoformat(day)
+    qty = float(c.get("qty") or 0)
+    remaining = max(0.0, qty - to_date)
+    tpt = float(c.get("tonPerTrip") or 0) or (60.0 if c.get("export") == "Oversea" else 32.0)
+    plan = int(-(-remaining // tpt)) if remaining > 0 else 0
+    end = max([x for x in (c.get("end"), c.get("extension")) if x] or [""])
+    remark, ref_end = "", end
+    nxt = D + timedelta(days=1)
+    if not end or end <= day:
+        last = (date(nxt.year + (nxt.month == 12), nxt.month % 12 + 1, 1) - timedelta(days=1)).isoformat()
+        ref_end = last
+        remark = ("Contract ended %s but is still Ongoing - planned to %s (end of month)"
+                  % (_dmy(end), _dmy(last))) if end else "No end date - planned to %s (end of month)" % _dmy(last)
+    days_left = max(1, (date.fromisoformat(ref_end) - D).days)
+    per_day = int(-(-plan // days_left)) if plan else 0
+    return {"remaining": remaining, "plan": plan, "perDay": per_day, "daysLeft": days_left, "refEnd": ref_end,
+            "tonPerTrip": tpt, "remark": remark}
+
+
+def _dmy(iso):
+    if not iso:
+        return ""
+    y, m, d = iso.split("-")
+    return "%d/%s/%s" % (int(d), m, y[2:])
+
+
+def daily_report(day, contracts, stamp=""):
+    """Everything the e-mail shows for one loading day (06:00 to 06:00)."""
+    key = (day, stamp, len(contracts))
+    if key in _DAILY_CACHE:
+        return _DAILY_CACHE[key]
+    D = date.fromisoformat(day)
+    cmap = {_ci(c.get("contract")): c for c in contracts}
+
+    def cust_of(contract):
+        c = cmap.get(_ci(contract))
+        return (c.get("customer") or contract) if c else (contract or "")
+
+    def market_of(contract):
+        c = cmap.get(_ci(contract))
+        return c.get("export", "") if c else ""
+
+    wk0 = D - timedelta(days=D.weekday()) - timedelta(weeks=25)        # 26 weeks, Monday first
+    d30 = D - timedelta(days=29)
+    lo = min(wk0, d30).isoformat()
+
+    tickets = db.session.query(CoalRptWeigh.day, CoalRptWeigh.ap, CoalRptWeigh.day_in, CoalRptWeigh.plate_raw,
+                               CoalRptWeigh.net_t, CoalRptWeigh.contract) \
+        .filter(CoalRptWeigh.day >= lo, CoalRptWeigh.day <= day).all()
+    ready = db.session.query(CoalRptReady.reg_date, CoalRptReady.plate_raw, CoalRptReady.country,
+                             CoalRptReady.contract, CoalRptReady.company) \
+        .filter(CoalRptReady.reg_date >= lo, CoalRptReady.reg_date <= day) \
+        .order_by(db.text("coal_rpt_ready.rowid")).all()
+    to_date = {_ci(c): t or 0 for c, t in db.session.query(CoalRptWeigh.contract, func.sum(CoalRptWeigh.net_t))
+               .filter(CoalRptWeigh.day <= day).group_by(CoalRptWeigh.contract)}
+
+    # ---- Truck register matching, key for key as the Calculation file
+    idx = {}
+    reg_by = {}                          # (date, contract, company) -> registrations
+    for r_day, plate, country, contract, company in ready:
+        k = (_ci(contract), ready_plate_key(plate, country), r_day)
+        if k not in idx:
+            idx[k] = company or ""
+        kk = (r_day, contract or "", company or "")
+        reg_by[kk] = reg_by.get(kk, 0) + 1
+    act_by, nreg_by = {}, {}             # (date, contract, company) -> tickets
+    today = {"tons": {}, "trips": {}, "bands": {}}
+    dn = {}
+    for t_day, ap, day_in, plate, tons, contract in tickets:
+        pk = ticket_plate_key(plate)
+        ck = _ci(contract)
+        comp = idx.get((ck, pk, t_day))
+        if comp is None and day_in:
+            comp = idx.get((ck, pk, day_in))
+        if comp is None:
+            kk = (t_day, contract or "", "No data")
+            nreg_by[kk] = nreg_by.get(kk, 0) + 1
+        else:
+            kk = (t_day, contract or "", comp)
+            act_by[kk] = act_by.get(kk, 0) + 1
+        if t_day >= (D - timedelta(days=6)).isoformat():
+            dn.setdefault(t_day, [0, 0])[1 if ap == "n" else 0] += 1
+        if t_day == day:
+            today["tons"][ck] = today["tons"].get(ck, 0) + (tons or 0)
+            today["trips"][ck] = today["trips"].get(ck, 0) + 1
+            b = today["bands"].setdefault(ck, [0] * 7)
+            b[band_of(tons or 0)] += 1
+
+    def roll(keyf, keep=lambda d, c: True):
+        out = {}
+        for src, slot in ((reg_by, 0), (act_by, 1), (nreg_by, 2)):
+            for (d, c, comp), n in src.items():
+                if not keep(d, c):
+                    continue
+                g = keyf(d, c, comp)
+                out.setdefault(g, [0, 0, 0])[slot] += n
+        return out
+
+    def iso_week(d):
+        y, w, _ = date.fromisoformat(d).isocalendar()
+        return "%04d-%02d" % (y, w)
+
+    weekly = roll(lambda d, c, comp: iso_week(d), lambda d, c: market_of(c) == "Oversea" and d >= wk0.isoformat())
+    weeks = []
+    for i in range(26):
+        wd = wk0 + timedelta(weeks=i)
+        k = iso_week(wd.isoformat())
+        v = weekly.get(k, [0, 0, 0])
+        weeks.append({"label": str(int(k[5:])), "week": k, "monday": wd.isoformat(), "reg": v[0], "act": v[1], "nreg": v[2]})
+    daily = roll(lambda d, c, comp: d, lambda d, c: d >= d30.isoformat())
+    days = []
+    for i in range(30):
+        dd = (d30 + timedelta(days=i)).isoformat()
+        v = daily.get(dd, [0, 0, 0])
+        days.append({"date": dd, "reg": v[0], "act": v[1], "nreg": v[2]})
+    corder = _order_key(CHART_ORDER)
+    bc = roll(lambda d, c, comp: cust_of(c), lambda d, c: d == day)
+    by_cust = [{"customer": k, "reg": v[0], "act": v[1], "nreg": v[2]}
+               for k, v in sorted(bc.items(), key=lambda kv: corder((kv[0], market_of_cust(kv[0], contracts))))]
+    bs = roll(lambda d, c, comp: (cust_of(c), comp or "(blank)"), lambda d, c: d == day)
+    by_sub = [{"customer": k[0], "company": k[1], "reg": v[0], "act": v[1], "nreg": v[2]}
+              # inside a customer: most total actual first, then most readiness (as the e-mail's chart)
+              for k, v in sorted(bs.items(), key=lambda kv: (corder((kv[0][0], market_of_cust(kv[0][0], contracts))),
+                                                             -(kv[1][1] + kv[1][2]), -kv[1][0], kv[0][1].upper()))]
+
+    # ---- the two tables: Ongoing contracts, in the e-mail's customer order
+    live = [c for c in contracts if (c.get("status") or "") == "Ongoing"]
+    torder = _order_key(TABLE_ORDER)
+    live.sort(key=lambda c: (torder((c.get("customer") or "", c.get("export") or "")), _ci(c.get("contract"))))
+    status, plan = [], []
+    for c in live:
+        ck = _ci(c.get("contract"))
+        td = to_date.get(ck, 0.0)
+        end = max([x for x in (c.get("end"), c.get("extension")) if x] or [""])
+        status.append({"customer": c.get("customer"), "export": c.get("export"), "term": c.get("term"),
+                       "endUser": c.get("endUser"), "contract": c.get("contract"), "start": c.get("start"),
+                       "end": end, "ended": bool(end) and end <= day, "gar": c.get("gar"), "qty": c.get("qty") or 0,
+                       "day": round(today["tons"].get(ck, 0), 2), "toDate": round(td, 2)})
+        p = plan_for(c, td, day)
+        trips = today["trips"].get(ck, 0)
+        regs = sum(n for (d, cc, comp), n in reg_by.items() if d == day and _ci(cc) == ck)
+        plan.append({"customer": c.get("customer"), "export": c.get("export"), "transporter": c.get("transporter"),
+                     "contract": c.get("contract"), "gar": c.get("gar"), "quantity": round(p["remaining"], 2),
+                     "plan": p["plan"], "perDay": p["perDay"], "variance": trips - p["perDay"], "register": regs,
+                     "bands": today["bands"].get(ck, [0] * 7), "trips": trips, "remark": p["remark"],
+                     "daysLeft": p["daysLeft"], "refEnd": p["refEnd"], "tonPerTrip": p["tonPerTrip"]})
+    dn7 = []
+    for i in range(6, -1, -1):
+        dd = (D - timedelta(days=i)).isoformat()
+        v = dn.get(dd, [0, 0])
+        dn7.append({"date": dd, "day": v[0], "night": v[1]})
+    out = {"day": day, "status": status, "plan": plan, "dayNight": dn7, "weekly": weeks, "daily": days,
+           "byCustomer": by_cust, "bySub": by_sub}
+    if len(_DAILY_CACHE) > 30:
+        _DAILY_CACHE.clear()
+    _DAILY_CACHE[key] = out
+    return out
+
+
+def market_of_cust(name, contracts):
+    for c in contracts:
+        if (c.get("customer") or "") == name:
+            return c.get("export") or ""
+    return ""
