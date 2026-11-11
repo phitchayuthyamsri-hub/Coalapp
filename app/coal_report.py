@@ -203,9 +203,9 @@ def _find(z, kind, sst_holder):
 
 
 def _open(fileobj):
-    data = fileobj.read() if hasattr(fileobj, "read") else open(fileobj, "rb").read()
+    """A path, or a seekable file (an upload is spooled to disk); read in place."""
     try:
-        return zipfile.ZipFile(io.BytesIO(data))
+        return zipfile.ZipFile(fileobj)
     except zipfile.BadZipFile:
         raise ValueError("not an .xlsx file")
 
@@ -229,8 +229,8 @@ def loading_day(dt):
 
 
 def parse_weigh(H, rows):
+    """Yields one ticket at a time."""
     g = lambda r, *ks: next((r[H[k]] for k in ks if k in H and H[k] < len(r)), None)
-    out = {}
     for r in rows:
         plate_raw = _s(g(r, "truckno"))
         if not plate_raw:
@@ -246,13 +246,12 @@ def parse_weigh(H, rows):
         tid = _s(g(r, "ticketid")) or ("W" + _s(g(r, "wid")))
         if tid in ("", "W"):
             tid = "%s|%s|%s" % (ref.isoformat(), norm_plate(plate_raw), net)
-        out[tid] = {"id": tid[:40], "day": day, "ap": ap,
+        yield {"id": tid[:40], "day": day, "ap": ap,
                     "day_in": (t_in or ref).date().isoformat(),   # gate-in date: the register match's second try
                     "plate": norm_plate(plate_raw)[:32], "plate_raw": plate_raw[:40], "net_t": tons,
                     "contract": _s(g(r, "contractno", "contract", "contratno"))[:120],
                     "customer": _s(g(r, "customername"))[:160],
                     "market": _market(_s(g(r, "ovsdmt", "export", "exportoversea")))}
-    return list(out.values())
 
 
 def _market(s):
@@ -265,22 +264,21 @@ def _market(s):
 
 
 def parse_ready(H, rows):
+    """Yields one registration at a time."""
     g = lambda r, *ks: next((r[H[k]] for k in ks if k in H and H[k] < len(r)), None)
-    out = {}
     for r in rows:
         rid = _s(g(r, "id"))
         plate_raw = _s(g(r, "truckplate"))
         day = _day(g(r, "registerdate"))
         if not rid or not plate_raw or not day:
             continue
-        out[rid] = {"id": rid[:64], "reg_date": day, "contract": _s(g(r, "contractno"))[:120],
+        yield {"id": rid[:64], "reg_date": day, "contract": _s(g(r, "contractno"))[:120],
                     "plate": norm_plate(plate_raw)[:32], "plate_raw": plate_raw[:40],
                     "country": _s(g(r, "country"))[:30],
                     # the Calculation file spells it "Transportion Company"
                     "company": _s(g(r, "transportcompany", "transportioncompany"))[:80],
                     "sub": _s(g(r, "subcontractor"))[:80],
                     "status": _s(g(r, "registrationstatus"))[:30]}
-    return list(out.values())
 
 
 def parse_contracts(H, rows):
@@ -302,22 +300,34 @@ def parse_contracts(H, rows):
 
 
 # ── storing ──────────────────────────────────────────────────────────────────
-def _replace_days(model, col, rows, chunk=2000):
-    """The file is the record for the days it covers: those days are replaced."""
-    if not rows:
-        return 0, None, None
-    days = sorted({r[col] for r in rows})
-    lo, hi = days[0], days[-1]
-    ids = [r["id"] for r in rows]
-    for i in range(0, len(days), 500):
-        model.query.filter(getattr(model, col).in_(days[i:i + 500])).delete(synchronize_session=False)
-    # an id already stored on another day (a corrected date) moves to this one
-    for i in range(0, len(ids), 500):
-        model.query.filter(model.id.in_(ids[i:i + 500])).delete(synchronize_session=False)
-    for i in range(0, len(rows), chunk):
-        db.session.execute(model.__table__.insert(), rows[i:i + chunk])
-    db.session.commit()
-    return len(rows), lo, hi
+def _store(model, col, rows, chunk=2000):
+    """The file is the record for the days it covers: its rows are written (a
+    ticket already stored is replaced, wherever it was), then any row of those
+    days the file no longer has is removed. Written in batches as read; one
+    transaction, so a file that fails half way leaves nothing behind."""
+    ins = model.__table__.insert().prefix_with("OR REPLACE")
+    days, ids, buf = set(), set(), []
+    try:
+        for r in rows:
+            days.add(r[col])
+            ids.add(r["id"])
+            buf.append(r)
+            if len(buf) >= chunk:
+                db.session.execute(ins, buf)
+                buf = []
+        if buf:
+            db.session.execute(ins, buf)
+        dl = sorted(days)
+        for i in range(0, len(dl), 200):
+            gone = [x for (x,) in db.session.query(model.id).filter(getattr(model, col).in_(dl[i:i + 200]))
+                    if x not in ids]
+            for j in range(0, len(gone), 500):
+                model.query.filter(model.id.in_(gone[j:j + 500])).delete(synchronize_session=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return len(ids), (dl[0] if dl else None), (dl[-1] if dl else None)
 
 
 def import_workbook(fileobj, kinds=("weigh", "ready", "contracts"), log=None):
@@ -337,12 +347,10 @@ def import_workbook(fileobj, kinds=("weigh", "ready", "contracts"), log=None):
         if log:
             log("%s: reading sheet %r" % (kind, name))
         if kind == "weigh":
-            rows = parse_weigh(H, it)
-            n, lo, hi = _replace_days(CoalRptWeigh, "day", rows)
+            n, lo, hi = _store(CoalRptWeigh, "day", parse_weigh(H, it))
             res[kind] = {"rows": n, "from": lo, "to": hi, "sheet": name}
         elif kind == "ready":
-            rows = parse_ready(H, it)
-            n, lo, hi = _replace_days(CoalRptReady, "reg_date", rows)
+            n, lo, hi = _store(CoalRptReady, "reg_date", parse_ready(H, it))
             res[kind] = {"rows": n, "from": lo, "to": hi, "sheet": name}
         else:
             rows = parse_contracts(H, it)
