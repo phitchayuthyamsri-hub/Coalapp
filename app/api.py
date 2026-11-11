@@ -1417,95 +1417,120 @@ def _open_upload():
     return openpyxl.load_workbook(fs.stream, data_only=True, read_only=True)
 
 
+# ── Daily/Weekly performance report: three data lists (11/11/2026) ───────────
+# 1 Input_Actual data loading + 2 Truck readiness live in their own tables
+# (coal_report); 3 Contract stays in the shared store. Any of them comes from
+# the team's Calculation file or the daily export it is built from.
+RPT_KINDS = {"weigh": "Input_Actual data loading", "ready": "Truck readiness", "contracts": "Contract"}
+
+
+def _rpt_meta():
+    try:
+        return json.loads(_kv_get("coalRptMeta_v1") or "{}")
+    except Exception:
+        return {}
+
+
+def _rpt_upload(kinds):
+    from . import coal_report
+    fs = request.files.get("file")
+    if not fs:
+        return jsonify(ok=False, error="no file"), 400
+    try:
+        res = coal_report.import_workbook(fs.stream, kinds)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    found = [k for k in kinds if k in res]
+    if not found:
+        return jsonify(ok=False, error="no " + " / ".join(RPT_KINDS[k] for k in kinds)
+                       + " table in this file (looked for its sheet name and its column headers)"), 400
+    meta = _rpt_meta()
+    stamp = {"at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "by": current_user.username,
+             "file": (fs.filename or "")[:120]}
+    out = {}
+    for k in found:
+        r = res[k]
+        if k == "contracts":
+            _kv_set("coalRptContracts_v1", json.dumps(r.pop("data")))
+        meta[k] = dict(stamp, **r)
+        out[k] = r
+    _kv_set("coalRptMeta_v1", json.dumps(meta))
+    return jsonify(ok=True, done=out, missing=[RPT_KINDS[k] for k in res.get("missing", [])])
+
+
+@bp.post("/coalrpt/upload")
+@editor_required
+def coalrpt_upload():
+    kind = request.args.get("kind", "all")
+    kinds = tuple(RPT_KINDS) if kind == "all" else ((kind,) if kind in RPT_KINDS else ())
+    if not kinds:
+        abort(400)
+    return _rpt_upload(kinds)
+
+
+# the two upload addresses the page used before the data lists (kept working)
 @bp.post("/coalrpt/contracts")
 @editor_required
 def coalrpt_contracts():
-    wb = _open_upload()
-    ws = wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return jsonify(ok=False, error="empty file"), 400
-    H = _hdr_index(rows[0])
-    def g(r, key):
-        i = H.get(key)
-        return r[i] if i is not None and i < len(r) else None
-    out = []
-    for r in rows[1:]:
-        if not _rs(g(r, "contract")):
-            continue
-        out.append({"customer": _rs(g(r, "customername")), "export": _rs(g(r, "export")),
-                    "term": _rs(g(r, "term")), "endUser": _rs(g(r, "enduser")),
-                    "contract": _rs(g(r, "contract")), "start": _ymd(g(r, "start")),
-                    "end": _ymd(g(r, "end")), "gar": _rs(g(r, "gartype")),
-                    "transporter": _rs(g(r, "transporter")), "qty": _num(g(r, "cntqty")),
-                    "tonPerTrip": _num(g(r, "tontrip")), "status": _rs(g(r, "status"))})
-    _kv_set("coalRptContracts_v1", json.dumps(out))
-    return jsonify(ok=True, count=len(out))
+    return _rpt_upload(("contracts",))
 
 
 @bp.post("/coalrpt/readiness")
 @editor_required
 def coalrpt_readiness():
-    wb = _open_upload()
-    ws = wb["Data"] if "Data" in wb.sheetnames else wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return jsonify(ok=False, error="empty file"), 400
-    H = _hdr_index(rows[0])
-    def g(r, key):
-        i = H.get(key)
-        return r[i] if i is not None and i < len(r) else None
-    try:
-        store = json.loads(_kv_get("coalRptReady_v1") or "{}")
-    except Exception:
-        store = {}
-    added = 0
-    for r in rows[1:]:
-        rid = _rs(g(r, "id"))
-        if not rid:
-            continue
-        store[rid] = {"id": rid, "regDate": _ymd(g(r, "registerdate")),
-                      "contract": _rs(g(r, "contractno")), "plate": _rs(g(r, "truckplate")),
-                      "country": _rs(g(r, "country")), "company": _rs(g(r, "transportcompany")),
-                      "sub": _rs(g(r, "subcontractor"))}
-        added += 1
-    _kv_set("coalRptReady_v1", json.dumps(store))
-    return jsonify(ok=True, added=added, total=len(store))
+    return _rpt_upload(("ready",))
 
 
 @bp.post("/coalrpt/readiness/remove")
 @editor_required
 def coalrpt_readiness_remove():
+    from .models import CoalRptReady
     d = request.get_json(force=True, silent=True) or {}
     frm, to = _rs(d.get("from")), _rs(d.get("to"))
-    try:
-        store = json.loads(_kv_get("coalRptReady_v1") or "{}")
-    except Exception:
-        store = {}
-    before = len(store)
-    store = {rid: row for rid, row in store.items()
-             if not ((not frm or row.get("regDate", "") >= frm) and (not to or row.get("regDate", "") <= to))}
-    _kv_set("coalRptReady_v1", json.dumps(store))
-    return jsonify(ok=True, removed=before - len(store), total=len(store))
+    if not frm and not to:
+        return jsonify(ok=False, error="pick a date range"), 400
+    q = CoalRptReady.query
+    if frm:
+        q = q.filter(CoalRptReady.reg_date >= frm)
+    if to:
+        q = q.filter(CoalRptReady.reg_date <= to)
+    removed = q.delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify(ok=True, removed=removed, total=CoalRptReady.query.count())
 
 
 @bp.get("/coalrpt/data")
 @login_required
 def coalrpt_data():
-    try:
-        wmonths = json.loads(_kv_get("coalRptWeigh_v1") or "{}")
-    except Exception:
-        wmonths = {}
-    weigh = []
-    for m in wmonths.values():
-        if isinstance(m, list):
-            weigh.extend(m)
+    from . import coal_report
     try:
         contracts = json.loads(_kv_get("coalRptContracts_v1") or "[]")
     except Exception:
         contracts = []
     try:
-        ready = list(json.loads(_kv_get("coalRptReady_v1") or "{}").values())
-    except Exception:
-        ready = []
-    return jsonify(weighbridge=weigh, contracts=contracts, readiness=ready)
+        days = max(14, min(400, int(request.args.get("days", 120))))
+    except ValueError:
+        days = 120
+    d = coal_report.report_data(days)
+    d.update(contracts=contracts, meta=_rpt_meta())
+    return jsonify(d)
+
+
+@bp.get("/coalrpt/list")
+@login_required
+def coalrpt_list():
+    from . import coal_report
+    kind = request.args.get("kind", "weigh")
+    if kind == "contracts":
+        try:
+            rows = json.loads(_kv_get("coalRptContracts_v1") or "[]")
+        except Exception:
+            rows = []
+        return jsonify(total=len(rows), page=0, size=len(rows), rows=rows)
+    if kind not in ("weigh", "ready"):
+        abort(400)
+    try:
+        page = max(0, int(request.args.get("page", 0)))
+    except ValueError:
+        page = 0
+    return jsonify(coal_report.list_rows(kind, request.args.get("q", ""), page))

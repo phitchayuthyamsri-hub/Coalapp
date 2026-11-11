@@ -689,3 +689,35 @@ class GpsSnapshot(db.Model):
     taken_at = db.Column(db.DateTime, default=datetime.utcnow)   # UTC
     taken_by = db.Column(db.String(80), default="")
     data = db.Column(db.JSON, default=dict)                      # _gps_view(day, None)
+
+
+class CoalRptWeigh(db.Model):
+    """Daily/Weekly report, data list 1 'Input_Actual data loading': one row per
+    weighbridge ticket, as the team's Calculation file holds it (11/11/2026)."""
+    __tablename__ = "coal_rpt_weigh"
+    id = db.Column(db.String(40), primary_key=True)              # TicketID
+    # the team's loading day: Date Out + Time Out - 6 h (a day runs 06:00-06:00)
+    day = db.Column(db.String(10), index=True, nullable=False)
+    ap = db.Column(db.String(1), default="d")                    # d = AM 06-18, n = PM 18-06
+    day_in = db.Column(db.String(10))                            # gate-in date (Date In)
+    plate = db.Column(db.String(32), index=True)                 # normalised Truck No
+    plate_raw = db.Column(db.String(40))
+    net_t = db.Column(db.Float, default=0)                       # net weight in tons
+    contract = db.Column(db.String(120), index=True)
+    customer = db.Column(db.String(160))
+    market = db.Column(db.String(16))                            # Oversea / Domestic
+
+
+class CoalRptReady(db.Model):
+    """Daily/Weekly report, data list 2 'Truck readiness': one row per truck
+    registration (Registration Trucklist export), keyed by its ID."""
+    __tablename__ = "coal_rpt_ready"
+    id = db.Column(db.String(64), primary_key=True)
+    reg_date = db.Column(db.String(10), index=True, nullable=False)
+    contract = db.Column(db.String(120), index=True)
+    plate = db.Column(db.String(32), index=True)
+    plate_raw = db.Column(db.String(40))
+    country = db.Column(db.String(30))
+    company = db.Column(db.String(80))                           # Transport Company
+    sub = db.Column(db.String(80))                               # Subcontractor
+    status = db.Column(db.String(30))                            # Registration Status

@@ -72,7 +72,7 @@
     <button class="tab on" data-tab="daily">Daily</button>
     <button class="tab" data-tab="weekly">Weekly</button>
     <button class="tab" data-tab="accuracy">Accuracy</button>
-    <button class="tab editonly" data-tab="data">Data</button>
+    <button class="tab" data-tab="data">Data</button>
   </div>
   <div class="bar" id="marketBar">
     <label>Market</label>
@@ -94,7 +94,8 @@ const BK_LABELS=['32–34','35–37','38–40','40–50','51–60','61–65','66
 
 const normC=s=>String(s||'').trim().toUpperCase();
 const normP=s=>String(s||'').trim().toUpperCase().replace(/[\s.\-_/\\]/g,'');
-function bkIdx(n){n=+n||0; if(n<35)return 0; if(n<38)return 1; if(n<40)return 2; if(n<51)return 3; if(n<61)return 4; if(n<66)return 5; return 6;}
+// the team's Volume range (Calculation file col AO): net <= 34 t, 37, 40, 50, 60, 65, above
+function bkIdx(n){n=+n||0; if(n<=34)return 0; if(n<=37)return 1; if(n<=40)return 2; if(n<=50)return 3; if(n<=60)return 4; if(n<=65)return 5; return 6;}
 const fmt=(n,d=0)=>(+n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
 function dmy(s){ if(!s)return''; const p=String(s).split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s; }
 function mondayOf(s){ const d=new Date(s+'T00:00:00'); const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd); return iso(d); }
@@ -112,18 +113,25 @@ async function boot(){
 }
 function $$(s){return [...document.querySelectorAll(s)];}
 
+// the server sends the report rows compact (11/11/2026): dictionaries + arrays
+function decode(j){
+  const D=(j&&j.dict)||{c:[],p:[],cust:[],co:[],sub:[]}, M=['','Oversea','Domestic'];
+  return { contracts:(j&&j.contracts)||[], totals:(j&&j.totals)||{}, summary:(j&&j.summary)||{}, meta:(j&&j.meta)||{}, since:(j&&j.since)||'',
+    weighbridge:((j&&j.w)||[]).map(r=>({d:r[0],p:D.p[r[1]],net:r[2],c:D.c[r[3]],cust:D.cust[r[4]],m:M[r[5]]||'',ap:r[6]?'n':'d',di:r[7]||r[0]})),
+    readiness:((j&&j.r)||[]).map(r=>({regDate:r[0],plate:D.p[r[1]],contract:D.c[r[2]],company:D.co[r[3]],sub:D.sub[r[4]]})) };
+}
 async function reload(){
-  try{ RAW=await (await fetch('/api/coalrpt/data')).json(); }catch(e){ RAW={weighbridge:[],contracts:[],readiness:[]}; }
+  try{ RAW=decode(await (await fetch('/api/coalrpt/data')).json()); }catch(e){ RAW=decode(null); }
   build(); render();
 }
 function build(){
   CMAP={}; (RAW.contracts||[]).forEach(c=>{ CMAP[normC(c.contract)]=c; });
   WROWS=(RAW.weighbridge||[]).filter(r=>r&&r.d).map(r=>{ const ck=normC(r.c); const c=CMAP[ck];
-    return {ck, date:r.d, net:+r.net||0, ap:(r.ap==='n'?'n':'d'), p:normP(r.p),
+    return {ck, date:r.d, dayIn:r.di||r.d, net:+r.net||0, ap:(r.ap==='n'?'n':'d'), p:normP(r.p),
             market:(c&&c.export)||r.m||'', cust:(c&&c.customer)||r.cust||r.c||'(no contract)'}; });
   REGrows=(RAW.readiness||[]).map(r=>({ck:normC(r.contract), plate:normP(r.plate), regDate:r.regDate||'',
             company:r.company||'', sub:r.sub||'', market:(CMAP[normC(r.contract)]&&CMAP[normC(r.contract)].export)||''}));
-  const asof=maxW(); $('#asof').textContent = asof ? ('Latest delivery: '+dmy(asof)) : 'No weighbridge data yet — upload in the TMS tool.';
+  const asof=maxW(); $('#asof').textContent = asof ? ('Latest delivery: '+dmy(asof)+(RAW.since?' · rows since '+dmy(RAW.since):'')) : 'No loading data yet — upload it on the Data tab (1. Input_Actual data loading).';
 }
 const mOK=r=>!MARKET||r.market===MARKET;
 function maxW(){ let m=''; WROWS.forEach(r=>{ if(r.date>m)m=r.date; }); return m; }
@@ -141,7 +149,7 @@ function aggregate(){
 }
 function regCount(date){ const seen={},m={}; REGrows.forEach(r=>{ if(MARKET&&r.market&&r.market!==MARKET)return; if(date&&r.regDate!==date)return; if(!r.plate)return; const k=r.ck+'|'+r.plate; if(seen[k])return; seen[k]=1; m[r.ck]=(m[r.ck]||0)+1; }); return m; }
 function tonPerTrip(c){ return (c&&+c.tonPerTrip>0)?+c.tonPerTrip:(TGT[(c&&c.export)||'']||TGT.Oversea); }
-function remainingWeeks(c,asof){ if(!c.end)return 1; const days=(new Date(c.end+'T00:00:00')-new Date(asof+'T00:00:00'))/864e5; return Math.max(1,Math.ceil(days/7)); }
+function remainingWeeks(c,asof){ const e=c.extension||c.end; if(!e)return 1; const days=(new Date(e+'T00:00:00')-new Date(asof+'T00:00:00'))/864e5; return Math.max(1,Math.ceil(days/7)); }
 
 function render(){
   if(TAB==='daily') return renderDaily();
@@ -154,7 +162,7 @@ function render(){
 let DAILY_STATUS='Ongoing';
 function renderDaily(){
   const A=aggregate(), asof=maxW();
-  const delivered={}; for(const ck in A.cd){ let t=0; for(const d in A.cd[ck])t+=A.cd[ck][d].t; delivered[ck]=t; }
+  const delivered={}; for(const ck in (RAW.totals||{})) delivered[ck]=RAW.totals[ck].t||0;   // whole history, not only the rows sent
   const regToday=regCount(maxReg());
   const contracts=(RAW.contracts||[]).filter(c=>(!MARKET||c.export===MARKET));
   const shown=contracts.filter(c=>DAILY_STATUS==='All'||c.status===DAILY_STATUS);
@@ -171,7 +179,7 @@ function renderDaily(){
     '</tr></thead><tbody>';
   if(!shown.length) html+='<tr><td colspan="13" class="empty">No contracts.</td></tr>';
   shown.forEach(c=>{ const ck=normC(c.contract); const del=delivered[ck]||0; const yest=(A.cd[ck]&&A.cd[ck][asof])?A.cd[ck][asof].t:0; const rem=(+c.qty||0)-del;
-    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.term)}</td><td class="l">${esc(c.endUser)}</td><td class="l">${esc(c.contract)}</td><td class="l">${dmy(c.start)}</td><td class="l">${dmy(c.end)}</td><td class="l">${esc(c.gar)}</td><td>${fmt(c.qty)}</td><td>${fmt(yest)}</td><td>${fmt(del)}</td><td class="${rem<0?'neg':''}">${fmt(rem)}</td><td class="l"><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td></tr>`;
+    html+=`<tr><td class="l">${esc(c.customer)}</td><td class="l">${esc(c.export)}</td><td class="l">${esc(c.term)}</td><td class="l">${esc(c.endUser)}</td><td class="l">${esc(c.contract)}</td><td class="l">${dmy(c.start)}</td><td class="l">${dmy(c.end)}${c.extension?'<div class="muted" style="font-size:11px">ext '+dmy(c.extension)+'</div>':''}</td><td class="l">${esc(c.gar)}</td><td>${fmt(c.qty)}</td><td>${fmt(yest)}</td><td>${fmt(del)}</td><td class="${rem<0?'neg':''}">${fmt(rem)}</td><td class="l"><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td></tr>`;
   });
   html+='</tbody></table></div></div>';
 
@@ -267,65 +275,113 @@ function barSVG(items,color,fmtv){
 }
 
 /* ---------- ACCURACY ---------- */
+// The team's Truck register file (11/11/2026), formula for formula:
+//   Index = Contract _ Truck No _ loading Date; a ticket is "Actual" when the Truck
+//   readiness holds that index (second try: the gate-in date), else "Not in truck
+//   registered". %Accuracy = Actual / Truck readiness (registrations).
 let ACC_BY='sub';
-function wPlateTrips(){ const m={}; WROWS.forEach(r=>{ if(!mOK(r))return; if(!r.p)return; m[r.p]=(m[r.p]||0)+1; }); return m; }
+function accGroups(){
+  const reg={}; REGrows.forEach(r=>{ if(!r.plate||!r.regDate)return; if(MARKET&&r.market&&r.market!==MARKET)return;
+    const k=r.ck+'|'+r.plate+'|'+r.regDate; if(!reg[k]) reg[k]={r,act:0}; });
+  const cust=ck=>{ const c=CMAP[ck]; return c?c.customer:(ck||'(no contract)'); };
+  const dim={ sub:x=>x.sub||'(none)', cust:x=>cust(x.ck), week:x=>mondayOf(x.day), day:x=>x.day }[ACC_BY];
+  const G={}, g=k=>G[k]||(G[k]={reg:0,act:0,nreg:0});
+  for(const k in reg){ const x=reg[k].r; g(dim({sub:x.sub,ck:x.ck,day:x.regDate})).reg++; }
+  const since=RAW.since||'';
+  WROWS.forEach(w=>{ if(!mOK(w)||!w.p||w.date<since)return;
+    const hit=reg[w.ck+'|'+w.p+'|'+w.date]||reg[w.ck+'|'+w.p+'|'+w.dayIn];
+    if(hit){ g(dim({sub:hit.r.sub,ck:w.ck,day:hit.r.regDate})).act++; }
+    else g(dim({sub:'(not in truck registered)',ck:w.ck,day:w.date})).nreg++; });
+  return G;
+}
 function renderAccuracy(){
-  const wtrips=wPlateTrips(); const wset=new Set(Object.keys(wtrips));
-  const reg=REGrows.filter(r=>r.plate && (!MARKET || !r.market || r.market===MARKET));
-  const regPlates=new Set(reg.map(r=>r.plate)); let matched=0; regPlates.forEach(p=>{ if(wset.has(p))matched++; });
-  const dim={ sub:r=>r.sub||'(none)', cust:r=>{ const c=CMAP[r.ck]; return c?c.customer:(r.ck||'(no contract)'); },
-              week:r=>r.regDate?mondayOf(r.regDate):'(no date)', day:r=>r.regDate||'(no date)' }[ACC_BY];
-  const groups={}; reg.forEach(r=>{ const g=dim(r); (groups[g]=groups[g]||{plates:new Set()}); groups[g].plates.add(r.plate); });
-  let rows=Object.keys(groups).map(g=>{ const ps=[...groups[g].plates]; const del=ps.filter(p=>wset.has(p)).length;
-      const trips=ps.reduce((sm,p)=>sm+(wtrips[p]||0),0); return {g,reg:ps.length,del,trips,acc:ps.length?del/ps.length*100:0}; });
-  if(ACC_BY==='week'||ACC_BY==='day') rows.sort((a,b)=>a.g.localeCompare(b.g)); else rows.sort((a,b)=>b.reg-a.reg);
-
+  const G=accGroups();
+  let rows=Object.keys(G).map(k=>Object.assign({g:k,acc:G[k].reg?G[k].act/G[k].reg*100:0},G[k]));
+  if(ACC_BY==='week'||ACC_BY==='day') rows.sort((a,b)=>b.g.localeCompare(a.g)); else rows.sort((a,b)=>b.reg-a.reg||b.nreg-a.nreg);
+  const T=rows.reduce((t,r)=>({reg:t.reg+r.reg,act:t.act+r.act,nreg:t.nreg+r.nreg}),{reg:0,act:0,nreg:0});
   let html='<div class="bar"><div class="seg" id="accby">'+
     [['sub','By subcontractor'],['cust','By customer'],['week','By week'],['day','By day']].map(x=>`<button data-k="${x[0]}" class="${x[0]===ACC_BY?'on':''}">${x[1]}</button>`).join('')+'</div></div>';
-  html+='<div class="card"><div class="kv"><span>Registered plates: <b>'+regPlates.size+'</b></span>'+
-    '<span>Seen in weighbridge: <b>'+matched+'</b> ('+(regPlates.size?Math.round(matched/regPlates.size*100):0)+'%)</span>'+
-    '<span>Distinct weighbridge plates: <b>'+wset.size+'</b></span></div>'+
-    '<div class="legend muted">Accuracy = registered trucks that actually delivered &divide; registered trucks. Matched by plate. If "seen in weighbridge" is near 0%, weighbridge Truck No and readiness Truck Plate are in different formats and the match is failing.</div></div>';
+  html+='<div class="card"><div class="kv"><span>Truck readiness: <b>'+fmt(T.reg)+'</b></span><span>Actual: <b>'+fmt(T.act)+'</b></span>'+
+    '<span>Not in truck registered: <b>'+fmt(T.nreg)+'</b></span><span>Total actual: <b>'+fmt(T.act+T.nreg)+'</b></span>'+
+    '<span>%Accuracy: <b>'+(T.reg?(T.act/T.reg*100).toFixed(1):'0')+'%</b></span></div>'+
+    '<div class="legend muted">As the Truck register file: a ticket is Actual when its contract + truck + loading date (or gate-in date) is in Truck readiness; %Accuracy = Actual &divide; Truck readiness'+(RAW.since?' · from '+dmy(RAW.since):'')+'.</div></div>';
   html+='<div class="card"><h2>Register vs actual &mdash; '+({sub:'by subcontractor',cust:'by customer',week:'by week',day:'by day'}[ACC_BY])+'</h2><div class="tableScroll"><table><thead><tr>'+
-    ['Group','Registered','Delivered','Trips','Accuracy %'].map((h,i)=>`<th class="${i===0?'l':''}">${h}</th>`).join('')+'</tr></thead><tbody>';
-  if(!rows.length) html+='<tr><td colspan="5" class="empty">No readiness data for this market.</td></tr>';
-  rows.forEach(r=>{ const lab=ACC_BY==='week'?wkLabel(r.g)+' (wk)':ACC_BY==='day'?dmy(r.g):r.g; const cls=r.acc>=80?'pos':(r.acc>=50?'':'neg');
-    html+=`<tr><td class="l">${esc(lab)}</td><td>${r.reg}</td><td>${r.del}</td><td>${r.trips}</td><td class="${cls}">${r.acc.toFixed(0)}%</td></tr>`; });
+    ['Group','Truck readiness','Actual','Not in truck registered','Total actual','%Accuracy'].map((h,i)=>`<th class="${i===0?'l':''}">${h}</th>`).join('')+'</tr></thead><tbody>';
+  if(!rows.length) html+='<tr><td colspan="6" class="empty">No readiness data for this market.</td></tr>';
+  rows.forEach(r=>{ const lab=ACC_BY==='week'?wkLabel(r.g)+' (wk)':ACC_BY==='day'?dmy(r.g):r.g; const cls=!r.reg?'':r.acc>=80?'pos':(r.acc>=50?'':'neg');
+    html+=`<tr><td class="l">${esc(lab)}</td><td>${fmt(r.reg)}</td><td>${fmt(r.act)}</td><td>${fmt(r.nreg)}</td><td>${fmt(r.act+r.nreg)}</td><td class="${cls}">${r.reg?r.acc.toFixed(1)+'%':'—'}</td></tr>`; });
   html+='</tbody></table></div></div>';
   $('#view').innerHTML=html;
   const e=$('#accby'); if(e) e.addEventListener('click',ev=>{ const b=ev.target.closest('button'); if(!b)return; ACC_BY=b.dataset.k; $$('#accby button').forEach(x=>x.classList.toggle('on',x===b)); renderAccuracy(); });
 }
 
 /* ---------- DATA ---------- */
+// Three data lists, named as the sheets of the team's Calculation file (11/11/2026).
+const DL={weigh:{q:'',page:0}, ready:{q:'',page:0}};
+const DL_DEF={
+  weigh:{n:1,title:'Input_Actual data loading',what:'one row per weighbridge ticket',
+    src:'The weighbridge ticket export (TicketID, Truck No, Date Out, Net Weight, ContractNo, OVS_DMT…) or the Calculation file. Replaces the days the file covers.',
+    cols:[['day','Date'],['ap','AM/PM'],['id','Ticket'],['plate','Truck No'],['net','Net (t)'],['contract','Contract'],['customer','Customer'],['market','Exp/Ovs']]},
+  ready:{n:2,title:'Truck readiness',what:'one row per truck registration',
+    src:'The Registration Trucklist export (ID, Register Date, Contract No, Truck Plate…) or the Calculation file. Replaces the register dates the file covers.',
+    cols:[['day','Register date'],['plate','Truck plate'],['contract','Contract'],['country','Country'],['company','Transport company'],['sub','Subcontractor'],['status','Status']]},
+  contracts:{n:3,title:'Contract',what:'the contract list',
+    src:'The Contract sheet of the Calculation file (the headers may sit a few rows down). Replaces the whole list.',
+    cols:[['customer','Customer'],['export','Exp/Ovs'],['term','Term'],['endUser','End user'],['contract','Contract'],['start','Start'],['end','End'],['extension','Extension'],['gar','GAR'],['transporter','Transporter'],['qty','Cnt. QTY'],['tonPerTrip','Ton/trip'],['status','Status']]}};
+function metaLine(k){ const m=(RAW.meta||{})[k]; if(!m) return ''; const at=m.at?new Date(m.at):null;
+  return 'Last upload '+(at?at.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'')+' by '+esc(m.by||'')+(m.file?' · '+esc(m.file):'')+(m.rows!=null?' · '+fmt(m.rows)+' rows':'')+(m.from?' ('+dmy(m.from)+' → '+dmy(m.to)+')':''); }
 function renderData(){
-  const wmonths={}; (RAW.weighbridge||[]).forEach(r=>{ const m=(r.d||'').slice(0,7); if(m)wmonths[m]=(wmonths[m]||0)+1; });
-  const rdates=(RAW.readiness||[]).map(r=>r.regDate).filter(Boolean).sort();
-  let html='<div class="card"><h2>Current data</h2><div class="kv">'+
-    `<span>Contracts: <b>${(RAW.contracts||[]).length}</b></span>`+
-    `<span>Readiness rows: <b>${(RAW.readiness||[]).length}</b></span>`+
-    `<span>Readiness dates: <b>${rdates.length?dmy(rdates[0])+' → '+dmy(rdates[rdates.length-1]):'—'}</b></span>`+
-    `<span>Weighbridge rows: <b>${(RAW.weighbridge||[]).length}</b></span>`+
-    `<span>Weigh months: <b>${Object.keys(wmonths).sort().join(', ')||'—'}</b></span>`+
-    '</div><div class="legend muted">Weighbridge is uploaded in the TMS tool (Data input → Weighbridge); it flows here automatically.</div></div>';
-
-  html+='<div class="card editonly"><h2>Upload</h2>'+
-    '<div class="upbox"><h3>Contracts master</h3><p>One-time upload. Replaces the whole contract list (re-upload to update).</p>'+
-      '<input type="file" id="cFile" accept=".xlsx,.xls"> <button class="act" id="cBtn">Upload contracts</button><span class="status" id="cMsg"></span></div>'+
-    '<div class="upbox"><h3>Readiness register</h3><p>Appends &amp; merges by ID — safe to re-upload and to add backward updates.</p>'+
-      '<input type="file" id="rFile" accept=".xlsx,.xls"> <button class="act" id="rBtn">Upload readiness</button><span class="status" id="rMsg"></span></div>'+
-    '<div class="upbox"><h3>Remove readiness by date</h3><p>Delete registration rows in a Register-Date range (inclusive).</p>'+
-      'From <input type="date" id="rmFrom"> To <input type="date" id="rmTo"> <button class="act" id="rmBtn">Remove</button><span class="status" id="rmMsg"></span></div>'+
-    '</div>';
+  const S=RAW.summary||{}, w=S.weigh||{}, r=S.ready||{};
+  const sum={weigh:fmt(w.rows||0)+' rows'+(w.from?' · '+dmy(w.from)+' → '+dmy(w.to):''),
+             ready:fmt(r.rows||0)+' rows'+(r.from?' · '+dmy(r.from)+' → '+dmy(r.to):''),
+             contracts:(RAW.contracts||[]).length+' contracts · '+(RAW.contracts||[]).filter(c=>c.status==='Ongoing').length+' ongoing'};
+  let html='<div class="card editonly"><h2>Upload the Calculation file <span class="sub">— fills all three lists from one workbook (up to 64 MB; the daily exports in each list are smaller)</span></h2>'+
+    '<input type="file" id="upAll" accept=".xlsx,.xlsm"> <button class="act" data-up="all" data-in="upAll">Upload all three</button><span class="status" id="msg_all"></span></div>';
+  ['weigh','ready','contracts'].forEach(k=>{ const D=DL_DEF[k];
+    html+='<div class="card" id="dl_'+k+'"><h2>'+D.n+'. '+D.title+' <span class="sub">— '+D.what+' · '+sum[k]+'</span></h2>'+
+      '<div class="legend muted" style="margin:-6px 0 10px">'+(metaLine(k)||'No upload recorded yet.')+'</div>'+
+      '<div class="upbox editonly"><p>'+D.src+'</p><input type="file" id="up_'+k+'" accept=".xlsx,.xlsm"> <button class="act" data-up="'+k+'" data-in="up_'+k+'">Upload</button><span class="status" id="msg_'+k+'"></span>'+
+      (k==='ready'?'<div style="margin-top:10px;font-size:12px;color:var(--mut)">Remove register dates From <input type="date" id="rmFrom"> To <input type="date" id="rmTo"> <button class="act" id="rmBtn">Remove</button><span class="status" id="rmMsg"></span></div>':'')+'</div>'+
+      (k==='contracts'?'':'<div class="bar" style="margin:4px 0 8px"><input type="search" placeholder="Search truck, contract, customer, date…" data-q="'+k+'" value="'+esc(DL[k].q)+'" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;min-width:280px"><span class="status" id="pg_'+k+'"></span></div>')+
+      '<div class="tableScroll" style="max-height:46vh" id="tb_'+k+'"><div class="empty">Loading…</div></div></div>'; });
   $('#view').innerHTML=html;
-  if(!ME.can_edit) return;
-  const up=async(inp,url,msg,btn)=>{ const f=$(inp).files[0]; if(!f){ $(msg).textContent='Choose a file first.'; return; } $(msg).textContent='Uploading…'; $(btn).disabled=true;
-    try{ const fd=new FormData(); fd.append('file',f); const r=await fetch(url,{method:'POST',body:fd}); const j=await r.json(); if(!r.ok||j.ok===false){ $(msg).textContent='Error: '+(j.error||r.status); } else { $(msg).textContent='Done · '+JSON.stringify(j).replace(/[{}"]/g,''); await reloadKeep(); } }catch(e){ $(msg).textContent='Error: '+e; } $(btn).disabled=false; };
-  $('#cBtn').addEventListener('click',()=>up('#cFile','/api/coalrpt/contracts','#cMsg','#cBtn'));
-  $('#rBtn').addEventListener('click',()=>up('#rFile','/api/coalrpt/readiness','#rMsg','#rBtn'));
-  $('#rmBtn').addEventListener('click',async()=>{ const from=$('#rmFrom').value,to=$('#rmTo').value; if(!from&&!to){ $('#rmMsg').textContent='Pick a date range.'; return; } $('#rmMsg').textContent='Removing…';
-    try{ const r=await fetch('/api/coalrpt/readiness/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})}); const j=await r.json(); $('#rmMsg').textContent='Removed '+j.removed+' · total '+j.total; await reloadKeep(); }catch(e){ $('#rmMsg').textContent='Error: '+e; } });
+  loadList('weigh'); loadList('ready'); loadList('contracts');
+  $$('#view input[data-q]').forEach(inp=>{ let t; inp.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ const k=inp.dataset.q; DL[k].q=inp.value; DL[k].page=0; loadList(k); },350); }); });
 }
-async function reloadKeep(){ try{ RAW=await (await fetch('/api/coalrpt/data')).json(); }catch(e){} build(); renderData(); }
+async function loadList(k){
+  const box=$('#tb_'+k); if(!box) return; const D=DL_DEF[k];
+  let j; try{ j=await (await fetch('/api/coalrpt/list?kind='+k+(DL[k]?'&q='+encodeURIComponent(DL[k].q)+'&page='+DL[k].page:''))).json(); }catch(e){ box.innerHTML='<div class="empty">Could not load: '+esc(e)+'</div>'; return; }
+  const num=c=>c==='net'||c==='qty'||c==='tonPerTrip';
+  const cell=(c,v)=>(c==='day'||c==='start'||c==='end'||c==='extension')?dmy(v):c==='ap'?(v==='n'?'PM':'AM'):num(c)?fmt(v,c==='net'?2:0):(c==='status'&&k==='contracts')?'<span class="pill '+esc(v)+'">'+esc(v)+'</span>':esc(v);
+  box.innerHTML='<table><thead><tr>'+D.cols.map(c=>'<th class="'+(num(c[0])?'':'l')+'">'+c[1]+'</th>').join('')+'</tr></thead><tbody>'+
+    (j.rows.length?j.rows.map(r=>'<tr>'+D.cols.map(c=>'<td class="'+(num(c[0])?'':'l')+'">'+cell(c[0],r[c[0]])+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+D.cols.length+'" class="empty">No rows'+(DL[k]&&DL[k].q?' match':'')+'.</td></tr>')+'</tbody></table>';
+  const pg=$('#pg_'+k); if(pg&&DL[k]){ const from=j.page*j.size+1, to=Math.min(j.total,(j.page+1)*j.size);
+    pg.innerHTML=j.total?(fmt(from)+'–'+fmt(to)+' of '+fmt(j.total)+' · newest first '+
+      (j.page>0?'<button class="act" data-pg="'+k+'" data-d="-1" style="padding:3px 10px">‹ Newer</button> ':'')+
+      (to<j.total?'<button class="act" data-pg="'+k+'" data-d="1" style="padding:3px 10px">Older ›</button>':'')):''; }
+}
+// one listener for the Data tab, wired once (the view is redrawn, not replaced)
+document.getElementById('view').addEventListener('click',async e=>{
+  if(TAB!=='data') return;
+  const pb=e.target.closest('[data-pg]'); if(pb){ const k=pb.dataset.pg; DL[k].page=Math.max(0,DL[k].page+(+pb.dataset.d)); loadList(k); return; }
+  const ub=e.target.closest('[data-up]');
+  if(ub){ const kind=ub.dataset.up, f=$('#'+ub.dataset.in).files[0], msg=$('#msg_'+kind);
+    if(!f){ msg.textContent='Choose a file first.'; return; }
+    if(f.size>64*1024*1024){ msg.textContent='This file is '+Math.round(f.size/1048576)+' MB - over the 64 MB limit. Upload the daily exports into each list instead.'; return; }
+    msg.textContent='Uploading and reading '+f.name+'… (a large workbook takes up to a minute)'; ub.disabled=true;
+    try{ const fd=new FormData(); fd.append('file',f); const r=await fetch('/api/coalrpt/upload?kind='+kind,{method:'POST',body:fd});
+      const j=await r.json().catch(()=>({error:'HTTP '+r.status}));
+      if(!r.ok||j.ok===false){ msg.textContent='Not uploaded: '+(j.error||r.status); }
+      else { const keep='Done · '+Object.keys(j.done).map(k=>DL_DEF[k].title+' '+fmt(j.done[k].rows)+' rows'+(j.done[k].from?' ('+dmy(j.done[k].from)+' → '+dmy(j.done[k].to)+')':'')).join(' · ')+(j.missing&&j.missing.length?' · not in this file: '+j.missing.join(', '):'');
+        await reloadKeep(); const m2=$('#msg_'+kind); if(m2) m2.textContent=keep; } }
+    catch(err){ msg.textContent='Not uploaded: '+err; }
+    ub.disabled=false; return; }
+  if(e.target.id==='rmBtn'){ const from=$('#rmFrom').value,to=$('#rmTo').value; if(!from&&!to){ $('#rmMsg').textContent='Pick a date range.'; return; }
+    if(!confirm('Remove every Truck readiness row registered '+(from?'from '+dmy(from)+' ':'')+(to?'to '+dmy(to):'')+'?')) return;
+    $('#rmMsg').textContent='Removing…';
+    try{ const r=await fetch('/api/coalrpt/readiness/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})}); const j=await r.json(); const t='Removed '+fmt(j.removed)+' · '+fmt(j.total)+' left'; await reloadKeep(); const m=$('#rmMsg'); if(m) m.textContent=t; }catch(err){ $('#rmMsg').textContent='Error: '+err; } }
+});
+async function reloadKeep(){ try{ RAW=decode(await (await fetch('/api/coalrpt/data')).json()); }catch(e){} build(); renderData(); }
 
 boot();
 </script>
