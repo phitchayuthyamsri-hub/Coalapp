@@ -328,6 +328,10 @@ def _views(role=None):
     # The planner also watches: whoever issues a day has to see how it went.
     if r == "planner":
         out += ["monitor", "map"]
+    # A company watches its own trucks run (user 16/11/2026): the Monitor and the
+    # map, read-only, every row and every position narrowed to its own fleet.
+    if r == "subcontractor":
+        out += ["monitor", "map"]
     out.append("flow")
     return out
 
@@ -2281,10 +2285,16 @@ def map_data():
     now_local = datetime.utcnow() + LOCAL_OFFSET
 
     trucks, unseen = [], []
+    # A company login is handed its own trucks' positions and nothing else -
+    # the same fleet rule as the Fleet page (fleet_scope).
+    from .fleet_scope import visible_keys
+    mine = visible_keys(current_user)
     for t in Truck.query.order_by(Truck.plate).all():
         if (t.status or "") == "deactivated":
             continue
         k = engine.norm_plate(t.plate)
+        if mine is not None and k not in mine:
+            continue
         p = plan.get(k)
         started = False
         if p is not None:
@@ -2338,6 +2348,8 @@ def track_remark():
     and is named on it."""
     if "monitor" not in _views():
         return jsonify(error="Not your view"), 403
+    if _role() in ("subcontractor", "spectator"):
+        return jsonify(error="The Monitor is view-only for this login"), 403
     d = request.get_json(force=True, silent=True) or {}
     day = (d.get("date") or "").strip()
     key = engine.norm_plate((d.get("plate") or "").strip())
@@ -2610,9 +2622,16 @@ def track():
     remarks = {m.key: {"text": m.text or "", "by": m.by or "",
                        "at": _fmt(m.at) if m.at else ""}
                for m in MonitorRemark.query.filter_by(day=day).all()}
+    # The team's remarks are its own notes, often about the company itself:
+    # a company login does not get them (16/11/2026).
+    hide_remarks = _role() == "subcontractor"
+    if hide_remarks:
+        remarks = {}
     return jsonify(
         date=day, subcontractor_id=only, source=source, issued=issued,
-        remarks=remarks,
+        remarks=remarks, hide_remarks=hide_remarks,
+        # Look, do not touch: a company login and a spectator write nothing here.
+        read_only=_role() in ("subcontractor", "spectator"),
         # Who may type an actual time into a cell (right-click on the Monitor).
         may_edit_actual=_role() in ("monitor", "admin"),
         # The page draws one table per route, in the order routes were made.

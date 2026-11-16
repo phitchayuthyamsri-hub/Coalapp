@@ -629,7 +629,7 @@ function drawTrack(){
     {key:'remark', label:'Team remark',  rowspan:2,
      get: r => remarkOf(r).text || '',
      fget: r => (remarkOf(r).text ? 'has remark' : 'blank')}
-  ];
+  ].filter(c => !(c.key === 'remark' && d.hide_remarks));   // not shown to company logins
   const placeCols = [];
   locs.forEach(function(l, j){
     // The sort runs on the full timestamp, not the clock: an estimate that
@@ -693,11 +693,11 @@ function drawTrack(){
       + '<td class="plate">' + esc(r.plate) + '</td>'
       + '<td class="tel">' + phoneCell(r) + '</td>'
       + '<td class="c-sub" style="color:var(--mut)">' + esc(r.sub || '') + '</td>'
-      + '<td class="rmk"><input class="rmk-in" maxlength="300"'
+      + (d.hide_remarks ? '' : '<td class="rmk"><input class="rmk-in" maxlength="300"'
         + ' data-plate="' + esc(r.plate) + '"'
         + ' value="' + esc(rm.text || '') + '"'
         + (rm.by ? ' data-who="' + esc(rm.by + (rm.at ? ' · ' + rm.at : '')) + '"' : '')
-        + ' placeholder="note for the team…"></td>'
+        + (d.read_only ? ' readonly' : ' placeholder="note for the team…"') + '></td>')
       + cols.map(function(j){
           const c = cs[j];
           return '<td class="pl">'
@@ -812,6 +812,7 @@ function drawTrack(){
     inp.addEventListener('focus', hideRemark);
     inp.addEventListener('input', hideRemark);
     inp.addEventListener('change', async function(){
+      if (TRACK && TRACK.read_only) return;            // view-only login
       try {
         const r = await fetch('/api/shift/track/remark', {method: 'POST',
           headers: {'Content-Type': 'application/json'},
