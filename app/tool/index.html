@@ -5844,11 +5844,22 @@ function removeTruck(plate) {
   return true;
 }
 
+// The fleet itself: the trucks on the register (the server's truck table). The
+// Fleet page, its export and its template show these and nothing else (18/11/2026):
+// a plate only seen in the GPS history is not a truck of ours, and listing it here
+// counted 28 strangers as "online" (143 against a fleet of 119).
+function fleetRegisterPlates() {
+  return Object.keys(STATE.fleet || {}).sort();
+}
+
+// Every plate worth looking at on the status pages: the register, plus what the GPS
+// history has seen. A tombstone only ever hides a GPS-only plate - four working trucks
+// stayed hidden because an old removal outlived the truck coming back on the register.
 function allFleetPlates() {
-  const set = new Set(Object.keys(STATE.fleet));
+  const set = new Set();
   (STATE.fileInfo?.plates || []).forEach(p => set.add(normPlate(p)));
-  // Drop any tombstoned plates.
   STATE.hiddenPlates.forEach(p => set.delete(p));
+  fleetRegisterPlates().forEach(p => set.add(p));
   return Array.from(set).sort();
 }
 
@@ -5981,29 +5992,10 @@ function fleetCompanyCell(r) {
     + opts.join('') + '</select>';
 }
 
-function renderFleetUI() {
-  const body = document.getElementById('fleetBody');
-  const sumEl = document.getElementById('fleetSummary');
-  if (!body || !sumEl) return;
-  // The Route cell offers what the Route page holds. Ask for it once, the
-  // first time this table is drawn - the seed used to do it on the way past,
-  // and stopped when the ping sync it lived in was removed. Without the list
-  // the cell still shows the truck's route, as text, rather than a picker.
-  if (!_routeDefsAsked && !(STATE.routeDefs || []).length) {
-    _routeDefsAsked = true;
-    try { loadRoutes(); } catch (e) {}
-  }
-  const plates = FLEET_ADMIN ? allFleetPlates() : Object.keys(STATE.fleet || {}).sort();
-  const counts = { online: 0, maintenance: 0, breakdown: 0, deactivated: 0 };
-  plates.forEach(p => { counts[effectiveStatus(p)]++; });
-  sumEl.innerHTML = `${plates.length} trucks · `
-    + `<span class="pill pill-online">${counts.online} Online</span> `
-    + `<span class="pill pill-maint">${counts.maintenance} Maintenance</span> `
-    + `<span class="pill pill-break">${counts.breakdown} Breakdown</span> `
-    + `<span class="pill pill-deact">${counts.deactivated} Deactivated</span>`;
-
-  // Build rows with stats
-  const rows = plates.map(p => {
+// The rows of the Fleet table, in the order it is sorted. The export reads this
+// too, so the file always says what the page says.
+function fleetRows() {
+  const rows = fleetRegisterPlates().map(p => {
     const r = STATE.fleet[p] || { status: 'online', added: null };
     const ts = tripStats(p);
     return {
@@ -6038,6 +6030,50 @@ function renderFleetUI() {
     if (!sb) return -1;
     return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' }) * dir;
   });
+  return rows;
+}
+
+// Every column of the Fleet table, plus the truck's route (18/11/2026). GPS Company
+// stays ahead of Company: the fleet upload takes the first heading with "company" in it.
+const FLEET_EXPORT_COLS = [
+  ['Plate', 16, r => r.plate],
+  ['Status', 13, r => FLEET_STATUS_LABEL[r.status] || r.status],
+  ['Driver', 26, r => r.driver],
+  ['Phone', 17, r => r.phone],
+  ['Effective From', 14, r => r.effFrom],
+  ['Effective To', 14, r => r.effTo],
+  ['GPS Company', 13, r => r.gps],
+  ['Company', 13, r => r.company || (FLEET_SUBS.filter(x => String(x.id) === String(r.companyId))[0] || {}).short || ''],
+  ['Route', 25, r => r.route],
+  ['Date added', 12, r => r.added ? isoDate(new Date(r.added)) : ''],
+  ['Trips YTD', 10, r => r.ytd],
+  ['Trips this month', 15, r => r.month],
+  ['Avg trips/month', 15, r => r.avg ? Math.round(r.avg * 10) / 10 : 0]
+];
+function fleetExportAoa() {
+  return [FLEET_EXPORT_COLS.map(c => c[0])].concat(fleetRows().map(r => FLEET_EXPORT_COLS.map(c => c[2](r))));
+}
+
+function renderFleetUI() {
+  const body = document.getElementById('fleetBody');
+  const sumEl = document.getElementById('fleetSummary');
+  if (!body || !sumEl) return;
+  // The Route cell offers what the Route page holds. Ask for it once, the
+  // first time this table is drawn - the seed used to do it on the way past,
+  // and stopped when the ping sync it lived in was removed. Without the list
+  // the cell still shows the truck's route, as text, rather than a picker.
+  if (!_routeDefsAsked && !(STATE.routeDefs || []).length) {
+    _routeDefsAsked = true;
+    try { loadRoutes(); } catch (e) {}
+  }
+  const rows = fleetRows();
+  const counts = { online: 0, maintenance: 0, breakdown: 0, deactivated: 0 };
+  rows.forEach(r => { counts[r.status]++; });
+  sumEl.innerHTML = `${rows.length} trucks · `
+    + `<span class="pill pill-online">${counts.online} Online</span> `
+    + `<span class="pill pill-maint">${counts.maintenance} Maintenance</span> `
+    + `<span class="pill pill-break">${counts.breakdown} Breakdown</span> `
+    + `<span class="pill pill-deact">${counts.deactivated} Deactivated</span>`;
 
   body.innerHTML = rows.map(r => `
     <tr>
@@ -6984,12 +7020,12 @@ function setupFleetUI() {
 
   const expBtn = document.getElementById('fleetExportBtn');
   if (expBtn) expBtn.addEventListener('click', () => {
-    const plates = allFleetPlates();
-    if (!plates.length) { toast('No trucks to export', true); return; }
-    const aoa = [['Truck License', 'Status', 'Phone', 'Effective From', 'Effective To', 'GPS Company']];
-    plates.forEach(p => { const m = fleetMeta(p); aoa.push([p, getStatus(p), m.phone || '', m.effFrom || '', m.effTo || '', m.gps || '']); });
+    const aoa = fleetExportAoa();
+    if (aoa.length < 2) { toast('No trucks to export', true); return; }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = FLEET_EXPORT_COLS.map(c => ({ wch: c[1] }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Fleet');
+    XLSX.utils.book_append_sheet(wb, ws, 'Fleet');
     XLSX.writeFile(wb, 'Fleet_export.xlsx');
     toast('Fleet exported');
   });
@@ -7028,7 +7064,7 @@ function setupFleetUI() {
 }
 
 function downloadFleetTemplate() {
-  const plates = allFleetPlates();
+  const plates = fleetRegisterPlates();
   const aoa = [['Truck License', 'Status', 'Phone', 'Effective From', 'Effective To', 'GPS Company']];
   if (plates.length) {
     plates.forEach(p => { const m = fleetMeta(p); aoa.push([p, getStatus(p), m.phone || '', m.effFrom || '', m.effTo || '', m.gps || '']); });

@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from app import create_app
 from app import engine
 from app import geofence
-from app.models import db, Truck, GpsPing, Anchor, KVStore, Route
+from app.models import db, Truck, GpsPing, Anchor, KVStore, Route, Subcontractor
 
 FLEET_KEY = "actualGpsFleet_v2"
 TIMING_KEY = "actualGpsTiming_v1"
@@ -69,6 +69,7 @@ def _kv_set(key, obj):
 def build_fleet():
     """The tool keys its fleet on the plate; everything else hangs off that."""
     names = {r.id: r.name for r in Route.query.all()}
+    subs = {s.id: (s.short or s.name) for s in Subcontractor.query.all()}
     out = {}
     for t in Truck.query.order_by(Truck.plate).all():
         out[t.plate] = {
@@ -85,6 +86,10 @@ def build_fleet():
             # Which run this truck makes. The name, not the id: the tool keys
             # everything on names a person would recognise.
             "route": names.get(t.route_id, ""),
+            # The Fleet page's Company column reads these two (18/11/2026);
+            # without them it stayed blank for every truck.
+            "companyId": t.subcontractor_id or "",
+            "company": subs.get(t.subcontractor_id, ""),
         }
     return out
 
