@@ -246,19 +246,34 @@ SEED_JS = r"""
   // to their own trucks, would replace the whole team's fleet with their slice
   // of it. __READONLY__ is the bridge's own escape hatch; this is exactly what
   // it is for.
+  //
+  // The plan, the declared status and the GPS status are handed to the page
+  // in memory (window.__TOOL_SEED, read by dinLoad) and NOT through
+  // localStorage (20/11/2026). The shared-store pull above already fills
+  // localStorage with ~4.4 million characters (weighbridge + GPS timing), and
+  // adding the whole issued plan went over the browser's ~5 million limit:
+  // setItem threw, the catch swallowed it, and the page fell back to a stale
+  // team copy holding 40 plan rows of 07-08/11 - every day after that showed
+  // nothing planned and every truck as "came, not in plan". Memory has no
+  // such limit, and the server is the record for these three anyway.
+  window.__TOOL_SEED = {plan: SEED.plan || {}, status: SEED.status || null,
+                        gpsStatus: SEED.gpsStatus || null, at: SEED.at};
+  window.__TOOL_SEEDED_AT = SEED.at;
   var wasRO = window.__READONLY__;
   window.__READONLY__ = true;
   try {
     localStorage.setItem(FLEET_KEY, JSON.stringify(SEED.fleet || {}));
+  } catch (e) { console.warn('[tool-link] fleet seed failed', e); }
+  try {
     var din = {};
     try { din = JSON.parse(localStorage.getItem(DIN_KEY)) || {}; } catch (e) {}
-    // Replace only what the server is the authority for. The operator's own
-    // manual overrides, assignments and weighbridge fills are theirs.
-    din.plan = SEED.plan || {};
-    if (SEED.status) din.status = SEED.status;
-    din.gpsStatus = SEED.gpsStatus || null;
+    // Drop the server-owned parts from the stored copy so it stays small and
+    // a stale copy can never be read again. The operator's own manual
+    // overrides, assignments and weighbridge fills are theirs and stay.
+    din.plan = {};
+    if (SEED.status) din.status = null;
+    delete din.gpsStatus;
     localStorage.setItem(DIN_KEY, JSON.stringify(din));
-    window.__TOOL_SEEDED_AT = SEED.at;
   } catch (e) { console.warn('[tool-link] store seed failed', e); }
   finally { window.__READONLY__ = wasRO; }
 

@@ -6172,9 +6172,17 @@ async function withProgress(title, fn) {
 const DIN_LS_KEY = 'actualGpsDataInput_v1';
 STATE.din = STATE.din || { plan: {}, weigh: {}, status: null, statusFrom: '', statusTo: '' };
 
-function dinSave() { try { const { plan, status, statusFrom, statusTo, manual, assign, wbfill } = STATE.din; localStorage.setItem(DIN_LS_KEY, JSON.stringify({ plan, status, statusFrom, statusTo, manual, assign, wbfill })); } catch (e) {} }
+function dinSave() { try { const { plan, status, statusFrom, statusTo, manual, assign, wbfill } = STATE.din;
+  // Plan / status that came from the server (window.__TOOL_SEED, 20/11/2026) are not stored again:
+  // they arrive fresh on every load, and storing the whole plan is what overfilled localStorage.
+  const S = window.__TOOL_SEED, sp = S ? {} : plan, ss = (S && S.status) ? null : status;
+  localStorage.setItem(DIN_LS_KEY, JSON.stringify({ plan: sp, status: ss, statusFrom, statusTo, manual, assign, wbfill })); } catch (e) {} }
 function dinLoad() {
   try { const raw = localStorage.getItem(DIN_LS_KEY); if (raw) { const d = JSON.parse(raw); if (d && typeof d === 'object') STATE.din = Object.assign({ plan: {}, weigh: {}, status: null, statusFrom: '', statusTo: '', manual: {}, assign: {}, wbfill: {} }, d); } } catch (e) {}
+  // The server's issued plan, declared status and GPS status come in memory from /api/tool/seed.js
+  // (window.__TOOL_SEED) - never through localStorage, which the shared store already fills (20/11/2026).
+  const S = window.__TOOL_SEED;
+  if (S) { STATE.din.plan = S.plan || {}; if (S.status) STATE.din.status = S.status; STATE.din.gpsStatus = S.gpsStatus || null; }
   STATE.din.weigh = _weighSeed();   // baked history + saved monthly updates (persisted)
   STATE.din.manual = STATE.din.manual || {}; STATE.din.assign = STATE.din.assign || {};
   STATE.din.wbfill = STATE.din.wbfill || {};   // plate|date|stage -> ISO (weighbridge Mine time kept after it resolved into a PvA row; small, persisted)
@@ -13657,6 +13665,10 @@ async function exportBakedHTML(mode) {
     } else {
       step('Collecting visits & sequences…', 35); await _yield();
       const ls = {}; BAKE_LS_ALL.forEach(k => { const v = localStorage.getItem(k); if (v != null) ls[k] = v; });
+      // The issued plan is held in memory, not in localStorage (20/11/2026) - put it back into the saved copy.
+      try { if (window.__TOOL_SEED && STATE.din) { const d = JSON.parse(ls[DIN_LS_KEY] || '{}');
+        d.plan = STATE.din.plan || {}; d.status = STATE.din.status || null; d.gpsStatus = STATE.din.gpsStatus || null;
+        ls[DIN_LS_KEY] = JSON.stringify(d); } } catch (e) {}
       const payload = {
         savedAt: Date.now(), perfOnly: false, ls,
         sequences: (STATE.sequences || []).map(serializeSeq),
