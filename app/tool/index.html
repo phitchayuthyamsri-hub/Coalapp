@@ -2946,7 +2946,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
   <div class="page-pad">
     <div class="panel flex">
       <h2>Send Plan to Drivers</h2>
-      <div class="help-text" style="margin-bottom:10px">Pick a plan date, then send each driver their plan over WhatsApp. Phone numbers come from the <b>Fleet</b> page. <b>Send all</b> steps through every planned driver — WhatsApp requires you to press Send for each message.</div>
+      <div class="help-text" style="margin-bottom:10px">Pick a plan date, then send each driver their plan over WhatsApp. Phone numbers come from the <b>Fleet</b> page. Each driver is sent one at a time; sending to all drivers at once is switched off.</div>
       <div id="sendBody" class="send-body"></div>
     </div>
   </div>
@@ -8584,7 +8584,8 @@ function renderSend(){
     '<div class="send-ctrl">'
     + '<span class="pcl">Plan date</span>'
     + '<select id="sendDateSel" class="send-date">'+opts+'</select>'
-    + '<button class="send-all-btn" id="sendAllBtn"'+(withPhone?'':' disabled')+'>📲 Send all ('+withPhone+')</button>'
+    // "Send all" (every planned driver in a row) is switched off (user 20/11/2026) - send per driver only.
+    + (SEND_ALL_ENABLED ? '<button class="send-all-btn" id="sendAllBtn"'+(withPhone?'':' disabled')+'>📲 Send all ('+withPhone+')</button>' : '')
     + '<span class="help-text">'+day.length+' trucks planned · '+withPhone+' with phone'
       +(noPhone?(' · '+noPhone+' missing phone (skipped)'):'')
       +(notFleet?(' · '+notFleet+' planned truck(s) no longer in the fleet (hidden)'):'')+'</span>'
@@ -8603,8 +8604,10 @@ function renderSend(){
     });
   });
   const sab=document.getElementById('sendAllBtn');
-  if(sab) sab.addEventListener('click', function(){ _sendAllStart(day.filter(function(e){return _sPhoneDigits(e.plate);})); });
+  if(sab && SEND_ALL_ENABLED) sab.addEventListener('click', function(){ _sendAllStart(day.filter(function(e){return _sPhoneDigits(e.plate);})); });
 }
+// Send all drivers at once: OFF (user 20/11/2026). Per-driver WhatsApp buttons stay.
+const SEND_ALL_ENABLED=false;
 let _waQ=[], _waI=0;
 function _ensureStepDom(){
   if(document.getElementById('waStep')) return;
@@ -8630,6 +8633,7 @@ function _waRender(){
   document.getElementById('waMsg').textContent = planMsg(e.plate, sendDate, e);
 }
 function _sendAllStart(list){
+  if(!SEND_ALL_ENABLED) return;
   _waQ=(list||[]).slice(); _waI=0;
   if(!_waQ.length) return;
   _ensureStepDom();
