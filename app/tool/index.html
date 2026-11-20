@@ -1118,6 +1118,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .ptable th.tot, :is([data-page-panel="perf"],[data-page-panel="daily"]) .ptable td.tot{width:138px;min-width:138px;max-width:138px}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable th.splate, :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable td.splate{width:180px;min-width:180px;max-width:180px}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable th.sum, :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable td.sum{width:46px;min-width:46px;max-width:46px}
+/* Daily status counts and Per-truck daily symbols share one column grid (user 20/11/2026): first column 180,
+   Total = the six symbol totals below it (6 x 56), every date 58 - set by each table's <colgroup>. */
+:is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid{table-layout:fixed;max-width:none}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid :is(th,td){box-sizing:border-box;width:auto;min-width:0;max-width:none;padding-left:4px;padding-right:4px;overflow:hidden;text-overflow:clip}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid :is(th.stcorner,td.stname,th.splate,td.splate){padding-left:10px;padding-right:8px}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) th.sortable{cursor:pointer;user-select:none}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) th.sortable:hover{background:#16242f}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sortable{cursor:pointer;user-select:none}
@@ -12315,7 +12320,13 @@ function renderPerf(p){
     {label:'No GPS',             cls:'nogps', f:'noGps'},
     {label:'Come — not in plan', cls:'extra', f:'unplan'},
   ];
-  let head=`<thead><tr><th class="stcorner">Status \\ Date</th><th class="tot">Total</th>`;
+  // One column grid for both tables: plate/status 180, Total = the six symbol totals (6 x 56), dates 58 (user 20/11/2026)
+  const DG={first:180,sum:56,nsum:6,date:58};
+  const dgW=DG.first+DG.sum*DG.nsum+DG.date*p.dates.length;
+  const dgDates=p.dates.map(()=>`<col style="width:${DG.date}px">`).join('');
+  const dgTop=`<colgroup><col style="width:${DG.first}px"><col style="width:${DG.sum*DG.nsum}px">${dgDates}</colgroup>`;
+  const dgSym=`<colgroup><col style="width:${DG.first}px">${`<col style="width:${DG.sum}px">`.repeat(DG.nsum)}${dgDates}</colgroup>`;
+  let head=`${dgTop}<thead><tr><th class="stcorner">Status \\ Date</th><th class="tot">Total</th>`;
   for(const d of p.dates) head+=`<th>${dHdr(d)}</th>`;
   head+=`</tr></thead>`;
   let body='<tbody>';
@@ -12327,12 +12338,12 @@ function renderPerf(p){
   }
   body+='</tbody>';
   detail.innerHTML=`<div class="dcap">Daily status counts <span class="dleg"><b class="ok">● came as planned (&plusmn;1 h)</b> · <b class="off">◐ not as planned (1&ndash;12 h off)</b> · <b class="wait">⏳ waiting (window still open)</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b></span></div>
-    <div class="scroller" style="max-height:none"><table class="ptable">${head}${body}</table></div>`;
+    <div class="scroller dgscroll" style="max-height:none"><table class="ptable dgrid" style="width:${dgW}px">${head}${body}</table></div>`;
 
   // ---- truck × date symbol grid ----
   const SYM={circle:'●',half:'◐',wait:'⏳',cross:'✕',nogps:'No GPS',square:'■',manual:'◆'};
   const arrow=col=>dailySort.col===col?(dailySort.dir>0?' ▲':' ▼'):'';
-  let sh=`<thead><tr><th class="splate sortable" data-col="__plate">Truck \\ Date${arrow('__plate')}</th>
+  let sh=`${dgSym}<thead><tr><th class="splate sortable" data-col="__plate">Truck \\ Date${arrow('__plate')}</th>
       <th class="sum sumhdr circle" title="Came as planned">●</th>
       <th class="sum sumhdr half" title="Not as planned">◐</th>
       <th class="sum sumhdr wait" title="Waiting">⏳</th>
@@ -12382,7 +12393,10 @@ function renderPerf(p){
   }
   sb+='</tbody>';
   symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="off">◐ not as planned</b> · <b class="wait">⏳ waiting</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
-    <div class="scroller" style="max-height:none"><table class="symtable">${sh}${sb}</table></div>`;
+    <div class="scroller dgscroll" style="max-height:none"><table class="symtable dgrid" style="width:${dgW}px">${sh}${sb}</table></div>`;
+  // the two tables scroll sideways together, so the dates stay under each other
+  const _dgs=[detail.querySelector('.dgscroll'), symEl.querySelector('.dgscroll')].filter(Boolean);
+  _dgs.forEach(el=>el.addEventListener('scroll',()=>{ _dgs.forEach(o=>{ if(o!==el && o.scrollLeft!==el.scrollLeft) o.scrollLeft=el.scrollLeft; }); }));
 }
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function renderIssues(){
