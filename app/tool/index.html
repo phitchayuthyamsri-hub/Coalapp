@@ -12346,8 +12346,19 @@ function renderPerf(p){
   if(perfWbOnly){ fleetRows=fleetRows.filter(pl=>p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length); }
   if(dailySort.col==='__plate'){ fleetRows.sort((a,b)=>a<b?-1:a>b?1:0); if(dailySort.dir<0) fleetRows.reverse(); }
   else if(dailySort.col){ const c=dailySort.col;
-    const act=pl=>(p.grid[pl]&&p.grid[pl].byDate[c])?1:0;
-    fleetRows.sort((a,b)=>{ const d=act(b)-act(a); return d!==0?d*dailySort.dir:(a<b?-1:a>b?1:0); }); }
+    // Sorting a date sorts by that day's status (user 20/11/2026): came as planned, not as planned,
+    // waiting, did not come, No GPS, came not in plan, manual / weighbridge only. Clicking again
+    // reverses the status order; trucks with nothing that day always stay at the bottom.
+    // Not as planned is always by hours off the plan, ascending (early first, then least late).
+    const RANK={circle:0,half:1,wait:2,cross:3,nogps:4,square:5};
+    const cellOf=pl=>p.grid[pl]&&p.grid[pl].byDate[c];
+    const rank=pl=>{ const x=cellOf(pl); if(!x) return null; return x.sym in RANK?RANK[x.sym]:6; };
+    fleetRows.sort((a,b)=>{ const ra=rank(a), rb=rank(b);
+      if(ra==null||rb==null){ if(ra!=null) return -1; if(rb!=null) return 1; return a<b?-1:a>b?1:0; }
+      if(ra!==rb) return (ra-rb)*dailySort.dir;
+      if(ra===RANK.half){ const da=cellOf(a).dm, db=cellOf(b).dm;
+        const x=(da==null?Infinity:da)-(db==null?Infinity:db); if(x) return x<0?-1:1; }
+      return a<b?-1:a>b?1:0; }); }
   let sb='<tbody>';
   for(const pl of fleetRows){
     const g=p.grid[pl]||{totals:{circle:0,half:0,wait:0,cross:0,nogps:0,square:0},byDate:{}};
@@ -12622,7 +12633,7 @@ function computePerf(){
   const hTip=(p,m)=>{ const pt=planTime(p); const at=pt!=null?hm(new Date(pt)):'';
     return m==null?'':('plan '+at+' \u00b7 at the mine '+(m>0?fmtDur(m)+' late':fmtDur(-m)+' early')); };
   for(const p of dAsPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:'',tip:hTip(p,p.deltaMin)}; g.totals.circle++; }
-  for(const p of dOffPlan){ const g=ensure(p.plate); g.byDate[p.d]={sym:'half',note:hNote(p.deltaMin),tip:hTip(p,p.deltaMin)}; g.totals.half++; }
+  for(const p of dOffPlan){ const g=ensure(p.plate); g.byDate[p.d]={sym:'half',note:hNote(p.deltaMin),tip:hTip(p,p.deltaMin),dm:p.deltaMin}; g.totals.half++; }
   for(const p of dManualPlanned){ const g=ensure(p.plate); g.byDate[p.d]={sym:'circle',note:''}; g.totals.circle++; }   // manual came-as-planned
   for(const p of dNoShowFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'cross',note:''}; g.totals.cross++;} }
   for(const p of dNoGpsFinal){ const g=ensure(p.plate); if(!g.byDate[p.d]){g.byDate[p.d]={sym:'nogps',note:'',tip:'no GPS position from 12 hours before to 12 hours after the plan time'}; g.totals.nogps++;} }
