@@ -1123,6 +1123,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid{table-layout:fixed;max-width:none}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid :is(th,td){box-sizing:border-box;width:auto;min-width:0;max-width:none;padding-left:4px;padding-right:4px;overflow:hidden;text-overflow:clip}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) :is(.ptable,.symtable).dgrid :is(th.stcorner,td.stname,th.splate,td.splate){padding-left:10px;padding-right:8px}
+/* Per-truck grid (user 20/11/2026): Subcontractor next to Truck, both frozen on the left; the date header
+   row frozen on top while the grid scrolls (the grid scrolls inside its own box, up to the window height). */
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable.dgrid :is(th.ssub,td.ssub){position:sticky;left:116px;z-index:1;text-align:left;padding-left:6px;padding-right:4px;background:var(--panel2);font-size:11px;font-weight:600;color:#c9d1d9;white-space:nowrap;text-overflow:ellipsis;box-shadow:inset -1px 0 0 var(--line)}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable.dgrid thead th{position:sticky;top:0;z-index:2}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable.dgrid thead :is(th.splate,th.ssub){z-index:4;background:var(--head);color:#fff}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable.dgrid thead th.splate{left:0}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable.dgrid thead th.ssub{left:116px}
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symgridscroll{max-height:calc(100vh - 70px) !important}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) th.sortable{cursor:pointer;user-select:none}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) th.sortable:hover{background:#16242f}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sortable{cursor:pointer;user-select:none}
@@ -12321,11 +12329,11 @@ function renderPerf(p){
     {label:'Come — not in plan', cls:'extra', f:'unplan'},
   ];
   // One column grid for both tables: plate/status 180, Total = the six symbol totals (6 x 56), dates 58 (user 20/11/2026)
-  const DG={first:180,sum:56,nsum:6,date:58};
+  const DG={first:200,plate:116,sub:84,sum:56,nsum:6,date:58};   // first = Truck + Subcontractor below
   const dgW=DG.first+DG.sum*DG.nsum+DG.date*p.dates.length;
   const dgDates=p.dates.map(()=>`<col style="width:${DG.date}px">`).join('');
   const dgTop=`<colgroup><col style="width:${DG.first}px"><col style="width:${DG.sum*DG.nsum}px">${dgDates}</colgroup>`;
-  const dgSym=`<colgroup><col style="width:${DG.first}px">${`<col style="width:${DG.sum}px">`.repeat(DG.nsum)}${dgDates}</colgroup>`;
+  const dgSym=`<colgroup><col style="width:${DG.plate}px"><col style="width:${DG.sub}px">${`<col style="width:${DG.sum}px">`.repeat(DG.nsum)}${dgDates}</colgroup>`;
   let head=`${dgTop}<thead><tr><th class="stcorner">Status \\ Date</th><th class="tot">Total</th>`;
   for(const d of p.dates) head+=`<th>${dHdr(d)}</th>`;
   head+=`</tr></thead>`;
@@ -12344,6 +12352,7 @@ function renderPerf(p){
   const SYM={circle:'●',half:'◐',wait:'⏳',cross:'✕',nogps:'No GPS',square:'■',manual:'◆'};
   const arrow=col=>dailySort.col===col?(dailySort.dir>0?' ▲':' ▼'):'';
   let sh=`${dgSym}<thead><tr><th class="splate sortable" data-col="__plate">Truck \\ Date${arrow('__plate')}</th>
+      <th class="ssub sortable" data-col="__sub">Subcontractor${arrow('__sub')}</th>
       <th class="sum sumhdr circle" title="Came as planned">●</th>
       <th class="sum sumhdr half" title="Not as planned">◐</th>
       <th class="sum sumhdr wait" title="Waiting">⏳</th>
@@ -12355,7 +12364,10 @@ function renderPerf(p){
   // sort fleet rows
   let fleetRows=ACS.fleet.slice();
   if(perfWbOnly){ fleetRows=fleetRows.filter(pl=>p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length); }
+  const subOf=pl=>(ACS.fleetMeta&&ACS.fleetMeta[pl]&&ACS.fleetMeta[pl].company)||'';
   if(dailySort.col==='__plate'){ fleetRows.sort((a,b)=>a<b?-1:a>b?1:0); if(dailySort.dir<0) fleetRows.reverse(); }
+  else if(dailySort.col==='__sub'){ fleetRows.sort((a,b)=>{ const A=subOf(a), B=subOf(b);   // no company last, plate breaks ties
+      if(A!==B){ if(!A) return 1; if(!B) return -1; return A.localeCompare(B,undefined,{sensitivity:'base'})*dailySort.dir; } return a<b?-1:a>b?1:0; }); }
   else if(dailySort.col){ const c=dailySort.col;
     // Sorting a date sorts by that day's status (user 20/11/2026): came as planned, not as planned,
     // waiting, did not come, No GPS, came not in plan, manual / weighbridge only. Clicking again
@@ -12376,6 +12388,7 @@ function renderPerf(p){
     const _wbd=(p.wbByTruck&&p.wbByTruck[pl])||null;
     const _wbBadge=(_wbd&&_wbd.length)?`<span class="wbflag" title="GPS error \u2014 Mine from weighbridge: ${_wbd.slice().sort().join(', ')}">&#9888; WB</span>`:'';
     sb+=`<tr${(_wbd&&_wbd.length)?' class="wbrow"':''}><td class="splate">${pl}${_wbBadge}</td>
+        <td class="ssub" title="${escAttr(subOf(pl))}">${escAttr(subOf(pl))}</td>
         <td class="sum sym circle">${g.totals.circle||''}</td>
         <td class="sum sym half">${g.totals.half||''}</td>
         <td class="sum sym wait">${g.totals.wait||''}</td>
@@ -12393,7 +12406,7 @@ function renderPerf(p){
   }
   sb+='</tbody>';
   symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="off">◐ not as planned</b> · <b class="wait">⏳ waiting</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
-    <div class="scroller dgscroll" style="max-height:none"><table class="symtable dgrid" style="width:${dgW}px">${sh}${sb}</table></div>`;
+    <div class="scroller dgscroll symgridscroll" style="max-height:none"><table class="symtable dgrid" style="width:${dgW}px">${sh}${sb}</table></div>`;
   // the two tables scroll sideways together, so the dates stay under each other
   const _dgs=[detail.querySelector('.dgscroll'), symEl.querySelector('.dgscroll')].filter(Boolean);
   _dgs.forEach(el=>el.addEventListener('scroll',()=>{ _dgs.forEach(o=>{ if(o!==el && o.scrollLeft!==el.scrollLeft) o.scrollLeft=el.scrollLeft; }); }));
