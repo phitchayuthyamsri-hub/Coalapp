@@ -102,15 +102,27 @@ def _plan(only):
     """
     out = {}
     for snap in PlanSnapshot.query.order_by(PlanSnapshot.id.asc()).all():
-        for r in (snap.rows or []):
+        firsts = set()      # plate|date of this snapshot's first trips
+        for r in sorted(snap.rows or [], key=lambda x: int(x.get("trip") or 1)):
             plate = r.get("plate") or ""
             key = engine.norm_plate(plate)
             if only is not None and key not in only:
                 continue
             t = r.get("t") or {}
             day = r.get("day") or (t.get("arrive_mine") or "")[:10]
+            extra = int(r.get("trip") or 1) > 1
+            if extra:
+                # A second trip (21/11/2026) is planned with its sheet's day but
+                # is scored on the date it reaches the mine - the page keeps one
+                # plan per truck per date. One landing on the same date as that
+                # truck's first trip leaves the first trip in place.
+                day = (t.get("arrive_mine") or "")[:10] or day
             if not plate or not day:
                 continue
+            if extra and "%s|%s" % (key, day) in firsts:
+                continue
+            if not extra:
+                firsts.add("%s|%s" % (key, day))
             out["%s|%s" % (key, day)] = {
                 "plate": key, "date": day,
                 "loadStart": t.get("load_start"),
@@ -145,6 +157,8 @@ def _status(only):
         key = engine.norm_plate(row.plate or "")
         if not key or (only is not None and key not in only):
             continue
+        if int(getattr(row, "trip", 1) or 1) > 1:
+            continue        # a second trip: the truck's status is its first row's
         day = row.arrive_date or dl.list_date
         if not day:
             continue

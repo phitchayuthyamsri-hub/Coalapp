@@ -227,6 +227,92 @@ def _same_day_rows(rows, today=None):
     return sorted(set(p for p in out if p))
 
 
+# ── more than one trip for a truck on one sheet (21/11/2026) ────────────────
+# A truck on Mine : A Ngo is back at the mine within the day. With one row per
+# truck per sheet its next run could only go on the next day's sheet, so it sat
+# waiting for that plan. A sheet may now name a truck again at a later time.
+# Trips are numbered by their time at the mine, earliest first.
+
+def _trip_no(r):
+    """A row's trip number - 1 when it has none (every row before 21/11/2026)."""
+    v = r.get("trip") if isinstance(r, dict) else getattr(r, "trip", None)
+    try:
+        return max(1, int(v or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _run_day(row, list_date):
+    """The day whose plan a declared row belongs to.
+
+    A first trip is planned on the day it reaches the mine, as always. An extra
+    trip belongs to the plan of the sheet it is declared on, even when it
+    reaches the mine after midnight: the 21/11 sheet's second run at 22/11
+    03:00 is in the 21/11 plan (user 21/11/2026)."""
+    if _trip_no(row) >= 2 and list_date:
+        return list_date
+    return row.arrive_date or ""
+
+
+def _row_hhmm(r):
+    """The time on an incoming row, whichever name the page or file used."""
+    for k in ("arrive_time", "arrive_hhmm", "arrive"):
+        if k in r:
+            return (r.get(k) or "").strip()[:5]
+    return ""
+
+
+def _number_trips(rows, day):
+    """Number each truck's trips on one sheet, in place, and list what is wrong.
+
+    A truck named once is trip 1 whatever it says. A truck named more than once
+    must be running on every row and timed on every row, at different times;
+    its trips are numbered by time at the mine. A trip after the first has to
+    reach the mine on the sheet's day or the morning after - it is part of that
+    day's plan."""
+    by = {}
+    for r in rows:
+        by.setdefault(engine.norm_plate((r.get("plate") or "").strip()), []).append(r)
+    try:
+        nxt = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        nxt = ""
+    bad = []
+    for key, rs in by.items():
+        if len(rs) == 1:
+            rs[0]["trip"] = 1
+            continue
+        plate = (rs[0].get("plate") or "").strip()
+        status = [(r.get("activity") if "activity" in r else r.get("note")) or "" for r in rs]
+        if any(st.strip() and not readiness_import.is_running(st) for st in status):
+            bad.append("%s is on the sheet %d times, but not every row is running. "
+                       "Only a running truck (FH / BH) can have a second trip."
+                       % (plate, len(rs)))
+            continue
+        whens = [((r.get("arrive_date") or "").strip(), _row_hhmm(r)) for r in rs]
+        if any(not d or not t for d, t in whens):
+            bad.append("%s is on the sheet %d times: give every trip a date and a "
+                       "time at the mine." % (plate, len(rs)))
+            continue
+        if len(set(whens)) < len(whens):
+            bad.append("%s has two trips at the same time." % plate)
+            continue
+        order = sorted(range(len(rs)), key=lambda i: whens[i])
+        for n, i in enumerate(order):
+            rs[i]["trip"] = n + 1
+            if n and whens[i][0] not in (day, nxt):
+                bad.append("%s trip %d reaches the mine on %s. A second trip has to "
+                           "reach the mine on %s or the morning after - it belongs "
+                           "to this day's plan." % (plate, n + 1, _dmy(whens[i][0]),
+                                                    _dmy(day)))
+    return bad
+
+
+def _trips_refusal(bad):
+    return jsonify(error="Trips could not be saved: " + " ".join(bad[:6])
+                   + (" …" if len(bad) > 6 else ""), code="trips", problems=bad), 400
+
+
 def _not_tomorrow(day, today=None):
     """The sheet a company declares is TOMORROW's, and only tomorrow's (user
     24/09/2026): a sheet for today is too late to plan, and one for the day
@@ -824,7 +910,7 @@ def _list_payload(dl, day):
         # they are the ones not running, and they belong at the bottom.
         def _k(r):
             d, t = (r.arrive_date or ""), (r.arrive_hhmm or "")
-            return (0 if d else 1, d, 0 if t else 1, t, r.plate or "")
+            return (0 if d else 1, d, 0 if t else 1, t, r.plate or "", _trip_no(r))
         recs.sort(key=_k)
         s = db.session.get(Subcontractor, dl.subcontractor_id) \
             if dl.subcontractor_id else None
@@ -847,6 +933,7 @@ def _list_payload(dl, day):
                 # Said on the sheet, or filled in from the fleet.
                 "route_declared": bool(r.route_id),
                 "plate": r.plate, "sub": short,
+                "trip": _trip_no(r),
                 "ready": bool(r.ready),
                 "state": r.state or "pending",
                 "reason": r.reason or "",
@@ -1255,6 +1342,9 @@ def upload():
     late = _same_day_rows(rows)
     if late:
         return _same_day_refusal(late)
+    trip_bad = _number_trips(rows, day)
+    if trip_bad:
+        return _trips_refusal(trip_bad)
 
     roster = _roster(sub_id) if sub_id else {}
     on_sheet = {r["key"] for r in rows}
@@ -1271,8 +1361,11 @@ def upload():
     # 50-truck fleet fed by a 30-truck file fills those 30 and leaves the rest
     # of the sheet exactly as it stands - so a second file with the other 20
     # completes the day instead of wiping the first.
-    existing = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
-    overlap = sorted(x.plate for k, x in existing.items() if k in on_sheet)
+    # Keyed per trip (21/11/2026). A truck the file names is replaced whole -
+    # every trip it had - by what the file says about it.
+    existing = {(x.key, _trip_no(x)): x
+                for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    overlap = sorted({x.plate for (k, _t), x in existing.items() if k in on_sheet})
     if overlap and not (request.form.get("replace") or "").strip():
         # Overwriting somebody's earlier answers is a decision, so it is asked
         # for by name - the plates - not implied by pressing Upload.
@@ -1285,14 +1378,31 @@ def upload():
     # A truck already sent, or already decided, keeps where it is. Re-uploading a
     # corrected sheet must not drag a decided row back to the start.
     running, fleet_route = 0, []
+    for (k, _t), x in list(existing.items()):
+        if k in on_sheet and not any(r["key"] == k and _trip_no(r) == _t for r in rows):
+            db.session.delete(x)        # a trip the file no longer has
     for r in rows:
-        old = existing.get(r["key"])
+        old = existing.get((r["key"], _trip_no(r)))
+        if old is None and _trip_no(r) > 1:
+            first = existing.get((r["key"], 1))
+            if first is not None:
+                # A new trip for a truck already through the chain: its state.
+                old_state = first.state or "pending"
+                if "route_id" not in r:
+                    r["route_id"] = first.route_id
+                row, runs = _declared_row(r, dl.id, old_state)
+                row.trip = _trip_no(r)
+                if runs:
+                    running += 1
+                db.session.add(row)
+                continue
         # A sheet with no Route column says nothing about routes, so a route
         # already declared for the truck on this day stands.
         if "route_id" not in r and old is not None:
             r["route_id"] = old.route_id
         row, runs = _declared_row(
             r, dl.id, (old.state or "pending") if old is not None else "pending")
+        row.trip = _trip_no(r)
         if old is not None:
             db.session.delete(old)
         if runs:
@@ -1748,23 +1858,31 @@ def _revision_data(day, only):
     owner = {dl.id: (dl.subcontractor_id,
                      subs.get(dl.subcontractor_id, "(no company)"))
              for dl in DailyList.query.all()}
+    sheet_day = {dl.id: dl.list_date for dl in DailyList.query.all()}
 
     arrivals, who, no_time = [], {}, []
     elsewhere = {}
     routes = {}     # the route each truck is declared onto for this day
+    trips = {}      # (plate, arrival) -> trip number, for a truck run more than once
     for r in _plannable_rows().all():
         sub_id, label = owner.get(r.list_id, (None, ""))
-        if r.arrive_date != day:
+        # The plan a row belongs to: a first trip by the day it reaches the
+        # mine, an extra trip by its sheet's day (21/11/2026).
+        run_day = _run_day(r, sheet_day.get(r.list_id))
+        if run_day != day:
             # Not this day, but worth knowing about: a revision opened on a
             # quiet day should say where the trucks are, not just draw a blank.
-            if r.arrive_date and r.arrive_hhmm and (only is None or sub_id == only):
-                elsewhere[r.arrive_date] = elsewhere.get(r.arrive_date, 0) + 1
+            if run_day and r.arrive_hhmm and (only is None or sub_id == only):
+                elsewhere[run_day] = elsewhere.get(run_day, 0) + 1
             continue
         if r.arrive_hhmm:
             try:
                 h, m = r.arrive_hhmm.split(":")
-                arrivals.append((r.plate, datetime.strptime(day, "%Y-%m-%d")
-                                 + timedelta(hours=int(h), minutes=int(m))))
+                # Its own date: an extra trip can reach the mine after midnight.
+                at = (datetime.strptime(r.arrive_date or day, "%Y-%m-%d")
+                      + timedelta(hours=int(h), minutes=int(m)))
+                arrivals.append((r.plate, at))
+                trips[(engine.norm_plate(r.plate), at)] = _trip_no(r)
                 routes[engine.norm_plate(r.plate)] = r.route_id
                 who[r.plate] = (sub_id, label)
                 continue
@@ -1776,12 +1894,24 @@ def _revision_data(day, only):
     cfg = planner.load_config()
     out = _plan_all(arrivals, cfg, routes) if arrivals else []
 
+    # A truck's planned runs come out in the order its arrivals went in, so
+    # its trip numbers are handed out in arrival order. Matching on the time
+    # itself would miss a run whose first stop made it wait.
+    seq = {}
+    for (k, at), n in sorted(trips.items(), key=lambda kv: kv[0][1]):
+        seq.setdefault(k, []).append(n)
     rows, agg = [], {}
     for r in sorted(out, key=lambda x: x["arrive_mine"]):
         sub_id, label = who.get(r["plate"], (None, ""))
+        k = engine.norm_plate(r["plate"])
+        trip = seq[k].pop(0) if seq.get(k) else 1
         if only is not None and sub_id != only:
             continue
-        rows.append(_plan_row(r, label, sub_id, 1, False))
+        row = _plan_row(r, label, sub_id, trip, False)
+        if trip > 1:
+            # Planned with this day, whatever the date it reaches the mine.
+            row["day"], row["trip"] = day, trip
+        rows.append(row)
         for k, v in r["waits"].items():
             agg[k] = agg.get(k, 0.0) + v
 
@@ -3501,13 +3631,15 @@ def plan_day():
     # Every declared truck is due where it says (07/10/2026) - the planner no
     # longer waits for the approval chain; only a denied truck is left out.
     owner = {dl.id: dl.subcontractor_id for dl in DailyList.query.all()}
+    sheet_day = {dl.id: dl.list_date for dl in DailyList.query.all()}
     days = {}
     for r in _plannable_rows().all():
         if not r.arrive_date or not r.arrive_hhmm:
             continue
         if only is not None and owner.get(r.list_id) != only:
             continue
-        days[r.arrive_date] = days.get(r.arrive_date, 0) + 1
+        d = _run_day(r, sheet_day.get(r.list_id))     # an extra trip: its sheet's day
+        days[d] = days.get(d, 0) + 1
 
     if not days:
         return jsonify(date=today, trucks=0, why="nothing due", today=today,
@@ -3921,6 +4053,7 @@ def approvals():
             _rid = r.route_id or (_t.route_id if _t else None)
             items.append({
                 "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
+                "trip": _trip_no(r),
                 # The route declared for the day (else the fleet's), so the
                 # manager sees which run each truck is approving onto - the
                 # same fact the supervisor and the declaration list show.
@@ -4191,6 +4324,9 @@ def save_list():
     late = _same_day_rows(incoming)
     if late:
         return _same_day_refusal(late)
+    trip_bad = _number_trips(incoming, day)
+    if trip_bad:
+        return _trips_refusal(trip_bad)
     unknown = _resolve_routes(incoming)
     if unknown:
         return jsonify(error="%d truck(s) name a route that does not exist: %s. "
@@ -4201,10 +4337,12 @@ def save_list():
     # Keep the state a row already has: a row sitting with the manager, or already
     # decided, must not be dragged back to pending because the supervisor saved
     # the page. The tick is intent; the state is where the row actually is.
-    prior = {r.key: (r.state or "pending")
+    # Per trip (21/11/2026): a truck can be on the sheet more than once.
+    prior = {(r.key, _trip_no(r)): (r.state or "pending")
              for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
     # The rows as they stand, so a field this caller never mentions survives.
-    before = {x.key: x for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    before = {(x.key, _trip_no(x)): x
+              for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
     DailyListRow.query.filter_by(list_id=dl.id).delete()
     for r in incoming:
         # Same mapping as an uploaded sheet. The old code here read "arrive"
@@ -4212,8 +4350,13 @@ def save_list():
         # was stored and a time from a sheet was not - or the other way about,
         # depending which page you were on.
         key = engine.norm_plate((r.get("plate") or "").strip())
-        row, _runs = _declared_row(r, dl.id, prior.get(key, "pending"),
-                                   before.get(key))
+        trip = _trip_no(r)
+        # A trip just added takes the state the truck's first trip is in: the
+        # truck has been through the chain, this is another time for it. Only
+        # a manager or admin can still edit a list that far along.
+        st = prior.get((key, trip)) or prior.get((key, 1)) or "pending"
+        row, _runs = _declared_row(r, dl.id, st, before.get((key, trip)))
+        row.trip = trip
         if "ready" in r:
             row.ready = bool(r.get("ready"))
         db.session.add(row)

@@ -252,9 +252,7 @@ def parse(path, strict=False):
         key = norm_plate(raw)
         if not key:
             continue
-        if key in seen:
-            warnings.append("%s appears more than once - the later row was used."
-                            % str(raw).strip())
+        dup = key in seen
 
         status = text(r, "status")
         if load_word(status):
@@ -285,6 +283,23 @@ def parse(path, strict=False):
         # routes is not saying "no route", and must not blank one.
         if "route" in cols:
             rec["route"] = text(r, "route")
+        if dup:
+            # The same truck again (21/11/2026). At a DIFFERENT date or time it
+            # is another trip - a short route is back at the mine within the
+            # day - and both are kept. Otherwise it is a repeat, and the later
+            # row is used, as before.
+            prev = [x for x in rows if x["key"] == key]
+            again = [x for x in prev if (x["arrive_date"], x["arrive_time"])
+                     == (rec["arrive_date"], rec["arrive_time"])]
+            timed = rec["arrive_date"] and rec["arrive_time"] and all(
+                x["arrive_date"] and x["arrive_time"] for x in prev)
+            if again or not timed:
+                warnings.append("%s appears more than once - the later row was used."
+                                % str(raw).strip())
+                rows = [x for x in rows if x["key"] != key or x is not (again or prev)[-1]]
+            else:
+                warnings.append("%s appears more than once at different times - "
+                                "read as %d trips." % (str(raw).strip(), len(prev) + 1))
         seen[key] = rec
         rows.append(rec)
 
@@ -295,8 +310,7 @@ def parse(path, strict=False):
                         % (len(misplaced), ", ".join(misplaced[:5]),
                            "..." if len(misplaced) > 5 else ""))
 
-    # later row wins on duplicates
-    rows = list({r["key"]: r for r in rows}.values())
+    # Repeats were settled above: what is left twice is a second trip.
     out = {"rows": rows, "header_row": hrow, "columns": sorted(cols),
            "sheet": ws.title, "warnings": warnings}
     if strict:

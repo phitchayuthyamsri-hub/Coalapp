@@ -213,7 +213,9 @@ function draw(){
                 + (r.gps_eta ? ' &middot; GPS eta ' + esc(r.gps_eta) : '') + '</span>'
               : '');
       return '<tr class="' + cls + '">' + rowNo(n)
-        + '<td class="plate">' + esc(r.plate) + trailLink(r.plate) + '</td>'
+        + '<td class="plate">' + esc(r.plate) + trailLink(r.plate)
+          + ((r.trip || 1) > 1 ? ' <span class="st s-applied" title="This truck&#39;s trip '
+             + (r.trip|0) + ' on the same sheet">trip ' + (r.trip|0) + '</span>' : '') + '</td>'
         + '<td><span class="st s-' + esc(r.state) + '">' + esc(r.state) + '</span></td>'
         + '<td class="c-route">' + (r.route ? esc(r.route) : '—') + '</td>'
         + '<td>' + esc(r.status || '—')

@@ -132,6 +132,7 @@
   a.trail{color:var(--blue);text-decoration:none;font-size:11px;opacity:.7}
   a.trail:hover{opacity:1}
   .b-gps{background:#12301f;color:#5fd97e}
+  .b-trip{background:#0c2a3d;color:#7dd3fc}
   .b-none{background:#2a2410;color:var(--amber)}
   .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;
         color:var(--mut)}
@@ -220,6 +221,8 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <button class="ghost" data-set="BH">All BH</button>
         <button class="ghost" id="bulkOff">Mark not running&hellip;</button>
         <button class="ghost" id="bulkGps">Use GPS for the selection</button>
+        <button class="ghost" id="bulkTrip" title="The same truck back at the mine again later, on this sheet (short routes such as Mine : A Ngo). It goes in this day's plan.">+ Trip for the selected truck</button>
+        <button class="ghost" id="bulkTripDel" title="Remove the selected trip (trip 2 or later)">Remove trip</button>
         <span class="msg" id="gridMsg"></span>
       </div>
       <div class="wrap-t"><table id="grid"></table></div>
@@ -359,7 +362,8 @@ async function load(){
     return 'seen — leg unknown';
   }
   const byPlate = {};
-  (list.rows || []).forEach(r => { byPlate[r.plate] = r; });
+  // A truck's first trip; its later trips on the sheet are added after.
+  (list.rows || []).forEach(r => { if ((r.trip || 1) === 1) byPlate[r.plate] = r; });
   const plates = Object.keys(byPlate).length
     ? Object.keys(byPlate)
     : (sug.rows || []).map(r => r.plate);
@@ -370,8 +374,8 @@ async function load(){
   const _k = v => String(v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const routeOfPlate = {};
   ROUTES.forEach(r => (r.trucks || []).forEach(pl => { routeOfPlate[_k(pl)] = r.name; }));
-  ROWS = plates.sort().map(pl => {
-    const d = byPlate[pl] || {}, g = SUGGEST[pl] || {};
+  const mkRow = (pl, d0) => {
+    const d = d0 || {}, g = SUGGEST[pl] || {};
     const declared = d.plate !== undefined;
     // These names are the API's, not the column titles. Getting them the wrong
     // way round put Loaded/Empty under Status and the not-running reason under
@@ -393,9 +397,15 @@ async function load(){
       // A value the grid can actually sort and filter on. The pretty cell is
       // drawn by the renderer, but sort and the filter menu read row.gps -
       // and with nothing here every truck counted as (blank).
-      gps: gpsCat(g)
+      gps: gpsCat(g),
+      // Which run of the truck this row is (21/11/2026): 2, 3 ... when the same
+      // truck is back at the mine again later on this sheet.
+      trip: d.trip || 1
     };
-  });
+  };
+  ROWS = plates.sort().map(pl => mkRow(pl, byPlate[pl]));
+  (list.rows || []).filter(r => (r.trip || 1) > 1).forEach(r => ROWS.push(mkRow(r.plate, r)));
+  ROWS.sort((a, b) => a.plate < b.plate ? -1 : a.plate > b.plate ? 1 : (a.trip || 1) - (b.trip || 1));
 
   // A company with no sheet on this day, while another has one, is a filter -
   // not an absence. Saying nothing here is how a supervisor concludes the
@@ -535,6 +545,7 @@ function draw(){
     rowClass: statusClass,
     render: {
       plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>'
+        + ((r.trip || 1) > 1 ? ' <span class="badge b-trip">trip ' + (r.trip | 0) + '</span>' : '')
         + ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
         + 'yesterday to now" href="/truck-trail?plate=' + encodeURIComponent(r.plate)
         + '" onmousedown="event.stopPropagation()">◎</a>',
@@ -573,7 +584,7 @@ $('#capture').onclick = async function(){
   const me = SUBS.filter(x => String(x.id) === String(SUBID))[0] || {};
   const who = me.short || me.name || 'Subcontractor';
   const day = $('#day').value || '';
-  const rows = (ROWS || []).map(r => [r.plate, r.driver, r.route, r.status, r.load,
+  const rows = (ROWS || []).map(r => [r.plate + ((r.trip || 1) > 1 ? ' (trip ' + r.trip + ')' : ''), r.driver, r.route, r.status, r.load,
     r.location, r.date ? DateFmt.dmy(r.date) : '', r.time, r.back ? DateFmt.dmy(r.back) : '',
     r.remark]);
   const msg = $('#saveMsg');
@@ -612,6 +623,32 @@ $('#bulkOff').onclick = function(){
   }
   GRID.draw(); paint();
   GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' marked ' + hit);
+};
+
+// Another trip for a truck (21/11/2026): the same truck, back at the mine later.
+$('#bulkTrip').onclick = function(){
+  if (!GRID || !MAY_EDIT || LOCKED) return;
+  const box = GRID.box(), src = ROWS[box.r1];
+  if (!src) return;
+  if (src.status !== 'FH' && src.status !== 'BH'){
+    GRID.say('Only a running truck (FH / BH) can have another trip'); return;
+  }
+  let last = box.r1, n = 1;
+  ROWS.forEach((o, j) => { if (o.plate === src.plate){ last = j; n = Math.max(n, o.trip || 1); } });
+  ROWS.splice(last + 1, 0, Object.assign({}, src, {trip: n + 1, date: src.date || $('#day').value,
+                                                   time: '', remark: ''}));
+  if (typeof GRID.setRows === 'function') GRID.setRows(ROWS);
+  GRID.draw(); paint();
+  GRID.say(src.plate + ' trip ' + (n + 1) + ' added - give it a date and time at the mine, then save');
+};
+$('#bulkTripDel').onclick = function(){
+  if (!GRID || !MAY_EDIT || LOCKED) return;
+  const box = GRID.box(), src = ROWS[box.r1];
+  if (!src || (src.trip || 1) < 2){ GRID.say('Select a trip 2 (or later) row to remove'); return; }
+  ROWS.splice(box.r1, 1);
+  if (typeof GRID.setRows === 'function') GRID.setRows(ROWS);
+  GRID.draw(); paint();
+  GRID.say(src.plate + ' trip ' + src.trip + ' removed - save to keep it that way');
 };
 
 $('#bulkGps').onclick = function(){
@@ -663,6 +700,7 @@ $('#save').onclick = async function(){
     subcontractor_id: SUBID ? Number(SUBID) : null,
     rows: ROWS.filter(r => r.status || r.location || r.date).map(r => ({
       plate: r.plate,
+      trip: r.trip || 1,
       // The route for this day, by name - saved with the sheet, not onto the
       // truck. The server turns it into the route and refuses a name that is
       // not one.

@@ -482,8 +482,22 @@ function drawRows(){
     // A blank time is only a question on a truck that is coming back.
     const wantsTime = (declared === 'BH');
     const missing = wantsTime && !(r.arrive_date && r.arrive);
+    // More than one trip on the sheet (21/11/2026): a short route is back at
+    // the mine within the day. "+ trip" sits on the truck's last trip.
+    const tripNo = r.trip || 1;
+    const lastTrip = !(LIST.rows || []).some(o => !o.absent && o.plate === r.plate
+                                               && (o.trip || 1) > tripNo);
+    const tripBits = (tripNo > 1 ? ' ' + pill('#38bdf822', '#7dd3fc', 'trip ' + tripNo) : '')
+      + (timeEditable && running && lastTrip
+          ? ' <button class="r-trip-add" data-i="' + i + '" title="Add another trip for this '
+            + 'truck on this sheet: the same truck back at the mine later (short routes such '
+            + 'as Mine : A Ngo). It goes in this day&#39;s plan." style="padding:0 6px;'
+            + 'font-size:11px;line-height:1.5">+ trip</button>' : '')
+      + (timeEditable && tripNo > 1
+          ? ' <button class="r-trip-del" data-i="' + i + '" title="Remove this trip" '
+            + 'style="padding:0 6px;font-size:11px;line-height:1.5">&times;</button>' : '');
     return '<tr' + (missing ? ' class="needtime"' : '') + '>' + no
-      + '<td class="plate">' + esc(r.plate)
+      + '<td class="plate">' + esc(r.plate) + tripBits
       + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
           + 'color:#fcd34d" title="This plate is not on the committed roster '
           + 'for this company">not committed</span>' : '') + '</td>'
@@ -536,6 +550,7 @@ function drawRows(){
       + '<textarea id="bulk" rows="2" style="width:100%;background:#0c1523;color:var(--txt);'
       + 'border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>' : '');
   TV.wire(document.getElementById('listTable'));
+  document.getElementById('listTable').addEventListener('click', tripClick);
   // What is typed is tidied to HH:MM on the 24-hour clock: "6:5" and "0605"
   // become 06:05; anything that is not a time is refused and cleared, so a
   // value that reaches the server is always one the planner can read.
@@ -554,6 +569,43 @@ function drawRows(){
     });
   });
   measureFreeze();
+}
+
+// What is typed on screen, into LIST.rows, so a redraw does not lose it.
+function syncInputs(){
+  (LIST.rows || []).forEach((r, i) => {
+    const g = c => document.querySelector('.' + c + '[data-i="' + i + '"]');
+    const a = g('r-adate'), t = g('r-arrive'), re = g('r-reason'), cb = g('r-ready');
+    if (a) r.arrive_date = a.value.trim();
+    if (t) r.arrive = t.value.trim();
+    if (re) r.reason = re.value;
+    if (cb) r.ready = cb.checked;
+  });
+}
+
+// Add or remove a truck's extra trip (21/11/2026). Saved with the sheet.
+function tripClick(e){
+  const add = e.target.closest('.r-trip-add'), del = e.target.closest('.r-trip-del');
+  if (!add && !del) return;
+  e.preventDefault();
+  syncInputs();
+  const i = +(add || del).dataset.i, src = LIST.rows[i];
+  if (!src) return;
+  if (add){
+    const n = Math.max.apply(null, LIST.rows.filter(o => o.plate === src.plate)
+                                     .map(o => o.trip || 1)) + 1;
+    LIST.rows.splice(i + 1, 0, Object.assign({}, src, {trip: n,
+      arrive_date: src.arrive_date || $('#day').value, arrive: '', reason: ''}));
+  } else {
+    LIST.rows.splice(i, 1);
+  }
+  DIRTY = true; paintDirty();
+  drawRows();
+  if (add){
+    const t = document.querySelector('.r-arrive[data-i="' + (i + 1) + '"]');
+    if (t) t.focus();
+    say('Trip added for ' + src.plate + ' — give it a date and time at the mine, then Save.');
+  }
 }
 
 // "6:5", "06:05", "0605", "6.05", "18h30" -> "06:05" / "18:30"; null if it is
@@ -1072,7 +1124,7 @@ function collectRows(){
     // is not told about, so this is belt and braces - but a save that carries
     // the whole row is one that can be read on its own, and the last time these
     // two disagreed it cost fifty-eight declared statuses.
-    rows.push({plate: prev.plate, ready: ticked, state: st,
+    rows.push({plate: prev.plate, trip: prev.trip || 1, ready: ticked, state: st,
                activity: prev.note || prev.reason || '',
                status: prev.sheet_status || '',
                location: prev.location || '',

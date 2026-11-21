@@ -516,6 +516,12 @@ class DailyListRow(db.Model):
     # has one route for good: the declaration says which, day by day. NULL
     # means the sheet did not say, and the fleet's own route applies.
     route_id = db.Column(db.Integer)
+    # Which run of the truck this row is, 1 for the first (21/11/2026). A truck
+    # on a short route (Mine : A Ngo) is back at the mine within the day, so it
+    # can be declared again on the same sheet at a later time: trip 2, 3 ...
+    # An extra trip belongs to the plan of the sheet it is on, even when it
+    # reaches the mine after midnight.
+    trip = db.Column(db.Integer, default=1)
 
 
 class MonitorRemark(db.Model):

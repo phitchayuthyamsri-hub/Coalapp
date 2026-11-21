@@ -664,6 +664,8 @@ def _ensure_listrow_schema():
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN location VARCHAR(60) DEFAULT ''")
     if "sheet_status" not in cols:
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN sheet_status VARCHAR(30) DEFAULT ''")
+    if "trip" not in cols:
+        stmts.append("ALTER TABLE daily_list_row ADD COLUMN trip INTEGER DEFAULT 1")
     for st in stmts:
         db.session.execute(text(st))
     if stmts:
