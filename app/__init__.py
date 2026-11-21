@@ -664,8 +664,6 @@ def _ensure_listrow_schema():
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN location VARCHAR(60) DEFAULT ''")
     if "sheet_status" not in cols:
         stmts.append("ALTER TABLE daily_list_row ADD COLUMN sheet_status VARCHAR(30) DEFAULT ''")
-    if "trip" not in cols:
-        stmts.append("ALTER TABLE daily_list_row ADD COLUMN trip INTEGER DEFAULT 1")
     for st in stmts:
         db.session.execute(text(st))
     if stmts:
@@ -680,6 +678,11 @@ def _ensure_listrow_schema():
     # tick, which is a one-time conversion and must never run again.
     if "route_id" not in cols:
         _add_column_racing("daily_list_row", "route_id INTEGER")
+    # The trip number (21/11/2026), the same way and for the same reason. It
+    # went through `stmts` first, and the conversion above ran again on every
+    # sheet - put back from the backup taken before the deploy.
+    if "trip" not in cols:
+        _add_column_racing("daily_list_row", "trip INTEGER DEFAULT 1")
     # 'sent'/'rejected' were the old words for the same decision.
     db.session.execute(text("UPDATE daily_list_row SET state='approved' WHERE state='sent'"))
     db.session.execute(text("UPDATE daily_list_row SET state='denied' WHERE state='rejected'"))
