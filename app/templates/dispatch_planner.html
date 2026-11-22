@@ -281,6 +281,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
            navigation rather than a date to be picked. -->
       <label class="f">Day at the mine<select id="day"></select></label>
       <label class="f">Company<select id="sub"></select></label>
+      <!-- AM / PM (21/11/2026): from the 24/11 sheets each shift is planned
+           and issued on its own timetable. -->
+      <label class="f" id="shWrap" style="display:none">Shift<select id="shSel">
+        <option value="">Whole day</option>
+        <option value="AM">AM &middot; 06:00&ndash;18:00</option>
+        <option value="PM">PM &middot; 18:00&ndash;06:00</option></select></label>
       <button id="run">Recalculate</button>
       <button id="rXls" title="This day's revision as it stands right now, as an
 Excel file - the title inside says whether it has been issued.">&#8681; Excel</button>
@@ -734,7 +740,10 @@ async function run(){
   // used to load once, on page open - pick another day and "Loading on this
   // day" kept describing the old one, which read as 16 trucks against 18.
   loadStanding();
-  const d = await jget('/api/shift/revision?date=' + $('#day').value + subQ());
+  const d = await jget('/api/shift/revision?date=' + $('#day').value + subQ() + shQ());
+  PLAN_SMODE = !!d.shift_mode;
+  $('#shWrap').style.display = PLAN_SMODE ? '' : 'none';
+  if (!PLAN_SMODE) $('#shSel').value = '';
   if (d.dormant){
     const away = d.elsewhere || [];
     $('#stats').innerHTML = '';
@@ -1392,18 +1401,29 @@ async function paintIssue(){
   if (b) b.onclick = doIssue;
 }
 
+// AM / PM days: the shift picked, for the plan, the file and the issue.
+let PLAN_SMODE = false;
+function shQ(){ const v = $('#shSel') && $('#shSel').value; return v ? '&shift=' + v : ''; }
+
 async function doIssue(){
   const m = $('#issueMsg'), b = $('#btnIssue');
-  const day = $('#day').value;
-  if (!confirm('Issue the revised plan for ' + day + '?\n\n'
+  const day = $('#day').value, sh = $('#shSel').value;
+  // AM / PM days (21/11/2026): each shift is issued on its own timetable.
+  if (PLAN_SMODE && !sh){
+    m.textContent = 'Pick AM or PM first - each shift is issued on its own.';
+    m.className = 'msg err'; return;
+  }
+  if (!confirm('Issue the revised plan for ' + day + (sh ? ' - ' + sh + ' shift' : '') + '?\n\n'
       + 'The monitoring team and the mine team will be told, and the figures as '
       + 'they stand now are recorded with it.\n\n'
-      + 'A draft email with the Excel file (Plan Load_' + day + '.xlsx) is sent to you to review.')) return;
+      + 'A draft email with the Excel file (Plan Load_' + day + (sh ? '_' + sh : '')
+      + '.xlsx) is sent to you to review.')) return;
   b.disabled = true;
   m.textContent = 'Issuing...'; m.className = 'msg';
   const send = (reissue) => fetch('/api/shift/revision/issue', {method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({date: day, subcontractor_id: SUBID || null, reissue: !!reissue})});
+      body: JSON.stringify({date: day, subcontractor_id: SUBID || null, reissue: !!reissue,
+                            shift: sh || undefined})});
   let j = {};
   try {
     let r = await send(false);
@@ -1434,19 +1454,20 @@ async function doIssue(){
 
 $('#day').onchange = run;
 $('#run').onclick = run;
+$('#shSel').onchange = run;
 
 // The revision as a file. Fetched rather than linked, so "nothing to export"
 // arrives as a readable message instead of a JSON page.
 $('#rXls').onclick = async () => {
   const d = $('#day').value;
-  const r = await fetch('/api/shift/revision.xlsx?date=' + d + subQ());
+  const r = await fetch('/api/shift/revision.xlsx?date=' + d + subQ() + shQ());
   if (!r.ok){
     let j = {}; try { j = await r.json(); } catch (e) {}
     alert(j.error || 'Export failed'); return;
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(await r.blob());
-  a.download = 'revision_' + d + '.xlsx';
+  a.download = 'revision_' + d + ($('#shSel').value ? '_' + $('#shSel').value : '') + '.xlsx';
   a.click();
   URL.revokeObjectURL(a.href);
 };

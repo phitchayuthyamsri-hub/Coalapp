@@ -496,8 +496,13 @@ function drawRows(){
       + (timeEditable && tripNo > 1
           ? ' <button class="r-trip-del" data-i="' + i + '" title="Remove this trip" '
             + 'style="padding:0 6px;font-size:11px;line-height:1.5">&times;</button>' : '');
+    // AM / PM files (21/11/2026): which file the row came in, and a file the
+    // company sent after its deadline.
+    const shiftBits = (r.shift ? ' ' + (r.shift === 'AM' ? pill('#facc1522', '#fde68a', 'AM')
+                                                         : pill('#818cf822', '#c7d2fe', 'PM')) : '')
+      + (r.late ? ' ' + pill('#ef444422', '#fca5a5', 'late') : '');
     return '<tr' + (missing ? ' class="needtime"' : '') + '>' + no
-      + '<td class="plate">' + esc(r.plate) + tripBits
+      + '<td class="plate">' + esc(r.plate) + shiftBits + tripBits
       + (r.uncommitted ? ' <span class="pill" style="background:#f59e0b22;'
           + 'color:#fcd34d" title="This plate is not on the committed roster '
           + 'for this company">not committed</span>' : '') + '</td>'
@@ -542,7 +547,7 @@ function drawRows(){
   }).join('');
 
   const hidden = (LIST.rows || []).length - view.length;
-  $('#listBody').innerHTML =
+  $('#listBody').innerHTML = shiftBanner() +
     '<table id="listTable"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>'
     + (hidden > 0 ? '<div class="empty" style="margin-top:6px">' + hidden
         + ' row(s) hidden by a filter.</div>' : '')
@@ -569,6 +574,26 @@ function drawRows(){
     });
   });
   measureFreeze();
+}
+
+// Each shift's timetable and where it stands (AM / PM files, 21/11/2026).
+// A step past its time with work still waiting is shown in red.
+function shiftBanner(){
+  const S = (LIST && LIST.shifts) || [];
+  if (!S.length) return '';
+  return S.map(s => '<div style="background:#0c1523;border:1px solid var(--line);border-radius:8px;'
+      + 'padding:7px 10px;margin-bottom:8px;font-size:12.5px">'
+      + '<b>' + esc(s.shift) + '</b> <span style="color:var(--mut)">arrivals ' + esc(s.from)
+      + ' → ' + esc(s.to) + '</span> &middot; ' + s.trucks + ' trip' + (s.trucks === 1 ? '' : 's')
+      + ' &middot; ' + s.pending + ' pending &middot; ' + s.applied + ' with the manager &middot; '
+      + s.approved + ' approved' + (s.denied ? ' &middot; ' + s.denied + ' denied' : '')
+      + '<div style="margin-top:3px">' + s.steps.map(st => '<span style="margin-right:12px'
+          + (st.overdue ? ';color:var(--bad);font-weight:700' : ';color:var(--mut)') + '">'
+          + esc(st.label) + ' by ' + esc(st.due) + (st.overdue ? ' — overdue' : '') + '</span>').join('')
+      + '</div>'
+      + (s.late && s.late.length ? '<div style="color:#fca5a5;margin-top:3px">Sent after the company deadline: '
+          + esc(s.late.join(', ')) + '</div>' : '')
+      + '</div>').join('');
 }
 
 // What is typed on screen, into LIST.rows, so a redraw does not lose it.
@@ -1124,7 +1149,7 @@ function collectRows(){
     // is not told about, so this is belt and braces - but a save that carries
     // the whole row is one that can be read on its own, and the last time these
     // two disagreed it cost fifty-eight declared statuses.
-    rows.push({plate: prev.plate, trip: prev.trip || 1, ready: ticked, state: st,
+    rows.push({plate: prev.plate, trip: prev.trip || 1, shift: prev.shift || '', ready: ticked, state: st,
                activity: prev.note || prev.reason || '',
                status: prev.sheet_status || '',
                location: prev.location || '',

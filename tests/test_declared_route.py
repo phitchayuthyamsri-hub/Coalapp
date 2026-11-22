@@ -69,6 +69,8 @@ FAR = (now_l + timedelta(days=10)).strftime("%Y-%m-%d")
 sr.SAME_DAY_RULE_FROM = "2000-01-01"
 
 app = create_app()
+from app import shift_routes as _sr_pin   # noqa: E402
+_sr_pin.SHIFT_MODE_FROM = "2099-01-01"   # one-file sheets; AM / PM files: test_shift_files.py
 with app.app_context():
     z = {}
     for name, role, typ, bays, mins, wo, wc, bo, bc in (

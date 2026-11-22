@@ -44,6 +44,8 @@ iso = lambda n: (T + timedelta(days=n)).strftime("%Y-%m-%d")
 TODAY, TOMORROW, YDAY = iso(0), iso(1), iso(-1)
 
 app = create_app()
+from app import shift_routes as _sr_pin   # noqa: E402
+_sr_pin.SHIFT_MODE_FROM = "2099-01-01"   # one-file sheets; AM / PM files: test_shift_files.py
 with app.app_context():
     pts = Subcontractor.query.filter_by(name="PTS").first() or Subcontractor(name="PTS", short="PTS")
     idle = Subcontractor(name="No Trucks Co", short="NoTrucks")

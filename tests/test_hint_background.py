@@ -53,6 +53,8 @@ sr._gps_view = slow_view
 sr.HINT_IN_BACKGROUND = True
 
 app = create_app()
+from app import shift_routes as _sr_pin   # noqa: E402
+_sr_pin.SHIFT_MODE_FROM = "2099-01-01"   # one-file sheets; AM / PM files: test_shift_files.py
 with app.app_context():
     sub = Subcontractor.query.filter_by(name="Bac Nam").first() or Subcontractor(name="Bac Nam")
     db.session.add(sub)

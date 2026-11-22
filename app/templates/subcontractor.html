@@ -133,6 +133,8 @@
   a.trail:hover{opacity:1}
   .b-gps{background:#12301f;color:#5fd97e}
   .b-trip{background:#0c2a3d;color:#7dd3fc}
+  .b-late{background:#3a1a18;color:#fca5a5}
+  #shiftWrap button.on{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
   .b-none{background:#2a2410;color:var(--amber)}
   .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;
         color:var(--mut)}
@@ -193,6 +195,13 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
       <div class="spacer"></div>
       <div id="who" class="why"></div>
     </div>
+    <!-- AM / PM files (21/11/2026): one shift at a time, from the 24/11 sheets. -->
+    <div class="row" id="shiftWrap" style="display:none;margin-top:8px;gap:6px;align-items:center">
+      <span class="why">Shift:</span>
+      <button class="ghost" type="button" data-shift="AM">AM &middot; arrivals 06:00&ndash;18:00</button>
+      <button class="ghost" type="button" data-shift="PM">PM &middot; arrivals 18:00&ndash;06:00</button>
+    </div>
+    <div id="shiftNote"></div>
     <div id="amendBox"></div>
     <div id="gpsNote"></div>
   </div>
@@ -246,6 +255,12 @@ if (location.search.indexOf('embed=1') >= 0) document.body.classList.add('embed'
         <label class="f">Date &mdash; the day these trucks are used
           <select id="delivery"></select></label>
         <div class="filed" id="filedAs">Pick the date first.</div>
+        <label class="f" id="upShiftWrap" style="display:none">Which file
+          <select id="upShift">
+            <option value="">— AM or PM —</option>
+            <option value="AM">AM file — arrivals 06:00 to 18:00</option>
+            <option value="PM">PM file — arrivals 18:00 to 06:00 next morning</option>
+          </select></label>
       </div>
       <div class="note n-info">Uploading fills ONLY the trucks named in the file,
         for the date you pick. Trucks already on the sheet and not in the file
@@ -275,6 +290,8 @@ const NOT_RUNNING = STATUS.slice(2);
 const PLACES = ['XPPL Mine','Lalay border','QL49','Chan May port','On the road',
                 'Workshop','Garage'];
 let ME = null, SUBID = null, ROWS = [], SUGGEST = {}, MAY_EDIT = false;
+// AM / PM files (21/11/2026): the shift on screen, and whether this day has them.
+let SHIFT = '', SMODE = false, OTHER = {};
 let ROUTES = [];   // the named routes, with the plates locked to each
 let LIST = null, LOCKED = false, PICKER = null, SUBS = [];
 
@@ -347,7 +364,12 @@ async function load(){
   LIST = list;
   // The server decides whether this list is still ours; the page only reports
   // it. A list gone to the supervisor is locked here on purpose.
-  if (MAY_EDIT && list && list.may_edit === false) LOCKED = true;
+  // On an AM / PM day the sheet is not locked as a whole: each row already
+  // sent on is protected by the server, and the other shift goes on regardless.
+  SMODE = !!(list && list.shift_mode);
+  if (SMODE && SHIFT !== 'AM' && SHIFT !== 'PM') SHIFT = (day === todayStr()) ? 'PM' : 'AM';
+  if (!SMODE) SHIFT = '';
+  if (MAY_EDIT && list && list.may_edit === false && !SMODE) LOCKED = true;
   else LOCKED = false;
   drawAmend();
 
@@ -362,11 +384,23 @@ async function load(){
     return 'seen — leg unknown';
   }
   const byPlate = {};
-  // A truck's first trip; its later trips on the sheet are added after.
-  (list.rows || []).forEach(r => { if ((r.trip || 1) === 1) byPlate[r.plate] = r; });
-  const plates = Object.keys(byPlate).length
-    ? Object.keys(byPlate)
-    : (sug.rows || []).map(r => r.plate);
+  OTHER = {};
+  // A truck's first trip; its later trips on the sheet are added after. On an
+  // AM / PM day: its row in the shift on screen, and its other shift's trip
+  // shown beside it, read-only.
+  const timed = r => !!(r.arrive_date && r.arrive);
+  (list.rows || []).forEach(r => {
+    if (SMODE){
+      if (timed(r) && r.shift !== SHIFT){ OTHER[r.plate] = r; return; }
+      byPlate[r.plate] = r; return;
+    }
+    if ((r.trip || 1) === 1) byPlate[r.plate] = r;
+  });
+  const plates = SMODE
+    ? Array.from(new Set((list.rows || []).map(r => r.plate).concat((sug.rows || []).map(r => r.plate))))
+    : Object.keys(byPlate).length
+      ? Object.keys(byPlate)
+      : (sug.rows || []).map(r => r.plate);
 
   // The route is declared with the truck, day by day (30/09/2026): what this
   // sheet says wins. The fleet's own route only fills a truck not yet declared,
@@ -375,7 +409,12 @@ async function load(){
   const routeOfPlate = {};
   ROUTES.forEach(r => (r.trucks || []).forEach(pl => { routeOfPlate[_k(pl)] = r.name; }));
   const mkRow = (pl, d0) => {
-    const d = d0 || {}, g = SUGGEST[pl] || {};
+    // A truck running in the other shift is answered for: nothing is guessed
+    // into this shift from the GPS.
+    const d = d0 || (OTHER[pl] ? {plate: pl, route: OTHER[pl].route} : {}), g0 = SUGGEST[pl] || {};
+    // The GPS's arrival only where it falls in the shift on screen.
+    const g = (SMODE && g0.eta_date && !inShiftWin(g0.eta_date, g0.eta_time))
+      ? Object.assign({}, g0, {eta_date: '', eta_time: ''}) : g0;
     const declared = d.plate !== undefined;
     // These names are the API's, not the column titles. Getting them the wrong
     // way round put Loaded/Empty under Status and the not-running reason under
@@ -400,11 +439,14 @@ async function load(){
       gps: gpsCat(g),
       // Which run of the truck this row is (21/11/2026): 2, 3 ... when the same
       // truck is back at the mine again later on this sheet.
-      trip: d.trip || 1
+      trip: d.trip || 1,
+      late: !!d.late,
+      other: OTHER[pl] ? (OTHER[pl].shift + ' ' + OTHER[pl].arrive + ' · ' + OTHER[pl].state) : ''
     };
   };
   ROWS = plates.sort().map(pl => mkRow(pl, byPlate[pl]));
-  (list.rows || []).filter(r => (r.trip || 1) > 1).forEach(r => ROWS.push(mkRow(r.plate, r)));
+  if (!SMODE) (list.rows || []).filter(r => (r.trip || 1) > 1).forEach(r => ROWS.push(mkRow(r.plate, r)));
+  paintShift();
   ROWS.sort((a, b) => a.plate < b.plate ? -1 : a.plate > b.plate ? 1 : (a.trip || 1) - (b.trip || 1));
 
   // A company with no sheet on this day, while another has one, is a filter -
@@ -537,6 +579,8 @@ function draw(){
     {key:'back',     label:'Back in service',width:'125px', kind:'date',
      hint:'day first'},
     {key:'remark',   label:'Remark',         width:'190px'},
+    {key:'other',    label:'Other shift',    width:'130px', ro:true,
+     hint:'AM / PM days: the truck\'s trip in the other shift'},
     {key:'gps',      label:'What the GPS says', ro:true}
   ];
   GRID = new Grid({
@@ -546,6 +590,7 @@ function draw(){
     render: {
       plate: (r) => '<span class="plate">' + esc(r.plate) + '</span>'
         + ((r.trip || 1) > 1 ? ' <span class="badge b-trip">trip ' + (r.trip | 0) + '</span>' : '')
+        + (r.late ? ' <span class="badge b-late" title="Sent after this shift\'s deadline">late</span>' : '')
         + ' <a class="trail" target="_blank" rel="noopener" title="GPS trail, '
         + 'yesterday to now" href="/truck-trail?plate=' + encodeURIComponent(r.plate)
         + '" onmousedown="event.stopPropagation()">◎</a>',
@@ -625,6 +670,37 @@ $('#bulkOff').onclick = function(){
   GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' marked ' + hit);
 };
 
+// ── AM / PM files (21/11/2026) ──────────────────────────────────────────────
+function inShiftWin(date, time){
+  if (!SMODE || !date || !time) return true;
+  const day = $('#day').value, t = new Date(date + 'T' + time + ':00').getTime();
+  const d0 = new Date(day + 'T00:00:00').getTime(), H = 3600e3;
+  const lo = d0 + (SHIFT === 'AM' ? 6 : 18) * H, hi = d0 + (SHIFT === 'AM' ? 18 : 30) * H;
+  return t >= lo && t < hi;
+}
+function paintShift(){
+  const w = $('#shiftWrap');
+  if (w) w.style.display = SMODE ? '' : 'none';
+  document.querySelectorAll('#shiftWrap [data-shift]').forEach(b =>
+    b.classList.toggle('on', b.dataset.shift === SHIFT));
+  ['#bulkTrip', '#bulkTripDel'].forEach(s => { const e = $(s); if (e) e.style.display = SMODE ? 'none' : ''; });
+  const n = $('#shiftNote');
+  if (!n) return;
+  const s = SMODE && LIST && (LIST.shifts || []).filter(x => x.shift === SHIFT)[0];
+  if (!s){ n.innerHTML = ''; return; }
+  const c = s.steps[0];
+  n.innerHTML = '<div class="note ' + (c.past ? 'n-warn' : 'n-info') + '"><b>' + esc(SHIFT)
+    + ' declaration</b> &mdash; trucks reaching the mine ' + esc(s.from) + ' to ' + esc(s.to)
+    + '. Send by <b>' + esc(c.due) + '</b>'
+    + (c.past ? ' &mdash; <b>the deadline has passed: what is sent now is marked late.</b>' : '.')
+    + ' Saving here changes this shift only; trips in the other shift stay as they are '
+    + '(see Other shift). A truck&rsquo;s second trip of the day is 18:00 or later, in the PM declaration.</div>';
+}
+document.querySelectorAll('#shiftWrap [data-shift]').forEach(b => b.onclick = () => {
+  if (SHIFT === b.dataset.shift) return;
+  SHIFT = b.dataset.shift; load();
+});
+
 // Another trip for a truck (21/11/2026): the same truck, back at the mine later.
 $('#bulkTrip').onclick = function(){
   if (!GRID || !MAY_EDIT || LOCKED) return;
@@ -698,6 +774,8 @@ $('#save').onclick = async function(){
   const payload = {
     date: $('#day').value,
     subcontractor_id: SUBID ? Number(SUBID) : null,
+    // AM / PM days: only this shift is saved; the other one is not touched.
+    shift: SMODE ? SHIFT : undefined,
     rows: ROWS.filter(r => r.status || r.location || r.date).map(r => ({
       plate: r.plate,
       trip: r.trip || 1,
@@ -768,7 +846,7 @@ $('#reapply').onclick = function(){
 // An upload used to go to whatever day the picker at the top showed, which can
 // open on the latest sheet - so a new day's file could silently replace another
 // day's. The file tab asks which day the trucks are used, and files it there.
-let DELIV_EXISTING = null;
+let DELIV_EXISTING = null, DELIV_SMODE = false;
 const DAYS_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function isoShift(iso, n){
   const d = new Date(iso + 'T00:00:00Z');
@@ -813,8 +891,12 @@ async function paintDelivery(){
     if (sel.value !== v) return;              // changed while we were asking
     const n = ((l && l.rows) || []).filter(r => !r.absent).length;
     DELIV_EXISTING = n ? {n: n, state: l.state} : null;
+    DELIV_SMODE = !!(l && l.shift_mode);
+    $('#upShiftWrap').style.display = DELIV_SMODE ? '' : 'none';
+    if (DELIV_SMODE && !$('#upShift').value) $('#upShift').value = (sheet === todayStr()) ? 'PM' : 'AM';
     $('#filedAs').innerHTML = head + ' &mdash; '
       + (!n ? 'a new sheet'
+         : DELIV_SMODE ? 'has ' + n + ' rows now - the file adds or moves only its own shift'
          : l.state === 'confirmed'
            ? '<b style="color:var(--red)">already confirmed (' + n + ' trucks) - it cannot be '
              + 'replaced by an upload.</b> Ask for the sheet back on the Fill in here tab first.'
@@ -844,14 +926,27 @@ async function send(f){
   }
   const sheet = delivery;
   const ex = DELIV_EXISTING;
-  if (ex && ex.state === 'confirmed'){
+  const upShift = DELIV_SMODE ? ($('#upShift').value || '') : '';
+  if (DELIV_SMODE && !upShift){
+    m.textContent = 'Pick which file this is - AM (arrivals 06:00-18:00) or PM (18:00-06:00).';
+    m.className = 'msg err';
+    return;
+  }
+  if (DELIV_SMODE){
+    if (!confirm('Upload ' + f.name + ' as the ' + upShift + ' file for ' + dayLabel(sheet) + '?'
+        + String.fromCharCode(10, 10) + 'It adds or moves the ' + upShift + ' trips of the trucks '
+        + 'it names. The ' + (upShift === 'AM' ? 'PM' : 'AM') + ' trips are not touched.')){
+      m.textContent = 'Not uploaded.'; m.className = 'msg';
+      return;
+    }
+  } else if (ex && ex.state === 'confirmed'){
     m.textContent = 'The sheet for ' + dayLabel(sheet)
       + ' is already confirmed, so it cannot be replaced by an upload. '
       + 'Ask for the sheet back first.';
     m.className = 'msg err';
     return;
   }
-  if (!confirm('Upload ' + f.name + ' into the sheet for ' + dayLabel(sheet) + '?'
+  if (!DELIV_SMODE && !confirm('Upload ' + f.name + ' into the sheet for ' + dayLabel(sheet) + '?'
       + String.fromCharCode(10, 10)
       + (ex ? 'The sheet has ' + ex.n + ' trucks now (' + ex.state + '). Only the '
               + 'trucks named in the file are filled; if any of them are already '
@@ -865,6 +960,7 @@ async function send(f){
   const fd = new FormData();
   fd.append('file', f);
   fd.append('date', sheet);
+  if (upShift) fd.append('shift', upShift);
   if (SUBID) fd.append('subcontractor_id', SUBID);
   try {
     let r = await fetch('/api/shift/upload', {method:'POST', body: fd});

@@ -214,6 +214,8 @@ function draw(){
               : '');
       return '<tr class="' + cls + '">' + rowNo(n)
         + '<td class="plate">' + esc(r.plate) + trailLink(r.plate)
+          + (r.shift ? ' <span class="st s-' + (r.shift === 'AM' ? 'pending' : 'applied') + '">' + esc(r.shift) + '</span>' : '')
+          + (r.late ? ' <span class="st s-denied" title="Sent by the company after this shift&#39;s deadline">late</span>' : '')
           + ((r.trip || 1) > 1 ? ' <span class="st s-applied" title="This truck&#39;s trip '
              + (r.trip|0) + ' on the same sheet">trip ' + (r.trip|0) + '</span>' : '') + '</td>'
         + '<td><span class="st s-' + esc(r.state) + '">' + esc(r.state) + '</span></td>'

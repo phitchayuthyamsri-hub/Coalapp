@@ -40,6 +40,8 @@ def check(label, got, want):
 DAY = "2026-11-16"
 SQ = [[16.0, 106.0], [16.0, 106.01], [16.01, 106.01], [16.01, 106.0]]
 app = create_app()
+from app import shift_routes as _sr_pin   # noqa: E402
+_sr_pin.SHIFT_MODE_FROM = "2099-01-01"   # one-file sheets; AM / PM files: test_shift_files.py
 with app.app_context():
     def _sub(name):
         s = Subcontractor.query.filter_by(name=name).first() or Subcontractor(name=name, short=name)

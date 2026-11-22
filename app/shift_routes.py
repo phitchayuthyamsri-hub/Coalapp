@@ -245,10 +245,16 @@ def _trip_no(r):
 def _run_day(row, list_date):
     """The day whose plan a declared row belongs to.
 
+    From the AM / PM sheets on (SHIFT_MODE_FROM) every timed row on a sheet is
+    that sheet's day: the day runs 06:00 to 06:00, and 00:00-06:00 is the
+    previous day's PM (user 21/11/2026).
+
     A first trip is planned on the day it reaches the mine, as always. An extra
     trip belongs to the plan of the sheet it is declared on, even when it
     reaches the mine after midnight: the 21/11 sheet's second run at 22/11
     03:00 is in the 21/11 plan (user 21/11/2026)."""
+    if _shift_mode(list_date):
+        return list_date if (row.arrive_date and row.arrive_hhmm) else ""
     if _trip_no(row) >= 2 and list_date:
         return list_date
     return row.arrive_date or ""
@@ -306,6 +312,286 @@ def _number_trips(rows, day):
                            "to this day's plan." % (plate, n + 1, _dmy(whens[i][0]),
                                                     _dmy(day)))
     return bad
+
+
+# ── AM / PM files (21/11/2026) ───────────────────────────────────────────────
+# The team splits the day into two files: AM for arrivals 06:00-18:00, PM for
+# 18:00 to 06:00 the next morning. A truck has at most one trip per shift, so
+# its second trip is always 18:00 or later. A file only touches its own shift:
+# the PM file adds to the day, never replaces the AM one, and a truck sent
+# again in the same shift at another time has its time moved. Each shift runs
+# its own timetable; a file after the company deadline is taken, marked late.
+# Sheets for days before SHIFT_MODE_FROM keep the old one-file rules.
+SHIFT_MODE_FROM = "2026-11-24"
+SHIFT_HOURS = {"AM": (6, 18), "PM": (18, 30)}
+SHIFT_STEPS = {
+    "AM": [("company", "Company sends", -1, "14:00"),
+           ("supervisor", "Supervisor checks", -1, "15:00"),
+           ("manager", "Manager approves", -1, "16:00"),
+           ("la", "L.A checks and sends to the mine", -1, "16:30")],
+    "PM": [("company", "Company sends", 0, "09:00"),
+           ("supervisor", "Supervisor checks", 0, "09:45"),
+           ("manager", "Manager approves", 0, "10:30"),
+           ("la", "L.A checks and sends to the mine", 0, "10:40")],
+}
+SHIFT_CUTOFF = {"AM": (-1, "16:30"), "PM": (0, "10:45")}
+
+
+def _shift_mode(day):
+    return bool(day) and day >= SHIFT_MODE_FROM
+
+
+def _shift_window(day, shift):
+    d0 = datetime.strptime(day, "%Y-%m-%d")
+    a, b = SHIFT_HOURS[shift]
+    return d0 + timedelta(hours=a), d0 + timedelta(hours=b)
+
+
+def _at(adate, hhmm):
+    try:
+        return datetime.strptime("%s %s" % (adate, hhmm), "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return None
+
+
+def _shift_of(day, adate, hhmm):
+    """AM, PM, or None when the time is outside the day's 06:00-06:00."""
+    t = _at(adate, hhmm)
+    if t is None:
+        return None
+    for s in ("AM", "PM"):
+        lo, hi = _shift_window(day, s)
+        if lo <= t < hi:
+            return s
+    return None
+
+
+def _due(day, off, hm):
+    return (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=off)
+            + timedelta(hours=int(hm[:2]), minutes=int(hm[3:5])))
+
+
+def _step_due(day, shift, key):
+    for k, _label, off, hm in SHIFT_STEPS[shift]:
+        if k == key:
+            return _due(day, off, hm)
+    return None
+
+
+def _row_shift(r, day):
+    """A row's shift: the file it came in, else read from its time."""
+    s = getattr(r, "shift", "") or ""
+    return s or _shift_of(day, r.arrive_date, r.arrive_hhmm) or ""
+
+
+def _is_late(r, day):
+    """Declared by the company after its shift's deadline."""
+    sh = getattr(r, "shift", "") or ""
+    at = getattr(r, "declared_at", None)
+    if sh not in SHIFT_STEPS or at is None or not _shift_mode(day):
+        return False
+    return (at + LOCAL_OFFSET) > _step_due(day, sh, "company")
+
+
+def _shift_day_refusal(day, shift, today=None):
+    """Which sheet a company may send a shift for: the AM file the day before,
+    the PM file on the day itself (or the day before, early). Admins fix things."""
+    if _role() == "admin":
+        return None
+    today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    tomorrow = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    ok = (day == tomorrow) if shift == "AM" else (day in (today, tomorrow))
+    if ok:
+        return None
+    want = ("tomorrow, %s" % _dmy(tomorrow)) if shift == "AM" else \
+        ("today, %s (or tomorrow)" % _dmy(today))
+    return jsonify(error="The %s file is sent for %s. You picked %s." % (shift, want, _dmy(day)),
+                   code="not_tomorrow", tomorrow=tomorrow), 400
+
+
+def _check_shift_rows(rows, day):
+    """A whole sheet saved on the board, on an AM / PM day: every time inside
+    the day's 06:00-06:00, at most one trip per truck per shift, every row of
+    a truck on the sheet more than once timed. Sets trip and shift in place."""
+    by, bad = {}, []
+    for r in rows:
+        by.setdefault(engine.norm_plate((r.get("plate") or "").strip()), []).append(r)
+    lo, _x = _shift_window(day, "AM")
+    _y, hi = _shift_window(day, "PM")
+    for key, rs in by.items():
+        plate = (rs[0].get("plate") or "").strip()
+        timed = []
+        for r in rs:
+            d, t = (r.get("arrive_date") or "").strip(), _row_hhmm(r)
+            if d and t:
+                sh = _shift_of(day, d, t)
+                if not sh:
+                    bad.append("%s at %s %s is outside the day of %s (%s to %s)."
+                               % (plate, _dmy(d), t, _dmy(day), lo.strftime("%d/%m %H:%M"),
+                                  hi.strftime("%d/%m %H:%M")))
+                    continue
+                r["shift"] = sh
+                timed.append(r)
+            elif len(rs) > 1:
+                bad.append("%s is on the sheet %d times: give every trip a date and a "
+                           "time at the mine." % (plate, len(rs)))
+            else:
+                r["trip"] = 1
+        shifts = [r["shift"] for r in timed]
+        dup = [x for x in ("AM", "PM") if shifts.count(x) > 1]
+        if dup:
+            bad.append("%s has two trips in the %s shift - one trip per truck per shift; "
+                       "a second trip is 18:00 or later." % (plate, dup[0]))
+        for n, r in enumerate(sorted(timed, key=lambda x: ((x.get("arrive_date") or ""), _row_hhmm(x)))):
+            r["trip"] = n + 1
+    return bad
+
+
+def _same_answer(x, r):
+    """Does the incoming row say what the stored row says about the run?"""
+    st = ((r.get("activity") if "activity" in r else r.get("note")) or "").strip()
+    return ((x.note or "").strip() == st
+            and (x.arrive_date or "") == (r.get("arrive_date") or "").strip()
+            and (x.arrive_hhmm or "") == _row_hhmm(r)
+            and ("route_id" not in r or (r.get("route_id") or None) == x.route_id))
+
+
+def _merge_shift(dl, day, shift, incoming, company):
+    """Merge one AM or PM file into the day's sheet. -> list of problems
+    (nothing is written when there are any).
+
+    Only the trucks the file names are touched, and only in its own shift:
+    - a time in the shift: the truck's trip in this shift, added or moved;
+    - no time: the truck is not coming in this shift - its trip in this shift
+      is withdrawn, and the status is kept when it has no other trip;
+    - a trip already sent to the manager or decided is not changed from a file
+      - that goes through Request to amend.
+    """
+    now_l = datetime.utcnow() + LOCAL_OFFSET
+    lo, hi = _shift_window(day, shift)
+    bad, seen = [], {}
+    for r in incoming:
+        key = engine.norm_plate((r.get("plate") or "").strip())
+        plate = (r.get("plate") or "").strip()
+        if key in seen:
+            bad.append("%s is in the %s file twice - one trip per truck per shift." % (plate, shift))
+            continue
+        seen[key] = r
+        d, t = (r.get("arrive_date") or "").strip(), _row_hhmm(r)
+        if d and t:
+            sh = _shift_of(day, d, t)
+            if sh != shift:
+                bad.append("%s at %s %s is not in the %s shift (%s to %s)%s."
+                           % (plate, _dmy(d), t, shift, lo.strftime("%d/%m %H:%M"),
+                              hi.strftime("%d/%m %H:%M"),
+                              (" - it belongs in the %s file" % sh) if sh else
+                              " - it is outside this day"))
+        elif d or t:
+            bad.append("%s has a date or a time at the mine, but not both." % plate)
+    existing = DailyListRow.query.filter_by(list_id=dl.id).all()
+    by = {}
+    for x in existing:
+        by.setdefault(x.key or engine.norm_plate(x.plate), []).append(x)
+    plan = []
+    for key, r in seen.items():
+        plate = (r.get("plate") or "").strip()
+        ex = by.get(key, [])
+        mine = [x for x in ex if x.arrive_date and x.arrive_hhmm and _row_shift(x, day) == shift]
+        status = [x for x in ex if not (x.arrive_date and x.arrive_hhmm)]
+        other = [x for x in ex if x.arrive_date and x.arrive_hhmm and _row_shift(x, day) != shift]
+        timed = bool((r.get("arrive_date") or "").strip() and _row_hhmm(r))
+        prev = mine[0] if mine else (status[0] if status and not other else None)
+        if prev is not None and _same_answer(prev, r):
+            plan.append(("touch", key, r, prev, []))
+            continue
+        locked = [x for x in mine if (x.state or "pending") != "pending"]
+        if locked:
+            bad.append("%s %s is already %s - a change now goes through Request to amend."
+                       % (plate, shift, {"applied": "with the manager"}.get(
+                           locked[0].state, locked[0].state)))
+            continue
+        if timed and company and _at(r["arrive_date"].strip(), _row_hhmm(r)) < now_l:
+            bad.append("%s: %s %s has already passed." % (plate, _dmy(r["arrive_date"]), _row_hhmm(r)))
+            continue
+        if timed:
+            plan.append(("put", key, r, prev, mine + status))
+        elif other:
+            plan.append(("drop", key, r, prev, mine))      # runs in the other shift
+        else:
+            plan.append(("put", key, r, prev, mine + status))
+    if bad:
+        return bad
+    stamp = datetime.utcnow()
+    touched = set()
+    for kind, key, r, prev, gone in plan:
+        if kind == "touch":
+            # Same run: only the details are refreshed. The state and the time
+            # it was declared stay, so sending the file again changes nothing.
+            for fld, attr in (("location", "location"), ("status", "sheet_status"),
+                              ("sheet_status", "sheet_status"), ("remark", "remark"),
+                              ("back_in_service", "back_in_service")):
+                if fld in r:
+                    setattr(prev, attr, (r.get(fld) or "")[:300 if attr == "remark" else 60])
+            if not prev.shift and prev.arrive_hhmm:
+                prev.shift = shift
+            continue
+        for x in gone:
+            db.session.delete(x)
+        touched.add(key)
+        if kind == "drop":
+            continue
+        row, _runs = _declared_row(r, dl.id, "pending", prev)
+        row.shift = shift
+        row.declared_at = stamp
+        if "ready" in r:
+            row.ready = bool(r.get("ready"))
+        db.session.add(row)
+    db.session.flush()
+    for key in touched:
+        rows = [x for x in DailyListRow.query.filter_by(list_id=dl.id).all()
+                if (x.key or engine.norm_plate(x.plate)) == key]
+        timed = sorted([x for x in rows if x.arrive_date and x.arrive_hhmm],
+                       key=lambda x: (x.arrive_date, x.arrive_hhmm))
+        for n, x in enumerate(timed):
+            x.trip = n + 1
+        for x in rows:
+            if not (x.arrive_date and x.arrive_hhmm):
+                x.trip = 1
+    return []
+
+
+def _shift_board(dl, day, now_l=None):
+    """Each shift's timetable with where it stands, for the pages."""
+    if not _shift_mode(day):
+        return []
+    now_l = now_l or (datetime.utcnow() + LOCAL_OFFSET)
+    rows = DailyListRow.query.filter_by(list_id=dl.id).all() if dl else []
+    out = []
+    for sh in ("AM", "PM"):
+        mine = [x for x in rows if _row_shift(x, day) == sh]
+        lo, hi = _shift_window(day, sh)
+        timed = [x for x in mine if x.arrive_hhmm]
+        st = lambda s: sum(1 for x in timed if (x.state or "pending") == s)
+        outstanding = {
+            "company": not mine,
+            "supervisor": any((x.state or "pending") == "pending" and x.ready for x in timed),
+            "manager": st("applied") > 0,
+            "la": False,
+        }
+        steps = []
+        for k, label, off, hm in SHIFT_STEPS[sh]:
+            due = _due(day, off, hm)
+            steps.append({"key": k, "label": label, "due": due.strftime("%d/%m %H:%M"),
+                          "past": now_l > due,
+                          "overdue": bool(now_l > due and outstanding.get(k))})
+        late = [x.plate for x in mine if _is_late(x, day)]
+        cut = _due(day, *SHIFT_CUTOFF[sh])
+        out.append({"shift": sh, "from": lo.strftime("%d/%m %H:%M"), "to": hi.strftime("%d/%m %H:%M"),
+                    "trucks": len(timed), "pending": st("pending"), "applied": st("applied"),
+                    "approved": st("approved"), "denied": st("denied"),
+                    "late": sorted(set(late)), "cutoff": cut.strftime("%d/%m %H:%M"),
+                    "past_cutoff": now_l > cut, "steps": steps})
+    return out
 
 
 def _trips_refusal(bad):
@@ -934,6 +1220,10 @@ def _list_payload(dl, day):
                 "route_declared": bool(r.route_id),
                 "plate": r.plate, "sub": short,
                 "trip": _trip_no(r),
+                # AM / PM (21/11/2026): the file it came in, and whether the
+                # company sent it after that file's deadline.
+                "shift": _row_shift(r, day) if _shift_mode(day) else "",
+                "late": _is_late(r, day),
                 "ready": bool(r.ready),
                 "state": r.state or "pending",
                 "reason": r.reason or "",
@@ -974,6 +1264,9 @@ def _list_payload(dl, day):
         "date": day,
         "state": state,
         "rows": rows,
+        "shift_mode": _shift_mode(day),
+        "shift_mode_from": SHIFT_MODE_FROM,
+        "shifts": _shift_board(dl, day) if dl else _shift_board(None, day),
         # Named for what it is: rows sitting with the manager, undecided.
         "applied_count": sum(1 for r in rows if r["state"] == "applied"),
         "submitted_by": dl.submitted_by if dl else None,
@@ -1275,14 +1568,24 @@ def upload():
     if _asked_all(request.form):
         return _one_company_only()
     sub_id = _req_sub_id(request.form)
-    bad_day = _not_tomorrow(day)
+    # AM / PM files (21/11/2026): every file says which shift it is.
+    shift = (request.form.get("shift") or "").strip().upper()
+    smode = _shift_mode(day)
+    if smode and shift not in SHIFT_HOURS:
+        return jsonify(error="From %s the trucks come in two files. Say whether this "
+                             "is the AM file (arrivals 06:00-18:00) or the PM file "
+                             "(18:00 to 06:00)." % _dmy(SHIFT_MODE_FROM),
+                       code="need_shift"), 400
+    bad_day = _shift_day_refusal(day, shift) if smode else _not_tomorrow(day)
     if bad_day:
         return bad_day
     dl = _find_list(day, sub_id)
 
     # A confirmed list is the document the manager signed. Replacing it from a
-    # sheet would rewrite what was approved without anyone deciding to.
-    if dl and dl.state == "confirmed":
+    # sheet would rewrite what was approved without anyone deciding to. On an
+    # AM / PM day a file only adds to its own shift and cannot change a row
+    # already sent on, so the PM file still goes in after the AM is approved.
+    if dl and dl.state == "confirmed" and not smode:
         s = db.session.get(Subcontractor, sub_id) if sub_id else None
         return jsonify(error="The list for %s on %s is already confirmed. It "
                              "cannot be replaced by an upload."
@@ -1339,6 +1642,8 @@ def upload():
             code="invalid", problems=bad, plates=plates,
             warnings=parsed.get("warnings", [])), 400
 
+    if smode:
+        return _upload_shift(dl, day, sub_id, shift, rows, parsed)
     late = _same_day_rows(rows)
     if late:
         return _same_day_refusal(late)
@@ -1444,6 +1749,47 @@ def upload():
         added=len(rows) - len(overlap), replaced=len(overlap),
         kept=len(existing) - len(overlap),
         missing=missing, uncommitted=uncommitted,
+        warnings=parsed.get("warnings", []),
+        sheet=parsed.get("sheet"), header_row=parsed.get("header_row"),
+        columns=parsed.get("columns"), state=dl.state)
+
+
+def _upload_shift(dl, day, sub_id, shift, rows, parsed):
+    """An AM or PM file into the day's sheet (21/11/2026): merged into its own
+    shift, the whole file or none of it."""
+    if not dl:
+        dl = DailyList(list_date=day, subcontractor_id=sub_id, state="draft")
+        db.session.add(dl)
+        db.session.flush()
+    before = DailyListRow.query.filter_by(list_id=dl.id).count()
+    bad = _merge_shift(dl, day, shift, rows, _role() == "subcontractor")
+    if bad:
+        db.session.rollback()
+        return jsonify(error="%d problem(s) in the %s file, so none of it was imported: %s"
+                             % (len(bad), shift, " ".join(bad[:6]) + (" …" if len(bad) > 6 else "")),
+                       code="shift", problems=[{"row": None, "plate": "", "column": shift,
+                                                "why": b} for b in bad],
+                       warnings=parsed.get("warnings", [])), 400
+    db.session.flush()
+    dl.content_hash = _content_hash(dl.id)
+    _act("upload", "%s file for %s — %d truck(s)" % (shift, _dmy(day), len(rows)))
+    db.session.commit()
+    _stamp_hint(dl, day, sub_id)
+    if _role() in GPS_PULLERS:
+        _take_gps_snapshot(day, retake=True)
+    now = DailyListRow.query.filter_by(list_id=dl.id).all()
+    roster = _roster(sub_id) if sub_id else {}
+    on_sheet = {x.key for x in now}
+    s = db.session.get(Subcontractor, sub_id) if sub_id else None
+    mine = [x for x in now if x.arrive_hhmm and _row_shift(x, day) == shift]
+    return jsonify(
+        ok=True, date=day, shift=shift,
+        subcontractor=(s.name if s else "(no company)"), subcontractor_id=sub_id,
+        imported=len(rows), running=len(mine), committed=len(roster),
+        added=max(0, len(now) - before), replaced=0, kept=before,
+        missing=sorted(c.plate for k, c in roster.items() if k not in on_sheet),
+        uncommitted=sorted(r["plate"] for r in rows if roster and r["key"] not in roster),
+        late=sorted({x.plate for x in mine if _is_late(x, day)}),
         warnings=parsed.get("warnings", []),
         sheet=parsed.get("sheet"), header_row=parsed.get("header_row"),
         columns=parsed.get("columns"), state=dl.state)
@@ -1841,7 +2187,7 @@ def week():
                                 request.args.get("roll", "1") != "0"))
 
 
-def _revision_data(day, only):
+def _revision_data(day, only, shift=None):
     """One day, rebuilt from readiness. The revised plan.
 
     This is the other half of the model. The week is issued in advance and the
@@ -1882,7 +2228,8 @@ def _revision_data(day, only):
                 at = (datetime.strptime(r.arrive_date or day, "%Y-%m-%d")
                       + timedelta(hours=int(h), minutes=int(m)))
                 arrivals.append((r.plate, at))
-                trips[(engine.norm_plate(r.plate), at)] = _trip_no(r)
+                trips[(engine.norm_plate(r.plate), at)] = (
+                    _trip_no(r), _row_shift(r, day) if _shift_mode(day) else "")
                 routes[engine.norm_plate(r.plate)] = r.route_id
                 who[r.plate] = (sub_id, label)
                 continue
@@ -1904,13 +2251,17 @@ def _revision_data(day, only):
     for r in sorted(out, key=lambda x: x["arrive_mine"]):
         sub_id, label = who.get(r["plate"], (None, ""))
         k = engine.norm_plate(r["plate"])
-        trip = seq[k].pop(0) if seq.get(k) else 1
+        trip, sh = seq[k].pop(0) if seq.get(k) else (1, "")
         if only is not None and sub_id != only:
             continue
+        if shift and sh != shift:
+            continue        # the other shift's run: planned with it, shown with it
         row = _plan_row(r, label, sub_id, trip, False)
-        if trip > 1:
+        if trip > 1 or sh:
             # Planned with this day, whatever the date it reaches the mine.
             row["day"], row["trip"] = day, trip
+        if sh:
+            row["shift"] = sh
         rows.append(row)
         for k, v in r["waits"].items():
             agg[k] = agg.get(k, 0.0) + v
@@ -1943,7 +2294,11 @@ def _revision_data(day, only):
 @login_required
 def revision():
     day = request.args.get("date") or         (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
-    return jsonify(**_revision_data(day, _req_sub_id()))
+    sh = (request.args.get("shift") or "").strip().upper()
+    out = _revision_data(day, _req_sub_id(), sh if sh in SHIFT_HOURS else None)
+    out["shift_mode"] = _shift_mode(day)
+    out["shift"] = sh if sh in SHIFT_HOURS else ""
+    return jsonify(**out)
 
 
 def _figures_now():
@@ -2815,10 +3170,12 @@ def revision_export():
         _day_bounds(day)
     except ValueError:
         return jsonify(error="Bad date: %s" % day), 400
-    data = _revision_workbook(day, only, current_user.username)
+    sh = (request.args.get("shift") or "").strip().upper()
+    sh = sh if sh in SHIFT_HOURS else None
+    data = _revision_workbook(day, only, current_user.username, sh)
     if data is None:
-        return jsonify(error="There is no revised plan for %s to export."
-                             % _dmy(day)), 404
+        return jsonify(error="There is no revised plan for %s%s to export."
+                             % (_dmy(day), (" " + sh) if sh else "")), 404
     return Response(data,
                     mimetype="application/vnd.openxmlformats-officedocument."
                              "spreadsheetml.sheet",
@@ -2826,7 +3183,7 @@ def revision_export():
                              'attachment; filename="revision_%s.xlsx"' % day})
 
 
-def _revision_workbook(day, only, by):
+def _revision_workbook(day, only, by, shift=None):
     """The Revision workbook as bytes, or None when the day has no revised plan.
 
     One builder for the download button and for the draft email sent on Issue
@@ -2836,7 +3193,7 @@ def _revision_workbook(day, only, by):
     import openpyxl
     from openpyxl.styles import Font, Alignment
 
-    d = _revision_data(day, only)
+    d = _revision_data(day, only, shift)
     if not d["rows"]:
         return None
     who = "All companies"
@@ -2855,8 +3212,8 @@ def _revision_workbook(day, only, by):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Revision"
-    ws.append(["Revised plan for %s — %s — local time (UTC+7)"
-               % (_dmy(day), who)])
+    ws.append(["Revised plan for %s%s — %s — local time (UTC+7)"
+               % (_dmy(day), (" %s shift" % shift) if shift else "", who)])
     ws["A1"].font = Font(bold=True, size=13)
     ws.append([issued_line + " · exported %s by %s"
                % ((datetime.utcnow() + LOCAL_OFFSET).strftime("%d/%m/%Y %H:%M"),
@@ -3413,15 +3770,23 @@ def revision_issue():
     d = request.get_json(force=True, silent=True) or {}
     day = d.get("date") or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
     only = _req_sub_id(d)
-    data = _revision_data(day, only)
+    # AM / PM days (21/11/2026): each shift is issued on its own timetable.
+    sh = (d.get("shift") or "").strip().upper()
+    if _shift_mode(day) and sh not in SHIFT_HOURS:
+        return jsonify(error="Pick AM or PM: from %s each shift is issued on its own."
+                             % _dmy(SHIFT_MODE_FROM), code="need_shift"), 400
+    sh = sh if _shift_mode(day) else ""
+    data = _revision_data(day, only, sh or None)
     if not data["rows"]:
-        return jsonify(error="There is no revised plan for this day to issue."), 400
+        return jsonify(error="There is no revised plan for this %s to issue."
+                             % (("day's " + sh + " shift") if sh else "day")), 400
 
     # Issuing the same day twice is abnormal (user 09/11/2026: "Gimme a warning
     # first"). Nothing is written until the planner confirms, and the page
     # sends reissue=true only after showing who issued it and when.
-    before = PlanSnapshot.query.filter_by(day=day, subcontractor_id=only).order_by(
+    _all_before = PlanSnapshot.query.filter_by(day=day, subcontractor_id=only).order_by(
         PlanSnapshot.issued_at.desc()).all()
+    before = [b for b in _all_before if not sh or (b.shift or "") == sh]
     if before and not d.get("reissue"):
         return jsonify(error="This day has already been issued.", reissue_needed=True,
                        times=len(before), last_at=_fmt(before[0].issued_at),
@@ -3430,12 +3795,21 @@ def revision_issue():
     # Freeze it. Without this the monitor has nothing to compare against, and
     # the figures are stored with the rows for the same reason the week does it:
     # a difference can only be attributed if the assumptions are known.
+    rows = data["rows"]
+    if sh:
+        # The day's plan in force holds both shifts: the other one exactly as
+        # it was last issued, this one as planned now. Every reader of "the
+        # plan for the day" keeps working on one snapshot.
+        last = _all_before[0] if _all_before else None
+        keep = [r for r in ((last.rows or []) if last else [])
+                if (r.get("shift") or "") and r.get("shift") != sh]
+        rows = sorted(keep + rows, key=lambda r: (r.get("t") or {}).get("arrive_mine") or "")
     snap = PlanSnapshot(week_start=_week_start(day).strftime("%Y-%m-%d"),
                         day=day, subcontractor_id=only,
                         issued_by=current_user.username,
                         issued_at=datetime.utcnow(),
                         note=(d.get("note") or "").strip()[:300],
-                        rows=data["rows"], figures=_figures_now())
+                        rows=rows, figures=_figures_now(), shift=sh)
     db.session.add(snap)
 
     st = _standing(day, only)
@@ -3444,7 +3818,7 @@ def revision_issue():
     audience = d.get("audience") or _DEFAULT_AUDIENCE
 
     n = Notice(kind="revision", day=day, subcontractor_id=only,
-               title="Revised plan issued for %s (%s)" % (day, who),
+               title="Revised plan issued for %s%s (%s)" % (day, (" " + sh) if sh else "", who),
                audience=audience, created_by=current_user.username,
                created_at=datetime.utcnow(),
                detail={"trucks": len(data["rows"]),
@@ -3461,7 +3835,7 @@ def revision_issue():
     # forwarding it to the team. Sent after the commit - the issue stands
     # whether or not the mail goes.
     mail = _mail_issue_draft(day, only, None if only is None else who,
-                             current_user.username, reissue=bool(before))
+                             current_user.username, reissue=bool(before), shift=sh or None)
     n.detail = dict(n.detail or {}, mail=mail)
     db.session.commit()
 
@@ -3480,15 +3854,17 @@ DRAFT_SIGNATURE = ("Phitchayuth Yamsri", "Process Analyst and Development",
                    "Logistics Asia ( LA )")
 
 
-def _draft_mail_parts(day, company=None):
+def _draft_mail_parts(day, company=None, shift=None):
     """Subject, file name, text and html of the draft - the team's own email,
     word for word: 'Coal loading Plan ... as of 10 Nov 2026' with the Revision
     file renamed 'Plan Load_2026-11-10.xlsx'."""
     dd = datetime.strptime(day, "%Y-%m-%d")
     tag = (" - %s" % company) if company else ""
+    tag = ((" %s shift" % shift) if shift else "") + tag
     subject = ("Coal loading Plan Mine-ChanMay / Mine-A Ngo / A Ngo-ChanMay as of %s%s"
                % (dd.strftime("%d %b %Y"), tag))
-    fname = "Plan Load_%s%s.xlsx" % (day, ("_" + company.replace(" ", "")) if company else "")
+    fname = "Plan Load_%s%s%s.xlsx" % (day, ("_" + shift) if shift else "",
+                                       ("_" + company.replace(" ", "")) if company else "")
     line = "Please see coal plan loading as of %s, thank you." % dd.strftime("%d %B %Y")
     text = "Dear all,\n\n    %s\n\nBest Regards,\n%s\n" % (line, "\n".join(DRAFT_SIGNATURE))
     html = ('<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">'
@@ -3498,16 +3874,16 @@ def _draft_mail_parts(day, company=None):
     return subject, fname, text, html
 
 
-def _mail_issue_draft(day, only, company, by, reissue=False):
+def _mail_issue_draft(day, only, company, by, reissue=False, shift=None):
     """Send the draft; returns what happened, for the page and the notice."""
     from . import mailer
     to = (os.environ.get("COAL_PLAN_DRAFT_TO") or DRAFT_TO_DEFAULT).strip()
     if not mailer.configured():
         return {"sent": False, "to": to, "why": "mail relay not configured"}
-    subject, fname, text, html = _draft_mail_parts(day, company)
+    subject, fname, text, html = _draft_mail_parts(day, company, shift)
     if (os.environ.get("COALAPP_ENV") or "").strip().lower() == "staging":
         subject = "[STAGING] " + subject
-    data = _revision_workbook(day, only, by)
+    data = _revision_workbook(day, only, by, shift)
     if data is None:
         return {"sent": False, "to": to, "why": "no revised plan to attach"}
     ok, msg = mailer.send_mail(to, subject, html=html, text=text, files=[(
@@ -4054,6 +4430,8 @@ def approvals():
             items.append({
                 "plate": r.plate, "state": r.state or "pending", "ready": bool(r.ready),
                 "trip": _trip_no(r),
+                "shift": _row_shift(r, day) if _shift_mode(day) else "",
+                "late": _is_late(r, day),
                 # The route declared for the day (else the fleet's), so the
                 # manager sees which run each truck is approving onto - the
                 # same fact the supervisor and the declaration list show.
@@ -4308,8 +4686,17 @@ def save_list():
     sub_id = _req_sub_id(d)
     dl = _find_list(day, sub_id)
     state = dl.state if dl else "none"
-    if not _can("edit", state):
+    # AM / PM days (21/11/2026): the company's page saves one shift at a time,
+    # merged like a file. A row already sent on is protected row by row, so the
+    # sheet as a whole is not locked by the other shift's progress.
+    shift = (d.get("shift") or "").strip().upper()
+    smode = _shift_mode(day)
+    merge = smode and shift in SHIFT_HOURS
+    if not _can("edit", state) and not (merge and _role() in ("subcontractor", "admin")):
         return jsonify(error="Your role may not edit this list (state: %s)" % state), 403
+    if smode and _role() == "subcontractor" and not merge:
+        return jsonify(error="Say whether this is the AM (06:00-18:00) or the PM "
+                             "(18:00-06:00) declaration.", code="need_shift"), 400
 
     if not dl:
         dl = DailyList(list_date=day, subcontractor_id=sub_id, state="draft")
@@ -4318,31 +4705,56 @@ def save_list():
 
     incoming = [r for r in (d.get("rows") or []) if (r.get("plate") or "").strip()]
     if _role() == "subcontractor":
-        bad_day = _not_tomorrow(day)
+        bad_day = _shift_day_refusal(day, shift) if merge else _not_tomorrow(day)
         if bad_day:
             return bad_day
-    late = _same_day_rows(incoming)
-    if late:
-        return _same_day_refusal(late)
-    trip_bad = _number_trips(incoming, day)
-    if trip_bad:
-        return _trips_refusal(trip_bad)
+    if not smode:
+        late = _same_day_rows(incoming)
+        if late:
+            return _same_day_refusal(late)
+        trip_bad = _number_trips(incoming, day)
+        if trip_bad:
+            return _trips_refusal(trip_bad)
+    elif not merge:
+        trip_bad = _check_shift_rows(incoming, day)
+        if trip_bad:
+            return _trips_refusal(trip_bad)
     unknown = _resolve_routes(incoming)
     if unknown:
         return jsonify(error="%d truck(s) name a route that does not exist: %s. "
                              "Pick a route from the list."
                              % (len(unknown), ", ".join("%s (%s)" % u for u in unknown[:6])),
                        code="unknown_route", plates=[u[0] for u in unknown]), 400
+    if merge:
+        bad = _merge_shift(dl, day, shift, incoming, _role() == "subcontractor")
+        if bad:
+            db.session.rollback()
+            return jsonify(error="The %s declaration was not saved: %s" % (
+                shift, " ".join(bad[:6]) + (" …" if len(bad) > 6 else "")),
+                code="shift", problems=bad), 400
+        db.session.flush()
+        dl.content_hash = _content_hash(dl.id)
+        _act("edit", "Saved the %s declaration for %s — %d truck(s)"
+             % (shift, _dmy(day), len(incoming)))
+        db.session.commit()
+        _stamp_hint(dl, day, sub_id)
+        out = _list_payload(dl, day)
+        out["missing_fleet"] = _fleet_gaps(dl, sub_id)
+        return jsonify(out)
 
     # Keep the state a row already has: a row sitting with the manager, or already
     # decided, must not be dragged back to pending because the supervisor saved
     # the page. The tick is intent; the state is where the row actually is.
     # Per trip (21/11/2026): a truck can be on the sheet more than once.
-    prior = {(r.key, _trip_no(r)): (r.state or "pending")
-             for r in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    # On an AM / PM day a row is matched by its shift instead of its number.
+    _now_rows = DailyListRow.query.filter_by(list_id=dl.id).all()
+    if smode:
+        _pk = lambda x: (x.key, _row_shift(x, day) if (x.arrive_date and x.arrive_hhmm) else "")
+    else:
+        _pk = lambda x: (x.key, _trip_no(x))
+    prior = {_pk(r): (r.state or "pending") for r in _now_rows}
     # The rows as they stand, so a field this caller never mentions survives.
-    before = {(x.key, _trip_no(x)): x
-              for x in DailyListRow.query.filter_by(list_id=dl.id).all()}
+    before = {_pk(x): x for x in _now_rows}
     DailyListRow.query.filter_by(list_id=dl.id).delete()
     for r in incoming:
         # Same mapping as an uploaded sheet. The old code here read "arrive"
@@ -4354,9 +4766,15 @@ def save_list():
         # A trip just added takes the state the truck's first trip is in: the
         # truck has been through the chain, this is another time for it. Only
         # a manager or admin can still edit a list that far along.
-        st = prior.get((key, trip)) or prior.get((key, 1)) or "pending"
-        row, _runs = _declared_row(r, dl.id, st, before.get((key, trip)))
+        k2 = (key, r.get("shift") or "") if smode else (key, trip)
+        st = prior.get(k2) or ((not smode) and prior.get((key, 1))) or "pending"
+        row, _runs = _declared_row(r, dl.id, st, before.get(k2))
         row.trip = trip
+        if smode:
+            old = before.get(k2)
+            row.shift = r.get("shift") or (old.shift if old is not None else "") or ""
+            # The board is not the company: when it declared stays as it was.
+            row.declared_at = old.declared_at if old is not None else None
         if "ready" in r:
             row.ready = bool(r.get("ready"))
         db.session.add(row)

@@ -522,6 +522,11 @@ class DailyListRow(db.Model):
     # An extra trip belongs to the plan of the sheet it is on, even when it
     # reaches the mine after midnight.
     trip = db.Column(db.Integer, default=1)
+    # AM / PM files (21/11/2026, from the 24/11 sheets): which file the row came
+    # in - AM is the day 06:00-18:00, PM 18:00 to 06:00 the next morning - and
+    # when the company declared it, so a file after the deadline reads late.
+    shift = db.Column(db.String(2), default="")
+    declared_at = db.Column(db.DateTime)
 
 
 class MonitorRemark(db.Model):
@@ -627,6 +632,9 @@ class PlanSnapshot(db.Model):
     issued_at = db.Column(db.DateTime, default=datetime.utcnow)
     note = db.Column(db.String(300), default="")
     rows = db.Column(db.JSON)        # the planned loops, exactly as issued
+    # AM or PM when a shift was issued (21/11/2026). The rows still hold the
+    # whole day: the other shift as it was issued, this one as planned now.
+    shift = db.Column(db.String(2), default="")
     figures = db.Column(db.JSON)     # every planning figure in force that day
 
 

@@ -457,6 +457,8 @@ def _ensure_snapshot_schema():
     if "day" not in cols:
         db.session.execute(text("ALTER TABLE plan_snapshot ADD COLUMN day VARCHAR(10)"))
         db.session.commit()
+    if "shift" not in cols:
+        _add_column_racing("plan_snapshot", "shift VARCHAR(2) DEFAULT ''")
 
 
 def _create_all_racing():
@@ -683,6 +685,11 @@ def _ensure_listrow_schema():
     # sheet - put back from the backup taken before the deploy.
     if "trip" not in cols:
         _add_column_racing("daily_list_row", "trip INTEGER DEFAULT 1")
+    # AM / PM files (21/11/2026) - the same safe way.
+    if "shift" not in cols:
+        _add_column_racing("daily_list_row", "shift VARCHAR(2) DEFAULT ''")
+    if "declared_at" not in cols:
+        _add_column_racing("daily_list_row", "declared_at DATETIME")
     # 'sent'/'rejected' were the old words for the same decision.
     db.session.execute(text("UPDATE daily_list_row SET state='approved' WHERE state='sent'"))
     db.session.execute(text("UPDATE daily_list_row SET state='denied' WHERE state='rejected'"))
