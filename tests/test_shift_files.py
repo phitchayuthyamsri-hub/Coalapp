@@ -343,5 +343,44 @@ with app.app_context():
     check("the PM workbook says so in its title", "PM shift" in ws["A1"].value, True)
 
 print()
+print("the PM file after the AM is approved goes back to the supervisor (24/11/2026)")
+with app.app_context():
+    dl = DailyList.query.filter_by(list_date=DAY).first()
+    DailyListRow.query.filter_by(list_id=dl.id, shift="PM").delete()
+    for x in DailyListRow.query.filter_by(list_id=dl.id).all():
+        x.state = "approved"
+    sr._restate(dl)
+    db.session.commit()
+    check("AM approved, no PM yet: the sheet reads confirmed", dl.state, "confirmed")
+code, j = upload(sheet([("20C10615", "Mine : A Ngo", "BH", NEXT, "02:30")]), "PM")
+check("the PM file goes in", code, 200)
+with app.app_context():
+    check("...and the sheet is back with the supervisor",
+          DailyList.query.filter_by(list_date=DAY).first().state, "draft")
+r = adm.post("/api/shift/list/submit", json={"date": DAY, "subcontractor_id": SID})
+check("the supervisor sends the PM trucks on", r.status_code, 200)
+with app.app_context():
+    check("...the sheet is with the manager", DailyList.query.filter_by(list_date=DAY).first().state, "submitted")
+    check("...only the PM trip moved", sorted((x.shift, x.state) for x in DailyListRow.query.filter_by(key="20C10615").all()
+                                              if x.list_id == DailyList.query.filter_by(list_date=DAY).first().id),
+          [("AM", "approved"), ("PM", "applied")])
+    check("approval for the day still open at 10:44 on the day",
+          sr._approval_closed(DAY, now_l=sr._due(DAY, 0, "10:44")), False)
+    check("...closed after the PM cut-off, 10:46", sr._approval_closed(DAY, now_l=sr._due(DAY, 0, "10:46")), True)
+r = adm.post("/api/shift/list/confirm", json={"date": DAY, "subcontractor_id": SID})
+check("the manager approves", r.status_code, 200)
+with app.app_context():
+    check("...and the sheet is confirmed again", DailyList.query.filter_by(list_date=DAY).first().state, "confirmed")
+r = sub_c.post("/api/shift/upload", data={"date": DAY, "subcontractor_id": str(SID),
+                                          "file": (io.BytesIO(open(sheet([("20H01499", "Mine : A Ngo", "BH", DAY, "12:00")]), "rb").read()), "r.xlsx")},
+               content_type="multipart/form-data")
+check("an upload with no AM / PM is refused", r.status_code, 400)
+with app.app_context():
+    from app.models import ActivityEvent
+    last = ActivityEvent.query.filter_by(action="refused").order_by(ActivityEvent.id.desc()).first()
+    check("...and the refusal is in the activity log with its reason",
+          bool(last and "no AM / PM chosen" in last.detail), True)
+
+print()
 print("ALL PASS" if not FAIL else "%d FAILED" % FAIL)
 sys.exit(1 if FAIL else 0)

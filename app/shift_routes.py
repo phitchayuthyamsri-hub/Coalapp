@@ -594,6 +594,17 @@ def _shift_board(dl, day, now_l=None):
     return out
 
 
+def _refused(detail):
+    """A declaration the system turned away, written down with the reason the
+    company was given (24/11/2026) - a refused upload used to leave no trace,
+    so "we cannot upload" could only be answered by guessing."""
+    try:
+        _act("refused", detail)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def _trips_refusal(bad):
     return jsonify(error="Trips could not be saved: " + " ".join(bad[:6])
                    + (" …" if len(bad) > 6 else ""), code="trips", problems=bad), 400
@@ -890,8 +901,23 @@ def _restate(dl):
     """
     rows = DailyListRow.query.filter_by(list_id=dl.id).all()
     st = {r.state or "pending" for r in rows}
+    # AM / PM days (24/11/2026): the PM file arrives after the AM shift was
+    # approved. A shift whose rows are all still pending has not been looked at
+    # yet, so the sheet is back with the supervisor - it used to stay
+    # "confirmed" and nobody was asked to check the PM trucks.
+    fresh = False
+    if _shift_mode(dl.list_date):
+        by = {}
+        for r in rows:
+            sh = _row_shift(r, dl.list_date)
+            if sh:
+                by.setdefault(sh, []).append(r)
+        fresh = any(rs and all((r.state or "pending") == "pending" for r in rs)
+                    for rs in by.values())
     if "applied" in st:
         dl.state = "submitted"          # something is waiting on the manager
+    elif fresh:
+        dl.state = "draft"              # a shift not yet checked by the supervisor
     elif "approved" in st or "denied" in st:
         dl.state = "confirmed"          # decided, nothing outstanding
     else:
@@ -1572,12 +1598,15 @@ def upload():
     shift = (request.form.get("shift") or "").strip().upper()
     smode = _shift_mode(day)
     if smode and shift not in SHIFT_HOURS:
+        _refused("Upload for %s refused: no AM / PM chosen" % _dmy(day))
         return jsonify(error="From %s the trucks come in two files. Say whether this "
                              "is the AM file (arrivals 06:00-18:00) or the PM file "
                              "(18:00 to 06:00)." % _dmy(SHIFT_MODE_FROM),
                        code="need_shift"), 400
     bad_day = _shift_day_refusal(day, shift) if smode else _not_tomorrow(day)
     if bad_day:
+        _refused("Upload for %s%s refused: %s" % (_dmy(day), (" " + shift) if shift else "",
+                                                  (bad_day[0].get_json() or {}).get("error", "")))
         return bad_day
     dl = _find_list(day, sub_id)
 
@@ -1765,6 +1794,7 @@ def _upload_shift(dl, day, sub_id, shift, rows, parsed):
     bad = _merge_shift(dl, day, shift, rows, _role() == "subcontractor")
     if bad:
         db.session.rollback()
+        _refused("%s file for %s refused: %s" % (shift, _dmy(day), " ".join(bad)))
         return jsonify(error="%d problem(s) in the %s file, so none of it was imported: %s"
                              % (len(bad), shift, " ".join(bad[:6]) + (" …" if len(bad) > 6 else "")),
                        code="shift", problems=[{"row": None, "plate": "", "column": shift,
@@ -1772,6 +1802,7 @@ def _upload_shift(dl, day, sub_id, shift, rows, parsed):
                        warnings=parsed.get("warnings", [])), 400
     db.session.flush()
     dl.content_hash = _content_hash(dl.id)
+    _restate(dl)
     _act("upload", "%s file for %s — %d truck(s)" % (shift, _dmy(day), len(rows)))
     db.session.commit()
     _stamp_hint(dl, day, sub_id)
@@ -4729,11 +4760,13 @@ def save_list():
         bad = _merge_shift(dl, day, shift, incoming, _role() == "subcontractor")
         if bad:
             db.session.rollback()
+            _refused("%s declaration for %s refused: %s" % (shift, _dmy(day), " ".join(bad)))
             return jsonify(error="The %s declaration was not saved: %s" % (
                 shift, " ".join(bad[:6]) + (" …" if len(bad) > 6 else "")),
                 code="shift", problems=bad), 400
         db.session.flush()
         dl.content_hash = _content_hash(dl.id)
+        _restate(dl)
         _act("edit", "Saved the %s declaration for %s — %d truck(s)"
              % (shift, _dmy(day), len(incoming)))
         db.session.commit()
@@ -4857,14 +4890,21 @@ FLOW_WINDOWS = {
 }
 
 
-def _approval_closed(day, today=None):
+def _approval_closed(day, today=None, now_l=None):
     """Whether the manager may no longer approve this run day's trucks
     (22/10/2026). Approval belongs to the day before the run day; once the run
     day itself has begun, the approval day has passed and a late approval is
     refused - "please denied approval if it's already pass the date". The
     admin is not held to it (see act_list), so a mistake can still be put
     right."""
+    if day and _shift_mode(day) and today is None:
+        # AM / PM days (24/11/2026): the PM shift is approved on the day itself
+        # (by 10:30), so approval stays open until the day's PM cut-off, 10:45.
+        now_l = now_l or (datetime.utcnow() + LOCAL_OFFSET)
+        return now_l > _due(day, *SHIFT_CUTOFF["PM"])
     today = today or (datetime.utcnow() + LOCAL_OFFSET).strftime("%Y-%m-%d")
+    if day and _shift_mode(day):
+        return day < today
     return bool(day) and day <= today
 
 
