@@ -3290,6 +3290,7 @@ button.small[style*="#0a84ff"], #rcpConfirm, #btnCalcStaged { color: #fff !impor
           <button data-scope="deact">Deactivated</button>
         </div>
         <label class="toggle" id="dailyCompanyWrap" style="margin-left:14px">Subcontractor <select id="dailyCompanySel" class="pmsel" style="margin-left:4px"><option value="">All</option></select></label>
+        <button id="dailyXlsxBtn" class="pmbtn" style="margin-left:14px" title="Both tables as they are on screen - period, fleet, subcontractor and sort - plus one row per truck per day with the hover details">&#11015; Excel</button>
       </div>
       <div id="perfDetail"></div>
       <div class="symwrap" id="symGrid"></div>
@@ -12411,10 +12412,57 @@ function renderPerf(p){
   sb+='</tbody>';
   symEl.innerHTML=`<div class="dcap">Per-truck daily symbols <span class="dleg"><b class="ok">● came as planned</b> · <b class="off">◐ not as planned</b> · <b class="wait">⏳ waiting</b> · <b class="miss">✕ did not come</b> · <b class="nogps">No GPS</b> · <b class="extra">■ came, not in plan</b> · <b class="manual">◆ manual entry (not scored)</b> &middot; <b style="color:#2e9bff">&#9888; weighbridge (GPS error)</b></span></div>
     <div class="scroller dgscroll symgridscroll" style="max-height:none"><table class="symtable dgrid" style="width:${dgW}px">${sh}${sb}</table></div>`;
+  // What is on screen, kept for the Excel button (user 24/11/2026).
+  window._DAILY_LAST={p, rows, fleetRows:fleetRows.slice(), subOf, SYM};
   // the two tables scroll sideways together, so the dates stay under each other
   const _dgs=[detail.querySelector('.dgscroll'), symEl.querySelector('.dgscroll')].filter(Boolean);
   _dgs.forEach(el=>el.addEventListener('scroll',()=>{ _dgs.forEach(o=>{ if(o!==el && o.scrollLeft!==el.scrollLeft) o.scrollLeft=el.scrollLeft; }); }));
 }
+// ---- Daily page as an Excel file (user 24/11/2026) ----
+// The two tables exactly as shown (period, fleet scope, subcontractor, sort order), and a
+// third sheet with one row per truck per day - status in words, the hours off, and the
+// hover text - so it can be filtered in Excel.
+function exportDailyXlsx(){
+  const L=window._DAILY_LAST;
+  if(!L||!L.p||!L.p.dates||!L.p.dates.length){ alert('Nothing to export - the Daily page has no dates in view.'); return; }
+  if(typeof XLSX==='undefined'){ alert('The Excel library has not loaded yet - try again in a moment.'); return; }
+  const {p,rows,fleetRows,subOf,SYM}=L;
+  const WORD={circle:'Came as planned',half:'Not as planned',wait:'Waiting',cross:'Did not come',nogps:'No GPS',square:'Came - not in plan'};
+  const scope=(document.querySelector('[data-page-panel="daily"] .fleet-scope-seg button.active')||{}).textContent||'';
+  const co=(document.getElementById('dailyCompanySel')||{}).value||'All';
+  const from=p.dates[0], to=p.dates[p.dates.length-1];
+  const info=[['Daily performance'],['Period',from+' to '+to],['Fleet',scope],['Subcontractor',co],
+    ['Exported',new Date().toLocaleString('en-GB')],[],
+    ['Legend'],['●','Came as planned (within 1 h of the plan time)'],['◐','Not as planned (1-12 h off) - the note is hours off, + late / - early'],
+    ['⏳','Waiting (the window is still open)'],['✕','Did not come (no mine arrival within 12 h)'],['No GPS','No position for 12 h either side'],
+    ['■','Came, not in plan'],['◆','Manual loading time - not scored'],['⚠','Mine time from the weighbridge (GPS error)']];
+  const counts=[['Status / Date','Total',...p.dates]];
+  for(const r of rows){ counts.push([r.label,p.dates.reduce((s,d)=>s+(p.sbd[d][r.f]||0),0),...p.dates.map(d=>p.sbd[d][r.f]||'')]); }
+  const grid=[['Truck','Subcontractor','● as planned','◐ not as planned','⏳ waiting','✕ did not come','No GPS','■ not in plan',...p.dates]];
+  const det=[['Date','Truck','Subcontractor','Status','Hours off / note','Manual','Weighbridge','Details']];
+  for(const pl of fleetRows){
+    const g=p.grid[pl]||{totals:{},byDate:{}}, t=g.totals||{};
+    const line=[pl,subOf(pl),t.circle||'',t.half||'',t.wait||'',t.cross||'',t.nogps||'',t.square||''];
+    for(const d of p.dates){ const c=g.byDate[d];
+      if(!c){ line.push(''); continue; }
+      const parts=[c.sym?SYM[c.sym]:'', c.man?'◆':'', c.wb?'⚠':'', c.note||''].filter(Boolean);
+      line.push(parts.join(' '));
+      det.push([d,pl,subOf(pl),c.sym?WORD[c.sym]:'',c.note||'',c.man?'yes':'',c.wb?'yes':'',(c.tip||'').replace(/\s+/g,' ').trim()]); }
+    grid.push(line);
+  }
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.aoa_to_sheet(counts); ws1['!cols']=[{wch:22},{wch:8},...p.dates.map(()=>({wch:11}))];
+  const ws2=XLSX.utils.aoa_to_sheet(grid); ws2['!cols']=[{wch:11},{wch:13},...Array(6).fill({wch:8}),...p.dates.map(()=>({wch:11}))];
+  ws2['!freeze']={xSplit:2,ySplit:1};
+  const ws3=XLSX.utils.aoa_to_sheet(det); ws3['!cols']=[{wch:11},{wch:11},{wch:13},{wch:18},{wch:12},{wch:8},{wch:11},{wch:80}];
+  const ws0=XLSX.utils.aoa_to_sheet(info); ws0['!cols']=[{wch:14},{wch:70}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Daily status counts');
+  XLSX.utils.book_append_sheet(wb,ws2,'Per-truck symbols');
+  XLSX.utils.book_append_sheet(wb,ws3,'Per truck per day');
+  XLSX.utils.book_append_sheet(wb,ws0,'About');
+  XLSX.writeFile(wb,'Daily_performance_'+from+'_to_'+to+(co&&co!=='All'?'_'+co.replace(/\s+/g,''):'')+'.xlsx');
+}
+if(typeof document!=='undefined') document.addEventListener('click',e=>{ if(e.target&&e.target.id==='dailyXlsxBtn') exportDailyXlsx(); });
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function renderIssues(){
   const el=document.getElementById('perfIssues'); if(!el) return;
