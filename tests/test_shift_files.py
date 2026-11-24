@@ -320,6 +320,13 @@ r = adm.post("/api/shift/revision/issue", json={"date": DAY})
 check("issuing with no shift is refused", (r.status_code, (r.get_json() or {}).get("code")), (400, "need_shift"))
 r = adm.post("/api/shift/revision/issue", json={"date": DAY, "shift": "AM"})
 check("AM issued", r.status_code, 200)
+with app.app_context():
+    from openpyxl import load_workbook as _lw
+    with app.test_request_context():
+        _pm = _lw(io.BytesIO(sr._revision_workbook(DAY, None, "adm", "PM"))).active["A2"].value
+        _am = _lw(io.BytesIO(sr._revision_workbook(DAY, None, "adm", "AM"))).active["A2"].value
+    check("the PM file says PM is not issued yet (only AM is)", _pm.startswith("PM shift NOT ISSUED YET"), True)
+    check("the AM file says AM is issued", _am.startswith("AM shift: Issued"), True)
 r = adm.post("/api/shift/revision/issue", json={"date": DAY, "shift": "AM"})
 check("AM again asks first", (r.status_code, (r.get_json() or {}).get("reissue_needed")), (409, True))
 r = adm.post("/api/shift/revision/issue", json={"date": DAY, "shift": "PM"})

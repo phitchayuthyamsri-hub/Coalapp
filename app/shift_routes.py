@@ -3232,11 +3232,19 @@ def _revision_workbook(day, only, by, shift=None):
         s = db.session.get(Subcontractor, only)
         who = (s.short or s.name) if s else str(only)
     snap = _issued_for(day, only)
-    issued_line = (("Issued %s%s" % (_fmt(snap.issued_at) or "",
+    if shift:
+        # A shift's file says whether THAT shift was issued (24/11/2026): the
+        # PM file read "Issued 23/11 16:12" - the AM issue - before PM was.
+        snap = next((x for x in PlanSnapshot.query.filter_by(day=day, subcontractor_id=only)
+                     .order_by(PlanSnapshot.issued_at.desc()).all()
+                     if (x.shift or "") == shift), None)
+    issued_line = (("%sIssued %s%s" % ((shift + " shift: ") if shift else "",
+                                       _fmt(snap.issued_at) or "",
                     (" by " + snap.issued_by)
                     if getattr(snap, "issued_by", "") else ""))
                    if snap is not None else
-                   "NOT ISSUED YET — a working revision, not a commitment")
+                   "%sNOT ISSUED YET — a working revision, not a commitment"
+                   % ((shift + " shift ") if shift else ""))
 
     dt = lambda v: datetime.strptime(v, "%Y-%m-%dT%H:%M") if v else None
     head = Font(bold=True)
