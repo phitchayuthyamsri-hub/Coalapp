@@ -35,5 +35,15 @@ check('date descending: status order reversed, blanks last', run(D, -1),
   ['J_manual', 'B_square', 'G_nogps', 'E_cross', 'H_wait', 'F_half_early2', 'I_half_late3', 'C_half_late8', 'D_circle', 'K_circle', 'A_blank', 'L_blank']);
 check('Subcontractor sort: by company, none last', run('__sub', 1).slice(0, 5), ['D_circle', 'K_circle', 'E_cross', 'C_half_late8', 'A_blank']);
 check('plate sort unchanged', run('__plate', 1).slice(0, 3), ['A_blank', 'B_square', 'C_half_late8']);
+
+// The six totals sort too (24/11/2026): first click most first, again least first, plate breaks ties.
+p.grid.E_cross.totals = { cross: 22 };
+p.grid.C_half_late8.totals = { cross: 4, half: 9 };
+p.grid.H_wait.totals = { cross: 4 };
+p.grid.D_circle.totals = { circle: 3 };
+check('✕ total: most first', run('__sum_cross', 1).slice(0, 3), ['E_cross', 'C_half_late8', 'H_wait']);
+check('✕ total: again, least first (ties stay A-Z)', run('__sum_cross', -1).slice(-3), ['C_half_late8', 'H_wait', 'E_cross']);
+check('◐ total: most first', run('__sum_half', 1)[0], 'C_half_late8');
+check('the total headers are sortable', html.includes('data-col="__sum_${k}"'), true);
 console.log(FAIL ? '\n' + FAIL + ' FAILED' : '\nall passed');
 process.exit(FAIL ? 1 : 0);

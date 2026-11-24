@@ -12355,15 +12355,17 @@ function renderPerf(p){
 
   // ---- truck × date symbol grid ----
   const SYM={circle:'●',half:'◐',wait:'⏳',cross:'✕',nogps:'No GPS',square:'■',manual:'◆'};
-  const arrow=col=>dailySort.col===col?(dailySort.dir>0?' ▲':' ▼'):'';
+  // The six totals sort too (user 24/11/2026): first click most first (▼), again least first (▲).
+  const arrow=col=>dailySort.col===col?((dailySort.dir>0)!==col.startsWith('__sum_')?' ▲':' ▼'):'';
+  const sumTh=(k,t,lab)=>`<th class="sum sumhdr ${k} sortable" data-col="__sum_${k}" title="${t} - click to sort">${lab}${arrow('__sum_'+k)}</th>`;
   let sh=`${dgSym}<thead><tr><th class="splate sortable" data-col="__plate">Truck \\ Date${arrow('__plate')}</th>
       <th class="ssub sortable" data-col="__sub">Subcontractor${arrow('__sub')}</th>
-      <th class="sum sumhdr circle" title="Came as planned">●</th>
-      <th class="sum sumhdr half" title="Not as planned">◐</th>
-      <th class="sum sumhdr wait" title="Waiting">⏳</th>
-      <th class="sum sumhdr cross" title="Did not come">✕</th>
-      <th class="sum sumhdr nogps" title="No GPS">No GPS</th>
-      <th class="sum sumhdr square" title="Come — not in plan">■</th>`;
+      ${sumTh('circle','Came as planned','●')}
+      ${sumTh('half','Not as planned','◐')}
+      ${sumTh('wait','Waiting','⏳')}
+      ${sumTh('cross','Did not come','✕')}
+      ${sumTh('nogps','No GPS','No GPS')}
+      ${sumTh('square','Come — not in plan','■')}`;
   for(const d of p.dates) sh+=`<th class="sortable" data-col="${d}">${dHdr(d)}${arrow(d)}</th>`;
   sh+=`</tr></thead>`;
   // sort fleet rows
@@ -12373,6 +12375,9 @@ function renderPerf(p){
   if(dailySort.col==='__plate'){ fleetRows.sort((a,b)=>a<b?-1:a>b?1:0); if(dailySort.dir<0) fleetRows.reverse(); }
   else if(dailySort.col==='__sub'){ fleetRows.sort((a,b)=>{ const A=subOf(a), B=subOf(b);   // no company last, plate breaks ties
       if(A!==B){ if(!A) return 1; if(!B) return -1; return A.localeCompare(B,undefined,{sensitivity:'base'})*dailySort.dir; } return a<b?-1:a>b?1:0; }); }
+  else if(dailySort.col&&dailySort.col.startsWith('__sum_')){ const k=dailySort.col.slice(6);
+    const n=pl=>(p.grid[pl]&&p.grid[pl].totals&&p.grid[pl].totals[k])||0;   // plate breaks ties
+    fleetRows.sort((a,b)=>{ const x=(n(b)-n(a))*dailySort.dir; return x||(a<b?-1:a>b?1:0); }); }
   else if(dailySort.col){ const c=dailySort.col;
     // Sorting a date sorts by that day's status (user 20/11/2026): came as planned, not as planned,
     // waiting, did not come, No GPS, came not in plan, manual / weighbridge only. Clicking again
