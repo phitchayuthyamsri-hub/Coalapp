@@ -26,11 +26,20 @@ def main():
     ap.add_argument("--budget", type=int, default=240, help="seconds of asking (default 240)")
     ap.add_argument("--plate", action="append", help="only this truck (repeatable)")
     ap.add_argument("--dry", action="store_true", help="list, do not ask or store")
+    ap.add_argument("--restamp", action="store_true",
+                    help="only record mine arrivals / Monitor times for every day from --since to today")
     a = ap.parse_args()
     app = create_app()
     with app.app_context():
         since = (datetime.strptime(a.since, "%Y-%m-%d") if a.since
                  else (datetime.utcnow() + timedelta(hours=7) - timedelta(days=3)))
+        if a.restamp:
+            days, d = [], since
+            while d.date() <= (datetime.utcnow() + timedelta(hours=7)).date():
+                days.append(d.strftime("%Y-%m-%d"))
+                d += timedelta(days=1)
+            print("restamp", gps_backfill.restamp(days), flush=True)
+            return
         only = {p.replace("-", "").replace(".", "").replace(" ", "").upper() for p in (a.plate or [])} or None
         out = gps_backfill.fill(app, since, budget_s=a.budget, only=only, dry=a.dry,
                                 log=lambda s: print(s, flush=True))

@@ -205,21 +205,50 @@ def restamp(days):
     A few days at a time, so a November-long refill never reads the whole
     ping table at once."""
     from . import actuals
-    from .shift_routes import _visits_and_roles, _day_bounds
     days = sorted(set(days))
     n = m = 0
     for i in range(0, len(days), 3):
         chunk = days[i:i + 3]
         # The run day's window opens the day before and stays open three days:
         # stamp every run day whose window could hold the new positions.
-        first = (datetime.strptime(chunk[0], "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
-        run_days = sorted({(datetime.strptime(first, "%Y-%m-%d") + timedelta(days=j)).strftime("%Y-%m-%d")
-                           for j in range((datetime.strptime(chunk[-1], "%Y-%m-%d")
-                                           - datetime.strptime(first, "%Y-%m-%d")).days + 2)})
-        since = _day_bounds(run_days[0])[0]
-        visits, roles = _visits_and_roles(since=since)
+        first = datetime.strptime(chunk[0], "%Y-%m-%d") - timedelta(days=2)
+        last = datetime.strptime(chunk[-1], "%Y-%m-%d") + timedelta(days=1)
+        run_days = [(first + timedelta(days=j)).strftime("%Y-%m-%d")
+                    for j in range((last - first).days + 1)]
+        since = first
+        visits, roles = _bounded_visits(since - timedelta(days=1), last + timedelta(days=4))
         visits = [v for v in visits if v["enter"] >= since]
         n += actuals.stamp_days(run_days, visits, roles)
         m += actuals.record_arrivals(visits, roles)
         db.session.commit()
     return {"stamps": n, "mine_arrivals": m}
+
+
+def _bounded_visits(lo, hi):
+    """Visits from the positions between lo and hi (local), one truck at a time.
+
+    The pages' own builder reads from `since` to now for every truck at once;
+    for a November refill that is the whole month - 1.6 million positions - and
+    the job was killed for memory on its first run (24/11/2026). Bounded on
+    both ends and plate by plate, as the Daily page's sync does it."""
+    from . import engine, geofence
+    from .shift_routes import _own_pings, LOCAL_OFFSET
+    anchors = geofence.for_engine()
+    roles = geofence.roles()
+    deactivated = frozenset(engine.norm_plate(t.plate) for t in
+                            Truck.query.filter_by(status="deactivated").all())
+    hi = min(hi, datetime.utcnow() + LOCAL_OFFSET)
+    plates = [r[0] for r in db.session.query(GpsPing.plate)
+              .filter(GpsPing.dt >= lo, GpsPing.dt <= hi).distinct().all()]
+    out = []
+    for plate in plates:
+        q = _own_pings(db.session.query(GpsPing.plate, GpsPing.dt, GpsPing.lat, GpsPing.lng,
+                                        GpsPing.speed, GpsPing.status)
+                       .filter(GpsPing.plate == plate, GpsPing.dt >= lo, GpsPing.dt <= hi))
+        pings = [{"plate": r[0], "dt": r[1], "lat": r[2], "lng": r[3], "speed": r[4], "status": r[5]}
+                 for r in q.order_by(GpsPing.dt).all()]
+        if pings:
+            out.extend(engine.build_visits(pings, anchors, deactivated,
+                                           now=datetime.utcnow() + LOCAL_OFFSET))
+    out.sort(key=lambda v: v["enter"])
+    return out, roles
