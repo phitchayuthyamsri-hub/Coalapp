@@ -682,6 +682,24 @@ class MineArrival(db.Model):
     at = db.Column(db.DateTime, index=True, nullable=False)
 
 
+class GpsGapFill(db.Model):
+    """A hole in a truck's captured positions, and what the provider's route
+    history gave for it (24/11/2026). Kept so the same hole is not asked about
+    over and over: a provider that had nothing is asked again a few times while
+    the hole is recent - trackers upload what they stored out of signal late -
+    and then left alone."""
+    __tablename__ = "gps_gap_fill"
+    id = db.Column(db.Integer, primary_key=True)
+    plate = db.Column(db.String(40), index=True, nullable=False)   # as the provider names it
+    source = db.Column(db.String(30), nullable=False)               # api:tct2 ...
+    gap_from = db.Column(db.DateTime, index=True, nullable=False)   # local time, last ping before
+    gap_to = db.Column(db.DateTime, nullable=False)                 # first ping after, or when asked
+    tries = db.Column(db.Integer, default=0)
+    got = db.Column(db.Integer, default=0)                          # positions added
+    tried_at = db.Column(db.DateTime)                               # UTC
+    note = db.Column(db.String(200), default="")
+
+
 class AnchorSeen(db.Model):
     """A Location the GPS has seen at least one truck inside. A checkpoint
     never seen is 'blind', and a blind checkpoint cannot report a truck as

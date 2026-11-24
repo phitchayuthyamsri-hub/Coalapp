@@ -289,6 +289,11 @@ with app.app_context():
     check("sent before the AM deadline", sr._is_late(x, DAY), False)
     x.declared_at = due - sr.LOCAL_OFFSET + timedelta(minutes=1)
     check("sent a minute after it: late", sr._is_late(x, DAY), True)
+    # The other AM rows were declared by this run, so whether THEY are late
+    # depends on the clock (after 14:00 the day before, they are): pin them
+    # well before the deadline, so the check below reads the same at any hour.
+    for y in DailyListRow.query.filter(DailyListRow.shift == "AM", DailyListRow.key != "20H01499").all():
+        y.declared_at = due - sr.LOCAL_OFFSET - timedelta(hours=2)
     db.session.commit()
 r = adm.get("/api/shift/list?date=%s&subcontractor_id=%s" % (DAY, SID))
 lj = r.get_json()
