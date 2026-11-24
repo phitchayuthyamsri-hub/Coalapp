@@ -12431,7 +12431,10 @@ function exportDailyXlsx(){
   const L=window._DAILY_LAST;
   if(!L||!L.p||!L.p.dates||!L.p.dates.length){ alert('Nothing to export - the Daily page has no dates in view.'); return; }
   if(typeof XLSX==='undefined'){ alert('The Excel library has not loaded yet - try again in a moment.'); return; }
-  const {p,rows,fleetRows,subOf,SYM}=L;
+  const {p,rows,subOf,SYM}=L;
+  // The file (user 24/11/2026): deactivated trucks are left out, and "not as planned" is its
+  // icon only - the hours off the plan stay on the page.
+  const fleetRows=L.fleetRows.filter(pl=>!(typeof isDeactivated==='function'&&isDeactivated(pl)));
   const WORD={circle:'Came as planned',half:'Not as planned',wait:'Waiting',cross:'Did not come',nogps:'No GPS',square:'Came - not in plan'};
   const scope=(document.querySelector('[data-page-panel="daily"] .fleet-scope-seg button.active')||{}).textContent||'';
   const co=(document.getElementById('dailyCompanySel')||{}).value||'All';
@@ -12446,11 +12449,11 @@ function exportDailyXlsx(){
                            vals:p.dates.map(d=>p.sbd[d][r.f]||0)})),
       grid:fleetRows.map(pl=>{ const g=p.grid[pl]||{totals:{},byDate:{}};
         return {plate:pl, sub:subOf(pl), wb:!!(p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length), totals:g.totals||{},
-                cells:p.dates.map(d=>{ const c=g.byDate[d]; return c?{sym:c.sym||'', man:!!c.man, wb:!!c.wb, note:c.note||''}:null; })}; }),
+                cells:p.dates.map(d=>{ const c=g.byDate[d]; return c?{sym:c.sym||'', man:!!c.man, wb:!!c.wb, note:''}:null; })}; }),
       detail:[]};
     for(const pl of fleetRows){ const g=p.grid[pl]||{byDate:{}};
       for(const d of p.dates){ const c=g.byDate[d]; if(!c) continue;
-        payload.detail.push({date:d, plate:pl, sub:subOf(pl), sym:c.sym||'', note:c.note||'', man:!!c.man, wb:!!c.wb,
+        payload.detail.push({date:d, plate:pl, sub:subOf(pl), sym:c.sym||'', note:'', man:!!c.man, wb:!!c.wb,
                              tip:(c.tip||'').replace(/\s+/g,' ').trim()}); } }
     const btn=document.getElementById('dailyXlsxBtn'), was=btn&&btn.textContent;
     if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
@@ -12464,28 +12467,28 @@ function exportDailyXlsx(){
   }
   const info=[['Daily performance'],['Period',from+' to '+to],['Fleet',scope],['Subcontractor',co],
     ['Exported',new Date().toLocaleString('en-GB')],[],
-    ['Legend'],['●','Came as planned (within 1 h of the plan time)'],['◐','Not as planned (1-12 h off) - the note is hours off, + late / - early'],
+    ['Legend'],['●','Came as planned (within 1 h of the plan time)'],['◐','Not as planned (1-12 h off the plan time)'],
     ['⏳','Waiting (the window is still open)'],['✕','Did not come (no mine arrival within 12 h)'],['No GPS','No position for 12 h either side'],
     ['■','Came, not in plan'],['◆','Manual loading time - not scored'],['⚠','Mine time from the weighbridge (GPS error)']];
   const counts=[['Status / Date','Total',...p.dates]];
   for(const r of rows){ counts.push([r.label,p.dates.reduce((s,d)=>s+(p.sbd[d][r.f]||0),0),...p.dates.map(d=>p.sbd[d][r.f]||'')]); }
   const grid=[['Truck','Subcontractor','● as planned','◐ not as planned','⏳ waiting','✕ did not come','No GPS','■ not in plan',...p.dates]];
-  const det=[['Date','Truck','Subcontractor','Status','Hours off / note','Manual','Weighbridge','Details']];
+  const det=[['Date','Truck','Subcontractor','Status','Manual','Weighbridge','Details']];
   for(const pl of fleetRows){
     const g=p.grid[pl]||{totals:{},byDate:{}}, t=g.totals||{};
     const line=[pl,subOf(pl),t.circle||'',t.half||'',t.wait||'',t.cross||'',t.nogps||'',t.square||''];
     for(const d of p.dates){ const c=g.byDate[d];
       if(!c){ line.push(''); continue; }
-      const parts=[c.sym?SYM[c.sym]:'', c.man?'◆':'', c.wb?'⚠':'', c.note||''].filter(Boolean);
+      const parts=[c.sym?SYM[c.sym]:'', c.man?'◆':'', c.wb?'⚠':''].filter(Boolean);
       line.push(parts.join(' '));
-      det.push([d,pl,subOf(pl),c.sym?WORD[c.sym]:'',c.note||'',c.man?'yes':'',c.wb?'yes':'',(c.tip||'').replace(/\s+/g,' ').trim()]); }
+      det.push([d,pl,subOf(pl),c.sym?WORD[c.sym]:'',c.man?'yes':'',c.wb?'yes':'',(c.tip||'').replace(/\s+/g,' ').trim()]); }
     grid.push(line);
   }
   const wb=XLSX.utils.book_new();
   const ws1=XLSX.utils.aoa_to_sheet(counts); ws1['!cols']=[{wch:22},{wch:8},...p.dates.map(()=>({wch:11}))];
   const ws2=XLSX.utils.aoa_to_sheet(grid); ws2['!cols']=[{wch:11},{wch:13},...Array(6).fill({wch:8}),...p.dates.map(()=>({wch:11}))];
   ws2['!freeze']={xSplit:2,ySplit:1};
-  const ws3=XLSX.utils.aoa_to_sheet(det); ws3['!cols']=[{wch:11},{wch:11},{wch:13},{wch:18},{wch:12},{wch:8},{wch:11},{wch:80}];
+  const ws3=XLSX.utils.aoa_to_sheet(det); ws3['!cols']=[{wch:11},{wch:11},{wch:13},{wch:18},{wch:8},{wch:11},{wch:80}];
   const ws0=XLSX.utils.aoa_to_sheet(info); ws0['!cols']=[{wch:14},{wch:70}];
   XLSX.utils.book_append_sheet(wb,ws1,'Daily status counts');
   XLSX.utils.book_append_sheet(wb,ws2,'Per-truck symbols');

@@ -51,10 +51,10 @@ check('four sheets', Object.keys(sheets), ['Daily status counts', 'Per-truck sym
 check('counts: header', sheets['Daily status counts'][0], ['Status / Date', 'Total', D[0], D[1]]);
 check('counts: a row with its total', sheets['Daily status counts'][1], ['Planned truck', 3, 2, 1]);
 check('grid keeps the on-screen order', sheets['Per-truck symbols'].slice(1).map(r => r[0]), ['37H09305', '20H01481']);
-check('grid cell: symbol, manual mark, note', sheets['Per-truck symbols'][2].slice(8), ['●', '◐ ◆ +5h']);
+check('grid cell: icon and marks only, no hours off (24/11)', sheets['Per-truck symbols'][2].slice(8), ['●', '◐ ◆']);
 check('grid cell: weighbridge mark', sheets['Per-truck symbols'][1].slice(8), ['', '⏳ ⚠']);
-check('per truck per day: status in words, tip on one line',
-  sheets['Per truck per day'][2], ['2026-11-23', '20H01481', 'Bac Nam', 'Came as planned', '', '', '', 'Plan 06:00 actual 06:20']);
+check('per truck per day: status in words, no hours column, tip on one line',
+  sheets['Per truck per day'][2], ['2026-11-23', '20H01481', 'Bac Nam', 'Came as planned', '', '', 'Plan 06:00 actual 06:20']);
 check('the file name carries the period and company', file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
 check('the About sheet says the fleet scope', sheets['About'][2], ['Fleet', 'In fleet']);
 
@@ -70,9 +70,17 @@ vm.createContext(ctx2);
 vm.runInContext(SRC + '\nexportDailyXlsx();', ctx2);
 check('live page: posts to the server', posted, '/api/tool/daily.xlsx');
 check('...the counts with totals', sent.counts[0], { label: 'Planned truck', f: 'planned', total: 3, vals: [2, 1] });
-check('...the grid in screen order, cells with symbol / marks / note', [sent.grid[1].plate, sent.grid[1].cells[1]],
-  ['20H01481', { sym: 'half', man: true, wb: false, note: '+5h' }]);
+check('...the grid in screen order, cells with the icon and marks, no hours', [sent.grid[1].plate, sent.grid[1].cells[1]],
+  ['20H01481', { sym: 'half', man: true, wb: false, note: '' }]);
 check('...one detail row per truck per day', sent.detail.length, 3);
 check('...and the file name', sent.file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
+
+// A deactivated truck is left out of the file (24/11/2026).
+sent = null;
+const ctx3 = Object.assign({}, ctx2, { isDeactivated: pl => pl === '37H09305' });
+vm.createContext(ctx3);
+vm.runInContext(SRC + '\nexportDailyXlsx();', ctx3);
+check('a deactivated truck is not in the file', sent.grid.map(g => g.plate), ['20H01481']);
+check('...nor in the per-day rows', [...new Set(sent.detail.map(x => x.plate))], ['20H01481']);
 console.log(FAIL ? '\n' + FAIL + ' FAILED' : '\nall passed');
 process.exit(FAIL ? 1 : 0);

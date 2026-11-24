@@ -144,8 +144,8 @@ def build(d):
     # ── 3. One row per truck per day ─────────────────────────────────────────
     ws = wb.create_sheet("Per truck per day")
     _title(ws, "One row per truck per day", sub)
-    _head_row(ws, 4, ["Date", "Truck", "Subcontractor", "Status", "Hours off / note", "Manual",
-                      "Weighbridge", "Details"])
+    # No hours-off column (24/11/2026): "not as planned" is its icon in the file.
+    _head_row(ws, 4, ["Date", "Truck", "Subcontractor", "Status", "Manual", "Weighbridge", "Details"])
     r = 5
     for x in d.get("detail") or []:
         sym = x.get("sym") or ""
@@ -154,22 +154,21 @@ def build(d):
         _cell(ws, r, 3, x.get("sub"), bg=PANEL2, color="C9D1D9", align=LEFT)
         _cell(ws, r, 4, ((SYM.get(sym, "") + "  ") if sym else "") + WORD.get(sym, ""),
               color=SYM_COLOR.get(sym, INK), bold=True, align=LEFT)
-        _cell(ws, r, 5, x.get("note") or None, color=MUTED)
-        _cell(ws, r, 6, "◆ yes" if x.get("man") else None, color=MANUAL)
-        _cell(ws, r, 7, "⚠ yes" if x.get("wb") else None, color=WB)
-        _cell(ws, r, 8, x.get("tip") or None, color=INK, align=LEFT, size=9)
+        _cell(ws, r, 5, "◆ yes" if x.get("man") else None, color=MANUAL)
+        _cell(ws, r, 6, "⚠ yes" if x.get("wb") else None, color=WB)
+        _cell(ws, r, 7, x.get("tip") or None, color=INK, align=LEFT, size=9)
         r += 1
-    for col, w in zip("ABCDEFGH", (11, 11, 14, 22, 13, 8, 12, 90)):
+    for col, w in zip("ABCDEFG", (11, 11, 14, 22, 8, 12, 90)):
         ws.column_dimensions[col].width = w
     ws.freeze_panes = "C5"
     if r > 5:
-        ws.auto_filter.ref = "A4:H%d" % (r - 1)
+        ws.auto_filter.ref = "A4:G%d" % (r - 1)
 
     # ── 4. About ─────────────────────────────────────────────────────────────
     ws = wb.create_sheet("About")
     _title(ws, "Daily performance", sub)
     legend = [("●", "circle", "Came as planned - at the mine within 1 h of the plan time"),
-              ("◐", "half", "Not as planned - 1 to 12 h off; the note is the hours off (+ late, - early)"),
+              ("◐", "half", "Not as planned - 1 to 12 h off the plan time"),
               ("⏳", "wait", "Waiting - the window is still open"),
               ("✕", "cross", "Did not come - no mine arrival within 12 h"),
               ("No GPS", "nogps", "No position for 12 h either side"),
