@@ -12431,6 +12431,32 @@ function exportDailyXlsx(){
   const scope=(document.querySelector('[data-page-panel="daily"] .fleet-scope-seg button.active')||{}).textContent||'';
   const co=(document.getElementById('dailyCompanySel')||{}).value||'All';
   const from=p.dates[0], to=p.dates[p.dates.length-1];
+  const fname='Daily_performance_'+from+'_to_'+to+(co&&co!=='All'?'_'+co.replace(/\s+/g,''):'')+'.xlsx';
+  // Coloured like the page (user 24/11/2026): the server lays the file out with the page's own
+  // colours - this browser library cannot write colours. A copy of the page saved as HTML and
+  // opened without the server still gets the plain file below.
+  if(typeof fetch==='function' && !window.__DAILY_PLAIN__){
+    const payload={dates:p.dates, from, to, scope, company:co, exported:new Date().toLocaleString('en-GB'), file:fname,
+      counts:rows.map(r=>({label:r.label, f:r.f, total:p.dates.reduce((s,d)=>s+(p.sbd[d][r.f]||0),0),
+                           vals:p.dates.map(d=>p.sbd[d][r.f]||0)})),
+      grid:fleetRows.map(pl=>{ const g=p.grid[pl]||{totals:{},byDate:{}};
+        return {plate:pl, sub:subOf(pl), wb:!!(p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length), totals:g.totals||{},
+                cells:p.dates.map(d=>{ const c=g.byDate[d]; return c?{sym:c.sym||'', man:!!c.man, wb:!!c.wb, note:c.note||''}:null; })}; }),
+      detail:[]};
+    for(const pl of fleetRows){ const g=p.grid[pl]||{byDate:{}};
+      for(const d of p.dates){ const c=g.byDate[d]; if(!c) continue;
+        payload.detail.push({date:d, plate:pl, sub:subOf(pl), sym:c.sym||'', note:c.note||'', man:!!c.man, wb:!!c.wb,
+                             tip:(c.tip||'').replace(/\s+/g,' ').trim()}); } }
+    const btn=document.getElementById('dailyXlsxBtn'), was=btn&&btn.textContent;
+    if(btn){ btn.disabled=true; btn.textContent='Preparing…'; }
+    const done=()=>{ if(btn){ btn.disabled=false; btn.textContent=was; } };
+    fetch('/api/tool/daily.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.blob(); })
+      .then(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=fname;
+                 document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),10000); done(); })
+      .catch(()=>{ done(); window.__DAILY_PLAIN__=true; try{ exportDailyXlsx(); } finally{ window.__DAILY_PLAIN__=false; } });
+    return;
+  }
   const info=[['Daily performance'],['Period',from+' to '+to],['Fleet',scope],['Subcontractor',co],
     ['Exported',new Date().toLocaleString('en-GB')],[],
     ['Legend'],['●','Came as planned (within 1 h of the plan time)'],['◐','Not as planned (1-12 h off) - the note is hours off, + late / - early'],
@@ -12460,7 +12486,7 @@ function exportDailyXlsx(){
   XLSX.utils.book_append_sheet(wb,ws2,'Per-truck symbols');
   XLSX.utils.book_append_sheet(wb,ws3,'Per truck per day');
   XLSX.utils.book_append_sheet(wb,ws0,'About');
-  XLSX.writeFile(wb,'Daily_performance_'+from+'_to_'+to+(co&&co!=='All'?'_'+co.replace(/\s+/g,''):'')+'.xlsx');
+  XLSX.writeFile(wb,fname);
 }
 if(typeof document!=='undefined') document.addEventListener('click',e=>{ if(e.target&&e.target.id==='dailyXlsxBtn') exportDailyXlsx(); });
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

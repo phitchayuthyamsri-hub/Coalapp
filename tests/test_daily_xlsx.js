@@ -57,5 +57,22 @@ check('per truck per day: status in words, tip on one line',
   sheets['Per truck per day'][2], ['2026-11-23', '20H01481', 'Bac Nam', 'Came as planned', '', '', '', 'Plan 06:00 actual 06:20']);
 check('the file name carries the period and company', file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
 check('the About sheet says the fleet scope', sheets['About'][2], ['Fleet', 'In fleet']);
+
+// With the server there (the live page): the page sends its data to be coloured there.
+let sent = null, posted = null;
+const ctx2 = Object.assign({}, ctx, {
+  fetch: (u, o) => { posted = u; sent = JSON.parse(o.body); return { then: () => ({ then: () => ({ catch: () => {} }) }) }; },
+  URL: { createObjectURL: () => 'blob:x', revokeObjectURL() {} }, setTimeout,
+});
+ctx2.window = Object.assign({}, ctx.window);
+ctx2.document = Object.assign({}, ctx.document, { getElementById: id => (id === 'dailyCompanySel' ? { value: 'BBC' } : null) });
+vm.createContext(ctx2);
+vm.runInContext(SRC + '\nexportDailyXlsx();', ctx2);
+check('live page: posts to the server', posted, '/api/tool/daily.xlsx');
+check('...the counts with totals', sent.counts[0], { label: 'Planned truck', f: 'planned', total: 3, vals: [2, 1] });
+check('...the grid in screen order, cells with symbol / marks / note', [sent.grid[1].plate, sent.grid[1].cells[1]],
+  ['20H01481', { sym: 'half', man: true, wb: false, note: '+5h' }]);
+check('...one detail row per truck per day', sent.detail.length, 3);
+check('...and the file name', sent.file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
 console.log(FAIL ? '\n' + FAIL + ' FAILED' : '\nall passed');
 process.exit(FAIL ? 1 : 0);

@@ -317,3 +317,20 @@ SEED_JS = r"""
   // 146 KB answer. The fleet table sat behind all of it.
 })();
 """
+
+
+@bp.post("/api/tool/daily.xlsx")
+@login_required
+def tool_daily_xlsx():
+    """The Daily page as an Excel file coloured like the page (24/11/2026). The page
+    sends what it shows; the colours are added here, because the browser's own
+    Excel library cannot write them."""
+    import re
+    from . import daily_xlsx
+    d = request.get_json(force=True, silent=True) or {}
+    name = re.sub(r"[^A-Za-z0-9_.\-]", "", str(d.get("file") or "")).lstrip(".") or "Daily_performance.xlsx"
+    if not name.lower().endswith(".xlsx"):
+        name += ".xlsx"
+    return Response(daily_xlsx.build(d),
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="%s"' % name})
