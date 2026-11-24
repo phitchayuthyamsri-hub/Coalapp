@@ -11,6 +11,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.cell.text import InlineFont
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 # The page's dark theme (app/tool/index.html :root and the Daily panel rules).
@@ -120,6 +121,11 @@ def build(d):
             if not c:
                 _cell(ws, r, i, None)
                 continue
+            if c.get("off"):
+                # Outside the truck's fleet dates (24/11/2026): not counted, and said so.
+                x = _cell(ws, r, i, "–", bg="1A2128", color="4B5663")
+                x.comment = Comment(str(c["off"]), "TMS")
+                continue
             parts = []
             if c.get("sym"):
                 parts.append(TextBlock(InlineFont(rFont="Segoe UI Symbol", sz=11 if c["sym"] != "nogps" else 8,
@@ -183,6 +189,9 @@ def build(d):
     _cell(ws, r, 2, "Manual loading time - not scored", align=LEFT)
     _cell(ws, r + 1, 1, "⚠", bg=PANEL2, color=WB, bold=True)
     _cell(ws, r + 1, 2, "Mine time from the weighbridge (GPS error)", align=LEFT)
+    _cell(ws, r + 2, 1, "–", bg=PANEL2, color="8B98A5", bold=True)
+    _cell(ws, r + 2, 2, "Outside the truck's fleet dates (before it joined / after it left) - not counted;"
+                        " hover the cell for the date", align=LEFT)
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 80
 

@@ -52,7 +52,8 @@ payload = {
     "grid": [{"plate": "20H01481", "sub": "Bac Nam", "wb": True, "totals": {"circle": 1, "cross": 1},
               "cells": [{"sym": "circle", "man": False, "wb": False, "note": ""},
                         {"sym": "half", "man": True, "wb": False, "note": "+5h"}]},
-             {"plate": "37H09305", "sub": "BBC", "wb": False, "totals": {}, "cells": [None, {"sym": "cross"}]}],
+             {"plate": "37H09305", "sub": "BBC", "wb": False, "totals": {},
+              "cells": [{"off": "Not in the fleet yet (from 24/11) - not counted"}, {"sym": "cross"}]}],
     "detail": [{"date": D[0], "plate": "20H01481", "sub": "Bac Nam", "sym": "circle", "tip": "Plan 06:00"}],
 }
 r = c.post("/api/tool/daily.xlsx", json=payload)
@@ -80,6 +81,10 @@ check("a day: ◐ purple, ◆ teal, +5h grey", [(b.text, b.font.color.rgb[-6:]) 
 cell = ws.cell(row=6, column=10).value
 check("a day: ✕ red", [(b.text, b.font.color.rgb[-6:]) for b in cell] if isinstance(cell, CellRichText) else cell,
       [("✕", "F87171")])
+off = ws.cell(row=6, column=9)                   # 37H09305, 23/11: before it joined the fleet
+check("a day outside the fleet dates: grey '–' with the reason on hover",
+      (off.value, fnt(off), off.comment.text if off.comment else None),
+      ("–", "4B5663", "Not in the fleet yet (from 24/11) - not counted"))
 plate = ws["A5"].value
 check("a weighbridge truck carries ⚠ WB in blue", [(b.text.strip(), b.font.color.rgb[-6:]) for b in plate]
       if isinstance(plate, CellRichText) else plate, [("20H01481", "E6EDF3"), ("⚠ WB", "2E9BFF")])

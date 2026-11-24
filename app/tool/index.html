@@ -1060,6 +1060,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .childrow.extra .mk{color:var(--extra)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable td.splate, :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable th.splate{background:var(--panel2)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable td.sum{background:#1a2630}
+/* A day outside the truck's fleet dates (user 24/11/2026): not scored, and said so. */
+:is([data-page-panel="perf"],[data-page-panel="daily"]) .symtable td.offeff{color:#4b5663;cursor:help;background:rgba(255,255,255,.02)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.circle{color:var(--ok)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.cross{color:var(--miss)}
 :is([data-page-panel="perf"],[data-page-panel="daily"]) .sym.square{color:var(--extra)}
@@ -12038,6 +12040,11 @@ function avgDur(vals){ const xs=vals.filter(v=>v!=null); if(!xs.length) return {
 function fmtDur(m){ if(m==null) return '—'; m=Math.round(m); const h=Math.floor(m/60),mm=m%60; return h?`${h}h ${pad(mm)}m`:`${mm}m`; }
 function inPerfRange(d){ if(perfRange.from && d<perfRange.from) return false; if(perfRange.to && d>perfRange.to) return false; return true; }
 function inEff(pl,d){ const m=(ACS.fleetMeta||{})[pl]||{}; if(m.effFrom&&d<m.effFrom) return false; if(m.effTo&&d>m.effTo) return false; return true; }
+// Why a day is outside the truck's fleet dates, or '' when it is inside (user 24/11/2026).
+function effOff(pl,d){ const m=(ACS.fleetMeta||{})[pl]||{}, dm=x=>x.slice(8,10)+'/'+x.slice(5,7);
+  if(m.effFrom&&d<m.effFrom) return 'Not in the fleet yet (from '+dm(m.effFrom)+') - not counted';
+  if(m.effTo&&d>m.effTo) return 'Left the fleet (after '+dm(m.effTo)+') - not counted';
+  return ''; }
 function cycKey(plate,d){ return plate+'|'+d; }
 function actualCycleDate(e){                          // cycle date = earliest actual in
   const L=e&&e.locs; if(!L) return null;
@@ -12406,7 +12413,7 @@ function renderPerf(p){
         <td class="sum sym nogps">${g.totals.nogps||''}</td>
         <td class="sum sym square">${g.totals.square||''}</td>`;
     for(const d of p.dates){ const c=g.byDate[d];
-      if(!c){ sb+=`<td></td>`; continue; }
+      if(!c){ const off=effOff(pl,d); sb+=off?`<td class="offeff" title="${escAttr(off)}">–</td>`:`<td></td>`; continue; }
       const symHTML=c.sym?`<span class="sym ${c.sym}"${c.tip?' title="'+escAttr(c.tip)+'"':''}>${SYM[c.sym]}</span>`:'';
       const manHTML=c.man?`<span class="sym manual" title="manual loading time — not scored">◆</span>`:'';
       const wbHTML=c.wb?`<span class="sym wbm" title="Mine time from weighbridge \u2014 GPS error">&#9888;</span>`:'';
@@ -12449,7 +12456,8 @@ function exportDailyXlsx(){
                            vals:p.dates.map(d=>p.sbd[d][r.f]||0)})),
       grid:fleetRows.map(pl=>{ const g=p.grid[pl]||{totals:{},byDate:{}};
         return {plate:pl, sub:subOf(pl), wb:!!(p.wbByTruck&&p.wbByTruck[pl]&&p.wbByTruck[pl].length), totals:g.totals||{},
-                cells:p.dates.map(d=>{ const c=g.byDate[d]; return c?{sym:c.sym||'', man:!!c.man, wb:!!c.wb, note:''}:null; })}; }),
+                cells:p.dates.map(d=>{ const c=g.byDate[d]; if(c) return {sym:c.sym||'', man:!!c.man, wb:!!c.wb, note:''};
+                  const off=effOff(pl,d); return off?{off}:null; })}; }),
       detail:[]};
     for(const pl of fleetRows){ const g=p.grid[pl]||{byDate:{}};
       for(const d of p.dates){ const c=g.byDate[d]; if(!c) continue;
@@ -12469,7 +12477,8 @@ function exportDailyXlsx(){
     ['Exported',new Date().toLocaleString('en-GB')],[],
     ['Legend'],['●','Came as planned (within 1 h of the plan time)'],['◐','Not as planned (1-12 h off the plan time)'],
     ['⏳','Waiting (the window is still open)'],['✕','Did not come (no mine arrival within 12 h)'],['No GPS','No position for 12 h either side'],
-    ['■','Came, not in plan'],['◆','Manual loading time - not scored'],['⚠','Mine time from the weighbridge (GPS error)']];
+    ['■','Came, not in plan'],['◆','Manual loading time - not scored'],['⚠','Mine time from the weighbridge (GPS error)'],
+    ['–','Outside the truck\'s fleet dates (before it joined / after it left) - not counted']];
   const counts=[['Status / Date','Total',...p.dates]];
   for(const r of rows){ counts.push([r.label,p.dates.reduce((s,d)=>s+(p.sbd[d][r.f]||0),0),...p.dates.map(d=>p.sbd[d][r.f]||'')]); }
   const grid=[['Truck','Subcontractor','● as planned','◐ not as planned','⏳ waiting','✕ did not come','No GPS','■ not in plan',...p.dates]];
@@ -12478,7 +12487,7 @@ function exportDailyXlsx(){
     const g=p.grid[pl]||{totals:{},byDate:{}}, t=g.totals||{};
     const line=[pl,subOf(pl),t.circle||'',t.half||'',t.wait||'',t.cross||'',t.nogps||'',t.square||''];
     for(const d of p.dates){ const c=g.byDate[d];
-      if(!c){ line.push(''); continue; }
+      if(!c){ line.push(effOff(pl,d)?'–':''); continue; }
       const parts=[c.sym?SYM[c.sym]:'', c.man?'◆':'', c.wb?'⚠':''].filter(Boolean);
       line.push(parts.join(' '));
       det.push([d,pl,subOf(pl),c.sym?WORD[c.sym]:'',c.man?'yes':'',c.wb?'yes':'',(c.tip||'').replace(/\s+/g,' ').trim()]); }

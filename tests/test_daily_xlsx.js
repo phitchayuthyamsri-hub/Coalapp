@@ -44,6 +44,8 @@ const ctx = {
     addEventListener() {},
   },
   Date,
+  // 37H09305 joined the fleet on 24/11 (fleet "from" date): 23/11 is outside it.
+  effOff: (pl, d) => (pl === '37H09305' && d < '2026-11-24' ? 'Not in the fleet yet (from 24/11) - not counted' : ''),
 };
 vm.createContext(ctx);
 vm.runInContext(SRC + '\nexportDailyXlsx();', ctx);
@@ -52,7 +54,7 @@ check('counts: header', sheets['Daily status counts'][0], ['Status / Date', 'Tot
 check('counts: a row with its total', sheets['Daily status counts'][1], ['Planned truck', 3, 2, 1]);
 check('grid keeps the on-screen order', sheets['Per-truck symbols'].slice(1).map(r => r[0]), ['37H09305', '20H01481']);
 check('grid cell: icon and marks only, no hours off (24/11)', sheets['Per-truck symbols'][2].slice(8), ['●', '◐ ◆']);
-check('grid cell: weighbridge mark', sheets['Per-truck symbols'][1].slice(8), ['', '⏳ ⚠']);
+check('grid cell: weighbridge mark; a day before the truck joined is "–"', sheets['Per-truck symbols'][1].slice(8), ['–', '⏳ ⚠']);
 check('per truck per day: status in words, no hours column, tip on one line',
   sheets['Per truck per day'][2], ['2026-11-23', '20H01481', 'Bac Nam', 'Came as planned', '', '', 'Plan 06:00 actual 06:20']);
 check('the file name carries the period and company', file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
@@ -72,7 +74,9 @@ check('live page: posts to the server', posted, '/api/tool/daily.xlsx');
 check('...the counts with totals', sent.counts[0], { label: 'Planned truck', f: 'planned', total: 3, vals: [2, 1] });
 check('...the grid in screen order, cells with the icon and marks, no hours', [sent.grid[1].plate, sent.grid[1].cells[1]],
   ['20H01481', { sym: 'half', man: true, wb: false, note: '' }]);
-check('...one detail row per truck per day', sent.detail.length, 3);
+check('...one detail row per truck per day (the "–" day is not one)', sent.detail.length, 3);
+check('...a day before the truck joined is sent as outside its dates', sent.grid[0].cells[0],
+  { off: 'Not in the fleet yet (from 24/11) - not counted' });
 check('...and the file name', sent.file, 'Daily_performance_2026-11-23_to_2026-11-24_BBC.xlsx');
 
 // A deactivated truck is left out of the file (24/11/2026).
