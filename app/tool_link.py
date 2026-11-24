@@ -229,12 +229,38 @@ def _gps_status(only):
             "tip": tip, "taken": taken}
 
 
+WEIGH_DAYS = 120    # how far back the Daily page is handed weighbridge loads
+
+
+def _weigh_loads(only):
+    """Every weighbridge load of the last WEIGH_DAYS days, as [plate, loading
+    day, shift] - shift d is 06:00-18:00 of that day, n is 18:00 to 06:00 the
+    next morning (24/11/2026).
+
+    A load is proof the truck was at the mine. Where the GPS has no trace of
+    that visit - the tracker silent, even in the provider's own history
+    (20C21788 loaded 43.21 t on 06/11, no position 10:00-24:00) - the Daily
+    page counts the plan as came, marked as a weighbridge (GPS error) cycle.
+    Which loads the GPS already explains is decided on the page, against the
+    same arrivals it scores with."""
+    from .models import CoalRptWeigh
+    since = (datetime.utcnow() + timedelta(hours=7) - timedelta(days=WEIGH_DAYS)).strftime("%Y-%m-%d")
+    fleet = {engine.norm_plate(t.plate) for t in Truck.query.all()}
+    out = []
+    for plate, day, ap in (db.session.query(CoalRptWeigh.plate, CoalRptWeigh.day, CoalRptWeigh.ap)
+                           .filter(CoalRptWeigh.day >= since).all()):
+        k = engine.norm_plate(plate)
+        if k in fleet and (only is None or k in only):
+            out.append([k, day, "n" if ap == "n" else "d"])
+    return out
+
+
 @bp.get("/api/tool/seed.js")
 @login_required
 def tool_seed_js():
     only = _own_plates()
     seed = {"fleet": _fleet(only), "plan": _plan(only), "status": _status(only),
-            "gpsStatus": _gps_status(only),
+            "gpsStatus": _gps_status(only), "weighLoads": _weigh_loads(only),
             "at": datetime.utcnow().isoformat(timespec="seconds")}
     js = SEED_JS.replace("__SEED__", json.dumps(seed)) \
                 .replace("__FLEET_KEY__", json.dumps(FLEET_KEY)) \
@@ -271,7 +297,8 @@ SEED_JS = r"""
   // nothing planned and every truck as "came, not in plan". Memory has no
   // such limit, and the server is the record for these three anyway.
   window.__TOOL_SEED = {plan: SEED.plan || {}, status: SEED.status || null,
-                        gpsStatus: SEED.gpsStatus || null, at: SEED.at};
+                        gpsStatus: SEED.gpsStatus || null, weighLoads: SEED.weighLoads || [],
+                        at: SEED.at};
   window.__TOOL_SEEDED_AT = SEED.at;
   var wasRO = window.__READONLY__;
   window.__READONLY__ = true;

@@ -12576,6 +12576,26 @@ function renderStatus(){
   el.innerHTML=`<div class="dcap">Truck status by day <span class="dleg">source: daily status file · cell = Note (col E)</span></div>
     <div class="scroller" style="max-height:none"><table class="symtable sttable">${th}${tb}</table></div>`;
 }
+// Weighbridge loads the GPS has no trace of -> the plan / day keys they fill (user 24/11/2026).
+// loads: [[plate, loading day, 'd'|'n']]; actsOf: {plate: [{mi}]} GPS arrivals; missed: plans with none.
+function wbAutoKeys(loads, fleetSet, actsOf, missed, planTime, WINDOW_MS){
+  const H=3600*1000, out=new Set(), byPlate={}, used=new Set();
+  for(const p of missed){ (byPlate[p.plate]=byPlate[p.plate]||[]).push(p); }
+  for(const l of loads){
+    const pl=normPlate(l[0]), day=l[1], ap=l[2];
+    if(!fleetSet.has(pl)||!day) continue;
+    const ws=Date.parse(day+'T'+(ap==='n'?'18:00':'06:00')+':00'), we=ws+12*H;
+    if(isNaN(ws)) continue;
+    if((actsOf[pl]||[]).some(a=>a.mi!=null&&a.mi>=ws-14*H&&a.mi<=we)) continue;   // the GPS saw this visit
+    let best=null, bg=Infinity;
+    for(const p of (byPlate[pl]||[])){ if(used.has(p.key)) continue; const pt=planTime(p); if(pt==null) continue;
+      const gap=pt<ws?ws-pt:(pt>we?pt-we:0);
+      if(gap<=WINDOW_MS&&gap<bg){ bg=gap; best=p; } }
+    if(best){ used.add(best.key); out.add(best.key); }
+    else out.add(cycKey(pl,day));
+  }
+  return out;
+}
 function computePerf(){
   const fleetSet=new Set(ACS.fleet);
   // unique plan cycles
@@ -12678,7 +12698,14 @@ function computePerf(){
   const actualKeys=new Set(actUniq.map(a=>a.key));
   const noShowKeySet=new Set(missed.map(p=>p.key));
   const manualAll=Object.keys(ACS.manual).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
-  const wbAll=Object.keys(ACS.wb||{}).filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
+  // The weighbridge proves visits the GPS never saw (user 24/11/2026): a load is the truck at the
+  // mine. Where no GPS arrival of that truck explains it - from 14 h before the shift it was weighed
+  // out in to the end of that shift - it fills the truck's closest missed plan within 12 h of that
+  // shift (came, marked as a weighbridge / GPS-error cycle), else it is a came-not-in-plan on its day.
+  // Shifts: d = 06:00-18:00 of the loading day, n = 18:00 to 06:00 the next morning.
+  const _seed=(typeof window!=='undefined'&&window.__TOOL_SEED)||null;
+  const _wbAuto=wbAutoKeys((_seed&&_seed.weighLoads)||[], fleetSet, actsOf, missed, planTime, WINDOW_MS);
+  const wbAll=[...new Set([...Object.keys(ACS.wb||{}), ..._wbAuto])].filter(k=>{const pl=k.split('|')[0],d=k.split('|')[1]; return fleetSet.has(pl)&&inPerfRange(d)&&inEff(pl,d);});
   const wbError=wbAll.length;                             // cycles whose Mine time came from the weighbridge (GPS error)
   const wbByTruck={}; for(const _k of wbAll){ const _pl=_k.split('|')[0], _d=_k.split('|')[1]; (wbByTruck[_pl]=wbByTruck[_pl]||[]).push(_d); }
   const gpsError=new Set([...manualAll, ...wbAll]).size;  // manual OR weighbridge Mine time = a GPS error (once per cycle)
