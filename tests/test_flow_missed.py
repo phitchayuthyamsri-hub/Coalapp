@@ -47,6 +47,7 @@ TODAY, YDAY, FIRST, BEFORE, TOMORROW = iso(0), iso(-1), iso(-2), iso(-3), iso(1)
 app = create_app()
 from app import shift_routes as _sr_pin   # noqa: E402
 _sr_pin.SHIFT_MODE_FROM = "2099-01-01"   # one-file sheets; AM / PM files: test_shift_files.py
+_sr_pin.FLEET_RULE_FROM = "2099-01-01"   # fleet rule: test_fleet_rule.py
 with app.app_context():
     # The app seeds the companies; Bac Nam is one of them.
     bn = Subcontractor.query.filter_by(name="Bac Nam").first() or Subcontractor(name="Bac Nam")

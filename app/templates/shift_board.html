@@ -802,6 +802,7 @@ async function doUpload(){
     return;
   }
   m.textContent = 'Imported ✓'; m.className = 'msg ok';
+  fleetDeniedPopup(d.fleet_denied);
   renderReport(d);
   await loadList();
 }
@@ -1168,9 +1169,26 @@ function collectRows(){
 
 function say(m, bad){ const e=$('#listMsg'); e.textContent=m; e.className='msg '+(bad?'err':'ok'); }
 
+// Trucks not in the company's fleet are not accepted (26/11/2026) - said in both languages.
+function fleetDeniedPopup(plates){
+  if (!plates || !plates.length) return;
+  const list = plates.join(', ');
+  alert('NOT ACCEPTED - not in your fleet list\n'
+    + list + '\n\n'
+    + 'These trucks are not on your company\'s current fleet list, so they were marked Denied '
+    + 'and will not be planned. Only trucks on the fleet list can be declared. To add a truck, '
+    + 'send an updated truck list to Logistics Asia first.\n\n'
+    + 'KHÔNG ĐƯỢC CHẤP NHẬN - không có trong danh sách xe\n'
+    + list + '\n\n'
+    + 'Các xe trên không có trong danh sách xe hiện tại của công ty nên đã bị đánh dấu Từ chối '
+    + 'và sẽ không được lập kế hoạch. Chỉ được khai báo các xe có trong danh sách xe. Muốn thêm xe, '
+    + 'vui lòng gửi danh sách xe cập nhật cho Logistics Asia trước.');
+}
+
 async function save(quiet){
   const r = await jpost('/api/shift/list', {date:$('#day').value, subcontractor_id:SUBID, rows:collectRows()});
   if (!r.ok){ say(r.data.error || 'Save failed', true); return false; }
+  fleetDeniedPopup(r.data && r.data.fleet_denied);
   DIRTY = false;
   if (!quiet) say('Saved ✓');
   return true;

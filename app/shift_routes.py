@@ -504,7 +504,7 @@ def _merge_shift(dl, day, shift, incoming, company):
         if prev is not None and _same_answer(prev, r):
             plan.append(("touch", key, r, prev, []))
             continue
-        locked = [x for x in mine if (x.state or "pending") != "pending"]
+        locked = [x for x in mine if (x.state or "pending") != "pending" and not _fleet_denied_row(x)]
         if locked:
             bad.append("%s %s is already %s - a change now goes through Request to amend."
                        % (plate, shift, {"applied": "with the manager"}.get(
@@ -592,6 +592,59 @@ def _shift_board(dl, day, now_l=None):
                     "late": sorted(set(late)), "cutoff": cut.strftime("%d/%m %H:%M"),
                     "past_cutoff": now_l > cut, "steps": steps})
     return out
+
+
+# ── only the company's own fleet can be declared (26/11/2026) ───────────────
+# Bac Nam declared 55 trucks a day against a fleet of 50: three deactivated
+# after 18/11 and two removed on 19/11 kept going through the sheet, the
+# supervisor, the manager and into the issued plan, where the Daily page then
+# could not score them. From FLEET_RULE_FROM every declared row of a truck
+# that is not active in that company's fleet on the sheet's day is marked
+# Denied - kept on the sheet, never planned - and the person saving is told,
+# in English and Vietnamese. A truck put back into the fleet is reopened on
+# the next save.
+FLEET_RULE_FROM = "2026-11-27"
+FLEET_DENY = "Not in the fleet / Không có trong danh sách xe"
+
+
+def _fleet_denied_row(r):
+    return (r.state or "") == "denied" and (r.reason or "").startswith(FLEET_DENY[:17])
+
+
+def _fleet_active_keys(sub_id, day):
+    """The company's trucks active on `day`: its own (or no company), not
+    deactivated, inside their fleet dates."""
+    out = set()
+    for t in Truck.query.all():
+        if t.subcontractor_id and t.subcontractor_id != sub_id:
+            continue
+        if (t.status or "") == "deactivated":
+            continue
+        if (t.eff_from and t.eff_from > day) or (t.eff_to and t.eff_to < day):
+            continue
+        out.add(engine.norm_plate(t.plate))
+    return out
+
+
+def _apply_fleet_rule(dl):
+    """Deny the declared rows of trucks not in the company's fleet, reopen the
+    ones whose truck is back. -> the plates denied (sorted)."""
+    day = dl.list_date or ""
+    if not dl.subcontractor_id or day < FLEET_RULE_FROM:
+        return []
+    ok = _fleet_active_keys(dl.subcontractor_id, day)
+    denied = set()
+    for r in DailyListRow.query.filter_by(list_id=dl.id).all():
+        k = r.key or engine.norm_plate(r.plate)
+        if k in ok:
+            if _fleet_denied_row(r):
+                r.state, r.reason = "pending", ""
+                r.ready = bool(readiness_import.is_running(r.note))
+            continue
+        if not _fleet_denied_row(r):
+            r.state, r.ready, r.reason = "denied", False, FLEET_DENY
+        denied.add(r.plate)
+    return sorted(denied)
 
 
 def _refused(detail):
@@ -899,7 +952,9 @@ def _restate(dl):
     "submitted" is not a property of the whole list - it means "some rows are
     sitting with the manager". Derived, never set by hand.
     """
-    rows = DailyListRow.query.filter_by(list_id=dl.id).all()
+    # A row the fleet rule denied is not a decision anyone took: it does not
+    # make a new sheet read "confirmed" (26/11/2026).
+    rows = [r for r in DailyListRow.query.filter_by(list_id=dl.id).all() if not _fleet_denied_row(r)]
     st = {r.state or "pending" for r in rows}
     # AM / PM days (24/11/2026): the PM file arrives after the AM shift was
     # approved. A shift whose rows are all still pending has not been looked at
@@ -1751,6 +1806,7 @@ def upload():
                                   "..." if len(fleet_route) > 5 else ""))
 
     db.session.flush()
+    denied = _apply_fleet_rule(dl)
     dl.content_hash = _content_hash(dl.id)
     twin = None if (request.form.get("force") or "").strip() else _duplicate_of(dl)
     if twin is not None:
@@ -1777,7 +1833,7 @@ def upload():
         imported=len(rows), running=running, committed=len(roster),
         added=len(rows) - len(overlap), replaced=len(overlap),
         kept=len(existing) - len(overlap),
-        missing=missing, uncommitted=uncommitted,
+        missing=missing, uncommitted=uncommitted, fleet_denied=denied,
         warnings=parsed.get("warnings", []),
         sheet=parsed.get("sheet"), header_row=parsed.get("header_row"),
         columns=parsed.get("columns"), state=dl.state)
@@ -1801,9 +1857,12 @@ def _upload_shift(dl, day, sub_id, shift, rows, parsed):
                                                 "why": b} for b in bad],
                        warnings=parsed.get("warnings", [])), 400
     db.session.flush()
+    denied = _apply_fleet_rule(dl)
     dl.content_hash = _content_hash(dl.id)
     _restate(dl)
     _act("upload", "%s file for %s — %d truck(s)" % (shift, _dmy(day), len(rows)))
+    if denied:
+        _act("refused", "Not in the fleet, denied on the %s sheet: %s" % (_dmy(day), ", ".join(denied)))
     db.session.commit()
     _stamp_hint(dl, day, sub_id)
     if _role() in GPS_PULLERS:
@@ -1821,6 +1880,7 @@ def _upload_shift(dl, day, sub_id, shift, rows, parsed):
         missing=sorted(c.plate for k, c in roster.items() if k not in on_sheet),
         uncommitted=sorted(r["plate"] for r in rows if roster and r["key"] not in roster),
         late=sorted({x.plate for x in mine if _is_late(x, day)}),
+        fleet_denied=denied,
         warnings=parsed.get("warnings", []),
         sheet=parsed.get("sheet"), header_row=parsed.get("header_row"),
         columns=parsed.get("columns"), state=dl.state)
@@ -4773,14 +4833,18 @@ def save_list():
                 shift, " ".join(bad[:6]) + (" …" if len(bad) > 6 else "")),
                 code="shift", problems=bad), 400
         db.session.flush()
+        denied = _apply_fleet_rule(dl)
         dl.content_hash = _content_hash(dl.id)
         _restate(dl)
         _act("edit", "Saved the %s declaration for %s — %d truck(s)"
              % (shift, _dmy(day), len(incoming)))
+        if denied:
+            _act("refused", "Not in the fleet, denied on the %s sheet: %s" % (_dmy(day), ", ".join(denied)))
         db.session.commit()
         _stamp_hint(dl, day, sub_id)
         out = _list_payload(dl, day)
         out["missing_fleet"] = _fleet_gaps(dl, sub_id)
+        out["fleet_denied"] = denied
         return jsonify(out)
 
     # Keep the state a row already has: a row sitting with the manager, or already
@@ -4820,6 +4884,7 @@ def save_list():
             row.ready = bool(r.get("ready"))
         db.session.add(row)
     db.session.flush()
+    denied = _apply_fleet_rule(dl)
     dl.content_hash = _content_hash(dl.id)
     twin = None if d.get("force") else _duplicate_of(dl)
     if twin is not None:
@@ -4831,9 +4896,12 @@ def save_list():
                        duplicate_of=twin.list_date, code="duplicate"), 409
     _act("edit", "Saved the declaration for %s — %d truck(s)"
          % (_dmy(day), len(incoming)))
+    if denied:
+        _act("refused", "Not in the fleet, denied on the %s sheet: %s" % (_dmy(day), ", ".join(denied)))
     db.session.commit()
     _stamp_hint(dl, day, sub_id)
     out = _list_payload(dl, day)
+    out["fleet_denied"] = denied
     # Saving stays free - a half-filled sheet is normal while answers are being
     # chased - but the gap is named NOW, to the person who can fill it, rather
     # than surfacing later as a refusal on the supervisor's submit.
@@ -5333,6 +5401,10 @@ def act_list(action):
                              "and that day has passed." % (_dmy(day), _dmy(prev)),
                        code="approval_closed"), 403
     if action == "submit":
+        # A sheet saved before the fleet rule, or a truck taken out of the fleet
+        # since: checked again before anything moves on (26/11/2026).
+        _apply_fleet_rule(dl)
+        db.session.flush()
         rows = DailyListRow.query.filter_by(list_id=dl.id).all()
 
         # The whole fleet answers before the list moves on: a truck missing

@@ -670,6 +670,22 @@ $('#bulkOff').onclick = function(){
   GRID.say(n + ' row' + (n === 1 ? '' : 's') + ' marked ' + hit);
 };
 
+// Trucks not in the company's fleet are not accepted (26/11/2026) - said in both languages.
+function fleetDeniedPopup(plates){
+  if (!plates || !plates.length) return;
+  const list = plates.join(', ');
+  alert('NOT ACCEPTED - not in your fleet list\n'
+    + list + '\n\n'
+    + 'These trucks are not on your company\'s current fleet list, so they were marked Denied '
+    + 'and will not be planned. Only trucks on the fleet list can be declared. To add a truck, '
+    + 'send an updated truck list to Logistics Asia first.\n\n'
+    + 'KHÔNG ĐƯỢC CHẤP NHẬN - không có trong danh sách xe\n'
+    + list + '\n\n'
+    + 'Các xe trên không có trong danh sách xe hiện tại của công ty nên đã bị đánh dấu Từ chối '
+    + 'và sẽ không được lập kế hoạch. Chỉ được khai báo các xe có trong danh sách xe. Muốn thêm xe, '
+    + 'vui lòng gửi danh sách xe cập nhật cho Logistics Asia trước.');
+}
+
 // ── AM / PM files (21/11/2026) ──────────────────────────────────────────────
 function inShiftWin(date, time){
   if (!SMODE || !date || !time) return true;
@@ -811,6 +827,7 @@ $('#save').onclick = async function(){
       j = await res.json();
     }
     if (!res.ok) throw new Error(j.error || 'Save failed');
+    fleetDeniedPopup(j.fleet_denied);
     const gaps = j.missing_fleet || [];
     m.textContent = 'Saved. The supervisor sees it on their page.'
       + (gaps.length ? ' ' + gaps.length + ' truck(s) still have no update ('
@@ -1022,6 +1039,7 @@ async function send(f){
       return;
     }
     if (!r.ok) throw new Error(j.error || 'Upload failed');
+    fleetDeniedPopup(j.fleet_denied);
     m.textContent = 'Filled ' + j.imported + ' truck(s) from ' + f.name
       + (j.replaced ? ' (' + j.replaced + ' replaced)' : '')
       + (j.kept ? ' · ' + j.kept + ' already on the sheet, untouched' : '') + '.';
